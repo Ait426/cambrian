@@ -1,0 +1,24 @@
+input:
+  type: "object"
+  properties:
+    endpoint:
+      type: "string"
+      description: "API 엔드포인트 경로 (예: /api/v1/users)"
+    method:
+      type: "string"
+      description: "HTTP 메서드 (GET, POST, PUT, DELETE, PATCH)"
+    params:
+      type: "object"
+      description: "요청 파라미터 객체 (키: 파라미터명, 값: 타입 또는 설명)"
+    response_example:
+      type: "object"
+      description: "응답 예시 JSON 객체"
+  required: ["endpoint", "method", "params", "response_example"]
+
+output:
+  type: "object"
+  properties:
+    html:
+      type: "string"
+      description: "API 문서 HTML"
+  required: ["html"]

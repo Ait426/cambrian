@@ -1,0 +1,42 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "cambrian"
+version = "0.3.0"
+requires-python = ">=3.11"
+dependencies = [
+    "pyyaml>=6.0",
+    "jsonschema>=4.20.0",
+]
+
+[project.optional-dependencies]
+anthropic = ["anthropic>=0.40.0"]
+openai = ["openai>=1.50.0"]
+google = ["google-generativeai>=0.8.0"]
+all = [
+    "anthropic>=0.40.0",
+    "openai>=1.50.0",
+    "google-generativeai>=0.8.0",
+]
+dev = [
+    "pytest>=8.0",
+]
+
+[project.scripts]
+cambrian = "engine.cli:main"
+
+[tool.setuptools]
+packages = ["engine"]
+include-package-data = true
+
+[tool.setuptools.package-data]
+"*" = ["*.json", "*.yaml", "*.md"]
+
+[tool.setuptools.data-files]
+"cambrian_data/schemas" = ["schemas/*.json"]
+
+# skills/와 schemas/를 data로 포함
+[tool.setuptools.exclude-package-data]
+"*" = ["tests/*"]

@@ -1,0 +1,28 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+dist/
+build/
+
+# Database
+*.db
+skill_pool/*.db
+
+# Environment
+.env
+.env.*
+
+# Claude Code
+.claude/
+
+# Logs
+*.log
+
+# Data
+data/
+
+# OS
+.DS_Store
+Thumbs.db

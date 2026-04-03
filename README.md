@@ -1,0 +1,232 @@
+# Cambrian
+
+**Self-evolving skill engine for AI agents.**
+
+태스크 실패 시 외부 스킬을 자동 탐색·흡수·융합하여 스스로 강해지는 시스템.
+
+## Quick Start
+
+```bash
+pip install -e ".[anthropic,dev]"
+export ANTHROPIC_API_KEY=sk-ant-...
+
+# 프로젝트 초기화 (14개 시드 스킬 + 설정 파일 생성)
+cambrian init --dir ./my_project
+cd ./my_project
+
+# 스킬 목록 확인
+cambrian skills
+
+# 태스크 실행
+cambrian run -d utility -t greeting -i '{"text": "hello"}'
+```
+
+## Installation
+
+```bash
+pip install cambrian
+```
+
+### LLM Provider (하나만 선택)
+
+```bash
+# Anthropic Claude (기본)
+pip install cambrian[anthropic]
+export ANTHROPIC_API_KEY=sk-ant-...
+
+# OpenAI GPT
+pip install cambrian[openai]
+export OPENAI_API_KEY=sk-...
+export CAMBRIAN_LLM_PROVIDER=openai
+
+# Google Gemini
+pip install cambrian[google]
+export GOOGLE_API_KEY=...
+export CAMBRIAN_LLM_PROVIDER=google
+
+# 전부 설치
+pip install cambrian[all]
+```
+
+CLI에서 프로바이더 지정:
+```bash
+cambrian run -d utility -t greeting -i '...' --provider openai --llm-model gpt-4o
+```
+
+## 핵심 루프
+
+```
+태스크 → 경쟁 실행 → 최적 결과 반환 → fitness 갱신
+              │
+          전원 실패 → 부검(Autopsy) → 스킬 검색 → 흡수 → 재시도
+```
+
+## 아키텍처
+
+```
+┌──────────────────────────────────────────┐
+│           Main Loop (loop.py)            │
+│                                          │
+│  Task → 후보 검색                         │
+│           │                              │
+│     후보 1개 → 즉시 실행                   │
+│     후보 2개+ → 경쟁 실행 (최적 선택)       │
+│           │                              │
+│       성공 → fitness 갱신 → 결과 반환      │
+│       실패 → Autopsy → Absorber → 재시도   │
+│                                          │
+│  피드백 3채널:                               │
+│  [AUTO]   실패 분석 자동 (rating 1)         │
+│  [CRITIC] 비판적 분석 수동 (rating 2)       │
+│  (수동)   사용자 피드백 (rating 1~5)        │
+│                                          │
+│  진화 루프 (피드백 기반):                   │
+│  feedback → mutate(LLM) → 3회 실행        │
+│  → Judge(LLM) 블라인드 채점 → 채택/폐기    │
+│                                          │
+│  생명주기 자동 관리:                        │
+│  30일 미사용 → dormant / 90일 → fossil     │
+└──────────────────────────────────────────┘
+```
+
+## 부품
+
+| 부품 | 파일 | 역할 |
+|------|------|------|
+| LLM | engine/llm.py | 프로바이더 추상화 (Anthropic / OpenAI / Google) |
+| Validator | engine/validator.py | 스킬 포맷 검증 (JSON Schema) |
+| Loader | engine/loader.py | 스킬 파일 → Skill 객체 |
+| Executor | engine/executor.py | 스킬 실행 (Mode A: LLM / Mode B: subprocess) |
+| Registry | engine/registry.py | SQLite 스킬 DB + 검색 + fitness + 퇴화 |
+| Autopsy | engine/autopsy.py | 실패 분석 + 필요 스킬 진단 |
+| Absorber | engine/absorber.py | 외부 스킬 흡수 + 보안 검사 |
+| Security | engine/security.py | AST 기반 정적 코드 분석 |
+| Benchmark | engine/benchmark.py | 동일 입력으로 다수 스킬 비교 실행 |
+| Evolution | engine/evolution.py | LLM 기반 SKILL.md 변이 + 다중 시행 비교 |
+| Judge | engine/judge.py | 두 출력을 익명화(A/B)하여 LLM 비교 채점 |
+| Portability | engine/portability.py | 스킬 export/import (.cambrian 패키지) |
+| Critic | engine/critic.py | LLM 기반 SKILL.md 비판적 분석 |
+| Loop | engine/loop.py | 전체 루프 오케스트레이션 + 경쟁 실행 + 자가 진화 제안 |
+| CLI | engine/cli.py | argparse CLI (16개 명령어) |
+
+## 시드 스킬 (14개)
+
+| Skill | Mode | Domain | 용도 |
+|-------|------|--------|------|
+| hello_world | B | utility | 기본 동작 테스트 |
+| slow_skill | B | testing | 타임아웃 테스트 |
+| crash_skill | B | testing | 오류 처리 테스트 |
+| csv_to_chart | A | data_visualization | CSV → HTML 차트 |
+| json_to_dashboard | A | data_visualization | JSON → 대시보드 |
+| landing_page | A | design | 랜딩 페이지 생성 |
+| inventory_anomaly_report | A | hotel_analytics | OTA 재고 불일치 분석 |
+| email_draft | A | writing | 상황 → 이메일 초안 |
+| meeting_summary | A | writing | 회의록 → 요약 |
+| code_review | A | coding | 코드 → 리뷰 피드백 |
+| data_cleaner | A | data | CSV 정제 |
+| seo_meta | A | marketing | SEO 메타태그 생성 |
+| api_doc | A | coding | API 문서 생성 |
+| expense_report | A | analytics | 지출 분석 리포트 |
+
+## 경쟁 실행
+
+같은 도메인+태그에 후보가 2개 이상이면 자동으로 경쟁 실행:
+
+- **Mode B 후보**: 전원 실행 (subprocess라 빠름)
+- **Mode A 후보**: fitness 상위 2개만 실행 (API 비용 제한)
+- 성공한 결과 중 fitness가 가장 높은 스킬의 결과를 반환
+
+## 진화 시스템
+
+### 흐름
+
+```
+1. feedback(skill_id, rating, comment) 저장
+2. evolve(skill_id, test_input) 호출
+3. mutate(): LLM이 SKILL.md + 피드백(입력/출력 이력 포함)으로 개선
+   - Input/Output Format 섹션은 원본 그대로 보존
+   - 변경 이력을 Changelog 섹션에 추가
+4. 원본 3회 + variant 3회 실행
+5. 각 시행마다 LLM Judge가 블라인드 채점 (0~10점)
+6. variant 평균 > original 평균 → 채택
+```
+
+### LLM Judge
+
+- A/B 익명화 (순서 랜덤), 채점 근거(reasoning) 기록
+- 채점: 정확성(0~3) + 피드백 반영도(0~4) + 품질(0~3)
+
+### Fitness 공식
+
+```
+fitness = execution_fitness x 0.5 + judge_fitness x 0.5
+execution_fitness = 성공률 x min(실행횟수/10, 1.0)
+judge_fitness = avg_judge_score / 10.0  (EMA 갱신)
+```
+
+## 퇴화와 멸종
+
+엔진 시작 시 자동 정리:
+
+| 조건 | 변경 |
+|------|------|
+| active + 30일 미사용 | → dormant |
+| newborn + 등록 30일 후 미사용 | → dormant |
+| dormant + 90일 미사용 | → fossil |
+
+fossil은 기본 검색에서 자동 제외.
+
+## 스킬 포맷
+
+```
+skill/
+├── meta.yaml        # 신원 정보 (id, version, domain, tags, mode, runtime)
+├── interface.yaml   # 입출력 계약 (JSON Schema)
+├── SKILL.md         # LLM용 지시서 (Mode A)
+└── execute/
+    └── main.py      # 실행 코드 (Mode B만)
+```
+
+## CLI Reference
+
+```bash
+# 프로젝트 초기화
+cambrian init [--dir ./path]
+
+# 태스크 실행
+cambrian run -d <domain> -t <tags...> -i '<json>' [--auto-evolve] [--provider anthropic] [--llm-model claude-sonnet-4-6]
+
+# 스킬 관리
+cambrian skills                          # 목록
+cambrian skill <id>                      # 상세
+cambrian absorb <path>                   # 외부 흡수
+cambrian remove <id>                     # 제거
+cambrian stats                           # 통계
+
+# 진화
+cambrian feedback <id> <rating> <comment>
+cambrian evolve <id> -i '<json>'
+cambrian history <id> [--detail <record_id>]
+cambrian rollback <id> <record_id>
+cambrian benchmark -d <domain> -t <tags...> -i '<json>'
+cambrian critique <id>                   # 비판적 분석
+
+# 패키지
+cambrian export <id> [-o ./output]       # .cambrian 패키지 내보내기
+cambrian import <path.cambrian>          # 패키지 가져오기
+```
+
+## 테스트
+
+```bash
+pytest tests/ -v --tb=short -k "not Api"
+# 180 passed, 12 skipped
+```
+
+## 기술 스택
+
+- Python 3.11+
+- pyyaml, jsonschema (필수)
+- anthropic / openai / google-generativeai (선택, LLM 프로바이더)
+- SQLite (ORM 없이 직접)
+- pytest

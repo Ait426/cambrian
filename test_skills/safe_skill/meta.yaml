@@ -1,0 +1,19 @@
+id: "safe_external"
+version: "1.0.0"
+name: "Safe External Skill"
+description: "보안 검사를 통과하는 안전한 외부 스킬"
+domain: "utility"
+tags: ["test", "external", "safe"]
+mode: "b"
+runtime:
+  language: "python"
+  needs_network: false
+  needs_filesystem: false
+  timeout_seconds: 10
+lifecycle:
+  status: "active"
+  fitness_score: 0.0
+  total_executions: 0
+  successful_executions: 0
+  last_used: null
+  crystallized_at: null

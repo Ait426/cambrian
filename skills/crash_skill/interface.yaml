@@ -1,0 +1,14 @@
+input:
+  type: "object"
+  properties:
+    message:
+      type: "string"
+      description: "에러 메시지"
+  required: ["message"]
+output:
+  type: "object"
+  properties:
+    result:
+      type: "string"
+      description: "절대 반환되지 않음"
+  required: ["result"]

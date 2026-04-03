@@ -1,0 +1,33 @@
+input:
+  type: "object"
+  properties:
+    transcript:
+      type: "string"
+      description: "회의 녹취록 또는 회의 내용 텍스트"
+    attendees:
+      type: "array"
+      items:
+        type: "string"
+      description: "참석자 이름 목록"
+  required: ["transcript", "attendees"]
+
+output:
+  type: "object"
+  properties:
+    html:
+      type: "string"
+      description: "회의 요약 HTML 문서"
+    action_items:
+      type: "array"
+      items:
+        type: "object"
+        properties:
+          owner:
+            type: "string"
+            description: "담당자 이름"
+          task:
+            type: "string"
+            description: "수행해야 할 작업 내용"
+        required: ["owner", "task"]
+      description: "추출된 액션 아이템 목록"
+  required: ["html", "action_items"]

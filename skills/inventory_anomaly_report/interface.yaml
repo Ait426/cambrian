@@ -1,0 +1,87 @@
+input:
+  type: object
+  required:
+    - property_name
+    - check_date
+    - mismatches
+  properties:
+    property_name:
+      type: string
+      description: "호텔/숙소 이름 (예: 평택스테이 호텔)"
+    check_date:
+      type: string
+      description: "교차검증 수행 날짜 (YYYY-MM-DD)"
+    mismatches:
+      type: array
+      description: "PMS ↔ OTA 재고 불일치 목록"
+      items:
+        type: object
+        required:
+          - stay_date
+          - room_type
+          - pms_remaining
+          - ota_remaining
+          - ota_source
+        properties:
+          stay_date:
+            type: string
+            description: "숙박일 (YYYY-MM-DD)"
+          room_type:
+            type: string
+            description: "객실 타입명 (예: 스탠다드, 디럭스 OTT)"
+          pms_remaining:
+            type: integer
+            description: "PMS(YFLUX)에 표시된 잔여 재고"
+          ota_remaining:
+            type: integer
+            description: "OTA 파트너센터에 표시된 잔여 재고"
+          ota_source:
+            type: string
+            description: "OTA 출처 (yanolja | goodchoice)"
+          pms_total:
+            type: integer
+            description: "PMS 전체 객실 수 (선택)"
+          ota_total:
+            type: integer
+            description: "OTA 전체 객실 수 (선택)"
+    pms_snapshot_at:
+      type: string
+      description: "PMS(YFLUX) 마지막 스냅샷 수집 시각 (ISO 8601)"
+    yanolja_captured_at:
+      type: string
+      description: "야놀자 파트너센터 수집 시각 (ISO 8601)"
+    goodchoice_captured_at:
+      type: string
+      description: "여기어때 파트너센터 수집 시각 (ISO 8601)"
+    room_types:
+      type: array
+      description: "전체 객실 타입 목록 (선택, 정상 객실도 포함하면 불일치 비율 계산 가능)"
+      items:
+        type: object
+        properties:
+          name:
+            type: string
+          total_rooms:
+            type: integer
+
+output:
+  type: object
+  required:
+    - html
+  properties:
+    html:
+      type: string
+      description: "완성된 분석 리포트 HTML"
+    summary:
+      type: object
+      description: "요약 통계"
+      properties:
+        total_mismatches:
+          type: integer
+        critical_count:
+          type: integer
+        warning_count:
+          type: integer
+    mismatch_count:
+      type: integer
+      description: "총 불일치 건수"

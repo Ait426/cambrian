@@ -1,0 +1,19 @@
+input:
+  type: "object"
+  properties:
+    text:
+      type: "string"
+      description: "인사말을 붙일 대상 텍스트"
+  required: ["text"]
+
+output:
+  type: "object"
+  properties:
+    greeting:
+      type: "string"
+      description: "인사말이 붙은 결과 텍스트"
+    timestamp:
+      type: "string"
+      format: "datetime"
+      description: "실행 시각 (ISO 8601)"
+  required: ["greeting"]

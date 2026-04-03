@@ -1,0 +1,40 @@
+input:
+  type: "object"
+  properties:
+    expenses:
+      type: "array"
+      items:
+        type: "object"
+        properties:
+          date:
+            type: "string"
+            description: "지출 날짜 (YYYY-MM-DD)"
+          category:
+            type: "string"
+            description: "지출 카테고리 (예: 식비, 교통비, 숙박비)"
+          amount:
+            type: "number"
+            description: "지출 금액"
+          description:
+            type: "string"
+            description: "지출 내역 설명"
+        required: ["date", "category", "amount", "description"]
+      description: "지출 항목 배열"
+    period:
+      type: "string"
+      description: "리포트 대상 기간 (예: 2026년 3월, 2026 Q1)"
+  required: ["expenses", "period"]
+
+output:
+  type: "object"
+  properties:
+    html:
+      type: "string"
+      description: "지출 보고서 HTML 문서"
+    total:
+      type: "number"
+      description: "총 지출 금액"
+    by_category:
+      type: "object"
+      description: "카테고리별 지출 합계 (키: 카테고리명, 값: 합계 금액)"
+  required: ["html", "total", "by_category"]

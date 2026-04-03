@@ -1,0 +1,26 @@
+input:
+  type: "object"
+  properties:
+    csv_data:
+      type: "string"
+      description: "정리할 CSV 데이터 (헤더 포함)"
+    rules:
+      type: "array"
+      items:
+        type: "string"
+      description: "적용할 정리 규칙 목록 (예: '빈 행 제거', '이메일 형식 검증')"
+  required: ["csv_data", "rules"]
+
+output:
+  type: "object"
+  properties:
+    cleaned_csv:
+      type: "string"
+      description: "정리된 CSV 데이터"
+    changes_made:
+      type: "integer"
+      description: "변경된 셀/행의 총 수"
+    report:
+      type: "string"
+      description: "수행된 정리 작업 요약 리포트"
+  required: ["cleaned_csv", "changes_made", "report"]

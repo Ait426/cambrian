@@ -1,0 +1,854 @@
+"""Cambrian 진화 코어 테스트."""
+
+from __future__ import annotations
+
+from datetime import datetime
+from pathlib import Path
+
+import pytest
+import yaml
+
+from engine.evolution import SkillEvolver
+from engine.executor import SkillExecutor
+from engine.judge import SkillJudge
+from engine.loop import CambrianEngine
+from engine.models import EvolutionRecord, ExecutionResult, JudgeVerdict
+
+
+@pytest.fixture
+def engine(schemas_dir: Path, tmp_path: Path) -> CambrianEngine:
+    """Mode A 테스트 스킬이 포함된 CambrianEngine을 생성한다."""
+    skills_dir = tmp_path / "skills"
+    pool_dir = tmp_path / "pool"
+    skill_dir = skills_dir / "evolve_test"
+    skill_dir.mkdir(parents=True)
+
+    meta = {
+        "id": "evolve_test",
+        "version": "1.0.0",
+        "name": "Evolve Test",
+        "description": "Mode A evolve test skill",
+        "domain": "testing",
+        "tags": ["test", "evolve"],
+        "created_at": "2026-04-02",
+        "updated_at": "2026-04-02",
+        "mode": "a",
+        "runtime": {
+            "language": "python",
+            "needs_network": False,
+            "needs_filesystem": False,
+            "timeout_seconds": 10,
+        },
+        "lifecycle": {
+            "status": "active",
+            "fitness_score": 0.0,
+            "total_executions": 0,
+            "successful_executions": 0,
+            "last_used": None,
+            "crystallized_at": None,
+        },
+    }
+    interface = {
+        "input": {
+            "type": "object",
+            "properties": {
+                "query": {"type": "string", "description": "query"},
+            },
+            "required": ["query"],
+        },
+        "output": {
+            "type": "object",
+            "properties": {
+                "html": {"type": "string", "description": "html"},
+            },
+            "required": ["html"],
+        },
+    }
+
+    with open(skill_dir / "meta.yaml", "w", encoding="utf-8") as file:
+        yaml.safe_dump(meta, file, allow_unicode=True, sort_keys=False)
+    with open(skill_dir / "interface.yaml", "w", encoding="utf-8") as file:
+        yaml.safe_dump(interface, file, allow_unicode=True, sort_keys=False)
+    (skill_dir / "SKILL.md").write_text(
+        '# Test\nYou receive a query. Respond with JSON: {"html": "<p>answer</p>"}',
+        encoding="utf-8",
+    )
+
+    return CambrianEngine(
+        schemas_dir=schemas_dir,
+        skills_dir=skills_dir,
+        skill_pool_dir=pool_dir,
+        db_path=":memory:",
+    )
+
+
+def test_add_feedback(engine: CambrianEngine) -> None:
+    """feedback()가 생성된 피드백 ID를 반환한다."""
+    feedback_id = engine.feedback("evolve_test", 3, "decent")
+
+    assert isinstance(feedback_id, int)
+    assert feedback_id > 0
+
+
+@pytest.mark.parametrize("rating", [0, 6])
+def test_add_feedback_invalid_rating(
+    engine: CambrianEngine,
+    rating: int,
+) -> None:
+    """유효하지 않은 rating은 ValueError를 발생시킨다."""
+    with pytest.raises(ValueError):
+        engine.feedback("evolve_test", rating, "bad")
+
+
+def test_get_feedback(engine: CambrianEngine) -> None:
+    """최근 피드백 목록을 최신순으로 반환한다."""
+    id1 = engine.feedback("evolve_test", 3, "first")
+    id2 = engine.feedback("evolve_test", 4, "second")
+    id3 = engine.feedback("evolve_test", 5, "third")
+
+    feedback_list = engine.get_registry().get_feedback("evolve_test")
+
+    assert len(feedback_list) == 3
+    assert [item["id"] for item in feedback_list] == [id3, id2, id1]
+
+
+def test_evolution_record_stored(engine: CambrianEngine) -> None:
+    """진화 기록을 저장하면 이력에서 조회할 수 있다."""
+    record = EvolutionRecord(
+        id=0,
+        skill_id="evolve_test",
+        parent_skill_md="# Old",
+        child_skill_md="# New",
+        parent_fitness=0.1,
+        child_fitness=0.2,
+        adopted=True,
+        mutation_summary="summary",
+        feedback_ids="[1, 2]",
+        created_at=datetime.now().astimezone().isoformat(),
+    )
+
+    record_id = engine.get_registry().add_evolution_record(record)
+    history = engine.get_registry().get_evolution_history("evolve_test")
+
+    assert record_id > 0
+    assert len(history) == 1
+    assert history[0]["id"] == record_id
+    assert history[0]["adopted"] is True
+
+
+def test_mutate_returns_string(
+    engine: CambrianEngine,
+) -> None:
+    """mutate()는 mock LLM 응답 문자열을 반환한다."""
+    from engine.llm import LLMProvider
+
+    class _MockProvider(LLMProvider):
+        def complete(self, system: str, user: str, max_tokens: int = 8192) -> str:
+            return "# Improved SKILL.md\nBetter instructions."
+        def provider_name(self) -> str:
+            return "mock"
+
+    evolver = SkillEvolver(
+        engine._loader, engine._executor, engine.get_registry(),
+        provider=_MockProvider(),
+    )
+    skill = engine._loader.load(engine.get_registry().get("evolve_test")["skill_path"])
+    result = evolver.mutate(skill, [{"id": 1, "rating": 3, "comment": "decent"}])
+
+    assert isinstance(result, str)
+    assert len(result) > 0
+
+
+def test_mutate_prompt_contains_feedback(
+    engine: CambrianEngine,
+) -> None:
+    """mutate() 프롬프트에 포맷된 피드백이 포함된다."""
+    from engine.llm import LLMProvider
+
+    captured: dict[str, str] = {}
+
+    class _CapturingProvider(LLMProvider):
+        def complete(self, system: str, user: str, max_tokens: int = 8192) -> str:
+            captured["system"] = system
+            captured["user"] = user
+            return "# Improved"
+        def provider_name(self) -> str:
+            return "mock"
+
+    evolver = SkillEvolver(
+        engine._loader, engine._executor, engine.get_registry(),
+        provider=_CapturingProvider(),
+    )
+    skill = engine._loader.load(engine.get_registry().get("evolve_test")["skill_path"])
+    evolver.mutate(skill, [{"id": 1, "rating": 3, "comment": "decent"}])
+
+    assert "Rating: 3/5" in captured["user"]
+
+
+def test_evolve_mode_b_rejected(
+    engine: CambrianEngine,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Mode B 스킬은 진화 대상에서 거부된다."""
+    _ = monkeypatch
+    skills_root = Path(engine.get_registry().get("evolve_test")["skill_path"]).parent
+    mode_b_dir = skills_root / "mode_b_test"
+    mode_b_dir.mkdir(parents=True)
+
+    meta = {
+        "id": "mode_b_test",
+        "version": "1.0.0",
+        "name": "Mode B Test",
+        "description": "Mode B evolve rejection",
+        "domain": "testing",
+        "tags": ["test", "evolve"],
+        "created_at": "2026-04-02",
+        "updated_at": "2026-04-02",
+        "mode": "b",
+        "runtime": {
+            "language": "python",
+            "needs_network": False,
+            "needs_filesystem": False,
+            "timeout_seconds": 10,
+        },
+        "lifecycle": {
+            "status": "active",
+            "fitness_score": 0.0,
+            "total_executions": 0,
+            "successful_executions": 0,
+            "last_used": None,
+            "crystallized_at": None,
+        },
+    }
+    interface = {
+        "input": {
+            "type": "object",
+            "properties": {"query": {"type": "string", "description": "query"}},
+            "required": ["query"],
+        },
+        "output": {
+            "type": "object",
+            "properties": {"html": {"type": "string", "description": "html"}},
+            "required": ["html"],
+        },
+    }
+    with open(mode_b_dir / "meta.yaml", "w", encoding="utf-8") as file:
+        yaml.safe_dump(meta, file, allow_unicode=True, sort_keys=False)
+    with open(mode_b_dir / "interface.yaml", "w", encoding="utf-8") as file:
+        yaml.safe_dump(interface, file, allow_unicode=True, sort_keys=False)
+    (mode_b_dir / "SKILL.md").write_text("# Mode B", encoding="utf-8")
+    execute_dir = mode_b_dir / "execute"
+    execute_dir.mkdir()
+    (execute_dir / "main.py").write_text(
+        'import json\nimport sys\n\n'
+        'def run(input_data: dict) -> dict:\n    return {"html": "<p>ok</p>"}\n\n'
+        'if __name__ == "__main__":\n    print(json.dumps(run({})))\n',
+        encoding="utf-8",
+    )
+
+    skill = engine._loader.load(mode_b_dir)
+    engine.get_registry().register(skill)
+    evolver = SkillEvolver(engine._loader, engine._executor, engine.get_registry())
+
+    with pytest.raises(RuntimeError, match="Only mode 'a'"):
+        evolver.evolve(
+            "mode_b_test",
+            {"query": "hello"},
+            [{"id": 1, "rating": 3, "comment": "ok"}],
+        )
+
+
+def test_evolve_no_feedback(engine: CambrianEngine) -> None:
+    """피드백 없이 evolve()를 호출하면 RuntimeError를 발생시킨다."""
+    with pytest.raises(RuntimeError, match="No feedback"):
+        engine.evolve("evolve_test", {"query": "hello"})
+
+
+def test_evolve_adopted(
+    engine: CambrianEngine,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Variant 평균 점수가 더 높으면 진화가 채택된다."""
+
+    def fake_mutate(
+        self: SkillEvolver,
+        skill: object,
+        feedback_list: list[dict],
+    ) -> str:
+        """변이된 SKILL.md를 반환한다."""
+        _ = self
+        _ = skill
+        _ = feedback_list
+        return "# Evolved\nImproved instructions here."
+
+    def fake_execute(
+        self: SkillExecutor,
+        skill: object,
+        input_data: dict,
+    ) -> ExecutionResult:
+        """스킬 ID에 따라 가짜 실행 결과를 반환한다."""
+        _ = self
+        _ = input_data
+        skill_id = getattr(skill, "id")
+        if skill_id == "evolve_test_variant":
+            return ExecutionResult(
+                skill_id=skill_id,
+                success=True,
+                output={"html": "<p>variant</p>"},
+                execution_time_ms=10,
+                mode="a",
+            )
+        return ExecutionResult(
+            skill_id=skill_id,
+            success=True,
+            output={"html": "<p>original</p>"},
+            execution_time_ms=100,
+            mode="a",
+        )
+
+    def fake_judge(
+        self: SkillJudge,
+        original_output: dict | None,
+        variant_output: dict | None,
+        skill_description: str,
+        feedback_list: list[dict],
+    ) -> JudgeVerdict:
+        """Variant가 더 높은 점수를 받도록 Judge 결과를 반환한다."""
+        _ = self
+        _ = original_output
+        _ = variant_output
+        _ = skill_description
+        _ = feedback_list
+        return JudgeVerdict(
+            original_score=5.0,
+            variant_score=8.0,
+            reasoning="variant is better",
+            winner="variant",
+        )
+
+    monkeypatch.setattr(SkillEvolver, "mutate", fake_mutate)
+    monkeypatch.setattr(SkillExecutor, "execute", fake_execute)
+    monkeypatch.setattr(SkillJudge, "judge", fake_judge)
+
+    engine.feedback("evolve_test", 5, "needs improvement")
+    record = engine.evolve("evolve_test", {"query": "hello"})
+
+    assert record.adopted is True
+
+
+def test_evolve_discarded(
+    engine: CambrianEngine,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Variant 평균 점수가 더 낮으면 진화가 폐기된다."""
+
+    def fake_mutate(
+        self: SkillEvolver,
+        skill: object,
+        feedback_list: list[dict],
+    ) -> str:
+        """변이된 SKILL.md를 반환한다."""
+        _ = self
+        _ = skill
+        _ = feedback_list
+        return "# Evolved\nWorse instructions here."
+
+    def fake_execute(
+        self: SkillExecutor,
+        skill: object,
+        input_data: dict,
+    ) -> ExecutionResult:
+        """Variant는 실패하고 original은 성공하도록 결과를 반환한다."""
+        _ = self
+        _ = input_data
+        skill_id = getattr(skill, "id")
+        if skill_id == "evolve_test_variant":
+            return ExecutionResult(
+                skill_id=skill_id,
+                success=False,
+                output=None,
+                error="variant failed",
+                execution_time_ms=10,
+                mode="a",
+            )
+        return ExecutionResult(
+            skill_id=skill_id,
+            success=True,
+            output={"html": "<p>original</p>"},
+            execution_time_ms=50,
+            mode="a",
+        )
+
+    def fake_judge(
+        self: SkillJudge,
+        original_output: dict | None,
+        variant_output: dict | None,
+        skill_description: str,
+        feedback_list: list[dict],
+    ) -> JudgeVerdict:
+        """Original이 더 높은 점수를 받도록 Judge 결과를 반환한다."""
+        _ = self
+        _ = original_output
+        _ = variant_output
+        _ = skill_description
+        _ = feedback_list
+        return JudgeVerdict(
+            original_score=7.0,
+            variant_score=2.0,
+            reasoning="original is better",
+            winner="original",
+        )
+
+    monkeypatch.setattr(SkillEvolver, "mutate", fake_mutate)
+    monkeypatch.setattr(SkillExecutor, "execute", fake_execute)
+    monkeypatch.setattr(SkillJudge, "judge", fake_judge)
+
+    engine.feedback("evolve_test", 2, "bad")
+    record = engine.evolve("evolve_test", {"query": "hello"})
+
+    assert record.adopted is False
+
+
+def test_evolve_trial_count(
+    engine: CambrianEngine,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """evolve()는 원본 3회와 variant 3회로 총 6회 실행한다."""
+    execute_count = {"count": 0}
+
+    def fake_mutate(
+        self: SkillEvolver,
+        skill: object,
+        feedback_list: list[dict],
+    ) -> str:
+        """변이된 SKILL.md를 반환한다."""
+        _ = self
+        _ = skill
+        _ = feedback_list
+        return "# Evolved\nImproved instructions here."
+
+    def fake_execute(
+        self: SkillExecutor,
+        skill: object,
+        input_data: dict,
+    ) -> ExecutionResult:
+        """호출 횟수를 기록하며 실행 결과를 반환한다."""
+        _ = self
+        _ = input_data
+        execute_count["count"] += 1
+        skill_id = getattr(skill, "id")
+        return ExecutionResult(
+            skill_id=skill_id,
+            success=True,
+            output={"html": f"<p>{skill_id}</p>"},
+            execution_time_ms=25,
+            mode="a",
+        )
+
+    def fake_judge(
+        self: SkillJudge,
+        original_output: dict | None,
+        variant_output: dict | None,
+        skill_description: str,
+        feedback_list: list[dict],
+    ) -> JudgeVerdict:
+        """Variant가 더 높은 점수를 받도록 Judge 결과를 반환한다."""
+        _ = self
+        _ = original_output
+        _ = variant_output
+        _ = skill_description
+        _ = feedback_list
+        return JudgeVerdict(5.0, 8.0, "variant is better", "variant")
+
+    monkeypatch.setattr(SkillEvolver, "mutate", fake_mutate)
+    monkeypatch.setattr(SkillExecutor, "execute", fake_execute)
+    monkeypatch.setattr(SkillJudge, "judge", fake_judge)
+
+    engine.feedback("evolve_test", 5, "count runs")
+    engine.evolve("evolve_test", {"query": "hello"})
+
+    assert execute_count["count"] == 6
+
+
+def test_evolve_judge_called_per_trial(
+    engine: CambrianEngine,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Judge는 trial 수만큼 정확히 3회 호출된다."""
+    judge_count = {"count": 0}
+
+    def fake_mutate(
+        self: SkillEvolver,
+        skill: object,
+        feedback_list: list[dict],
+    ) -> str:
+        """변이된 SKILL.md를 반환한다."""
+        _ = self
+        _ = skill
+        _ = feedback_list
+        return "# Evolved\nImproved instructions here."
+
+    def fake_execute(
+        self: SkillExecutor,
+        skill: object,
+        input_data: dict,
+    ) -> ExecutionResult:
+        """가짜 실행 결과를 반환한다."""
+        _ = self
+        _ = input_data
+        skill_id = getattr(skill, "id")
+        return ExecutionResult(
+            skill_id=skill_id,
+            success=True,
+            output={"html": f"<p>{skill_id}</p>"},
+            execution_time_ms=20,
+            mode="a",
+        )
+
+    def fake_judge(
+        self: SkillJudge,
+        original_output: dict | None,
+        variant_output: dict | None,
+        skill_description: str,
+        feedback_list: list[dict],
+    ) -> JudgeVerdict:
+        """Judge 호출 횟수를 기록한다."""
+        _ = self
+        _ = original_output
+        _ = variant_output
+        _ = skill_description
+        _ = feedback_list
+        judge_count["count"] += 1
+        return JudgeVerdict(5.0, 8.0, "variant is better", "variant")
+
+    monkeypatch.setattr(SkillEvolver, "mutate", fake_mutate)
+    monkeypatch.setattr(SkillExecutor, "execute", fake_execute)
+    monkeypatch.setattr(SkillJudge, "judge", fake_judge)
+
+    engine.feedback("evolve_test", 5, "count judges")
+    engine.evolve("evolve_test", {"query": "hello"})
+
+    assert judge_count["count"] == 3
+
+
+def test_evolve_average_scoring(
+    engine: CambrianEngine,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Judge 평균 점수로 채택 여부와 child_fitness를 계산한다."""
+    judge_count = {"count": 0}
+
+    def fake_mutate(
+        self: SkillEvolver,
+        skill: object,
+        feedback_list: list[dict],
+    ) -> str:
+        """변이된 SKILL.md를 반환한다."""
+        _ = self
+        _ = skill
+        _ = feedback_list
+        return "# Evolved\nImproved instructions here."
+
+    def fake_execute(
+        self: SkillExecutor,
+        skill: object,
+        input_data: dict,
+    ) -> ExecutionResult:
+        """가짜 실행 결과를 반환한다."""
+        _ = self
+        _ = input_data
+        skill_id = getattr(skill, "id")
+        return ExecutionResult(
+            skill_id=skill_id,
+            success=True,
+            output={"html": f"<p>{skill_id}</p>"},
+            execution_time_ms=20,
+            mode="a",
+        )
+
+    def fake_judge(
+        self: SkillJudge,
+        original_output: dict | None,
+        variant_output: dict | None,
+        skill_description: str,
+        feedback_list: list[dict],
+    ) -> JudgeVerdict:
+        """호출 순서별로 다른 Judge 점수를 반환한다."""
+        _ = self
+        _ = original_output
+        _ = variant_output
+        _ = skill_description
+        _ = feedback_list
+        judge_count["count"] += 1
+        if judge_count["count"] == 1:
+            return JudgeVerdict(6.0, 8.0, "trial1", "variant")
+        if judge_count["count"] == 2:
+            return JudgeVerdict(4.0, 9.0, "trial2", "variant")
+        return JudgeVerdict(5.0, 7.0, "trial3", "variant")
+
+    monkeypatch.setattr(SkillEvolver, "mutate", fake_mutate)
+    monkeypatch.setattr(SkillExecutor, "execute", fake_execute)
+    monkeypatch.setattr(SkillJudge, "judge", fake_judge)
+
+    engine.feedback("evolve_test", 5, "average scoring")
+    record = engine.evolve("evolve_test", {"query": "hello"})
+
+    assert record.adopted is True
+    assert record.child_fitness == pytest.approx(0.8, abs=0.01)
+
+
+def test_evolve_tie_not_adopted(
+    engine: CambrianEngine,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """원본과 variant 평균이 같으면 채택하지 않는다."""
+
+    def fake_mutate(
+        self: SkillEvolver,
+        skill: object,
+        feedback_list: list[dict],
+    ) -> str:
+        """변이된 SKILL.md를 반환한다."""
+        _ = self
+        _ = skill
+        _ = feedback_list
+        return "# Evolved\nTie instructions here."
+
+    def fake_execute(
+        self: SkillExecutor,
+        skill: object,
+        input_data: dict,
+    ) -> ExecutionResult:
+        """가짜 실행 결과를 반환한다."""
+        _ = self
+        _ = input_data
+        skill_id = getattr(skill, "id")
+        return ExecutionResult(
+            skill_id=skill_id,
+            success=True,
+            output={"html": f"<p>{skill_id}</p>"},
+            execution_time_ms=20,
+            mode="a",
+        )
+
+    def fake_judge(
+        self: SkillJudge,
+        original_output: dict | None,
+        variant_output: dict | None,
+        skill_description: str,
+        feedback_list: list[dict],
+    ) -> JudgeVerdict:
+        """동점 Judge 결과를 반환한다."""
+        _ = self
+        _ = original_output
+        _ = variant_output
+        _ = skill_description
+        _ = feedback_list
+        return JudgeVerdict(6.0, 6.0, "tie", "tie")
+
+    monkeypatch.setattr(SkillEvolver, "mutate", fake_mutate)
+    monkeypatch.setattr(SkillExecutor, "execute", fake_execute)
+    monkeypatch.setattr(SkillJudge, "judge", fake_judge)
+
+    engine.feedback("evolve_test", 4, "tie case")
+    record = engine.evolve("evolve_test", {"query": "hello"})
+
+    assert record.adopted is False
+
+
+# === Phase 2: judge_reasoning 테스트 ===
+
+
+def test_evolve_stores_judge_reasoning(
+    engine: CambrianEngine,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """evolve는 Judge reasoning을 record에 누적 저장한다."""
+
+    def fake_mutate(
+        self: SkillEvolver,
+        skill: object,
+        feedback_list: list[dict],
+    ) -> str:
+        _ = self
+        _ = skill
+        _ = feedback_list
+        return "# Evolved"
+
+    def fake_execute(
+        self: SkillExecutor,
+        skill: object,
+        input_data: dict,
+    ) -> ExecutionResult:
+        _ = self
+        _ = input_data
+        skill_id = getattr(skill, "id")
+        return ExecutionResult(
+            skill_id=skill_id,
+            success=True,
+            output={"html": f"<p>{skill_id}</p>"},
+            execution_time_ms=20,
+            mode="a",
+        )
+
+    def fake_judge(
+        self: SkillJudge,
+        original_output: dict | None,
+        variant_output: dict | None,
+        skill_description: str,
+        feedback_list: list[dict],
+    ) -> JudgeVerdict:
+        _ = self
+        _ = original_output
+        _ = variant_output
+        _ = skill_description
+        _ = feedback_list
+        return JudgeVerdict(5.0, 8.0, "good improvement", "variant")
+
+    monkeypatch.setattr(SkillEvolver, "mutate", fake_mutate)
+    monkeypatch.setattr(SkillExecutor, "execute", fake_execute)
+    monkeypatch.setattr(SkillJudge, "judge", fake_judge)
+
+    engine.feedback("evolve_test", 3, "test")
+    record = engine.evolve("evolve_test", {"query": "hello"})
+
+    assert "good improvement" in record.judge_reasoning
+    assert record.judge_reasoning.count("good improvement") == 3
+
+
+def test_evolution_history_contains_reasoning(
+    engine: CambrianEngine,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """진화 이력에는 Judge reasoning이 저장된다."""
+
+    def fake_mutate(
+        self: SkillEvolver,
+        skill: object,
+        feedback_list: list[dict],
+    ) -> str:
+        _ = self
+        _ = skill
+        _ = feedback_list
+        return "# Evolved"
+
+    def fake_execute(
+        self: SkillExecutor,
+        skill: object,
+        input_data: dict,
+    ) -> ExecutionResult:
+        _ = self
+        _ = input_data
+        skill_id = getattr(skill, "id")
+        return ExecutionResult(
+            skill_id=skill_id,
+            success=True,
+            output={"html": f"<p>{skill_id}</p>"},
+            execution_time_ms=20,
+            mode="a",
+        )
+
+    def fake_judge(
+        self: SkillJudge,
+        original_output: dict | None,
+        variant_output: dict | None,
+        skill_description: str,
+        feedback_list: list[dict],
+    ) -> JudgeVerdict:
+        _ = self
+        _ = original_output
+        _ = variant_output
+        _ = skill_description
+        _ = feedback_list
+        return JudgeVerdict(5.0, 8.0, "good improvement", "variant")
+
+    monkeypatch.setattr(SkillEvolver, "mutate", fake_mutate)
+    monkeypatch.setattr(SkillExecutor, "execute", fake_execute)
+    monkeypatch.setattr(SkillJudge, "judge", fake_judge)
+
+    engine.feedback("evolve_test", 3, "test")
+    engine.evolve("evolve_test", {"query": "hello"})
+    history = engine.get_registry().get_evolution_history("evolve_test")
+
+    assert "good improvement" in history[0]["judge_reasoning"]
+
+
+# === Phase 3: mutate 변이 범위 제한 테스트 ===
+
+
+def test_mutate_preserves_output_format(
+    engine: CambrianEngine,
+) -> None:
+    """변이 결과에 원본 Output Format 섹션이 보존된다."""
+    from engine.llm import LLMProvider
+
+    original_md = (
+        '# Test\n\n## Input Format\nJSON input\n\n'
+        '## Output Format\nRespond with ONLY a JSON object:\n'
+        '```json\n{"html": "..."}\n```\n\n## Design\nOld design'
+    )
+
+    class _MockProvider(LLMProvider):
+        def complete(self, system: str, user: str, max_tokens: int = 8192) -> str:
+            # Output Format을 올바르게 유지한 변이 반환
+            return (
+                '# Test\n\n## Input Format\nJSON input\n\n'
+                '## Output Format\nRespond with ONLY a JSON object:\n'
+                '```json\n{"html": "..."}\n```\n\n## Design\nImproved design\n\n'
+                '## Changelog\n- Improved design section'
+            )
+        def provider_name(self) -> str:
+            return "mock"
+
+    # evolve_test 스킬의 SKILL.md를 Output Format 포함으로 교체
+    skill_data = engine.get_registry().get("evolve_test")
+    skill_path = Path(skill_data["skill_path"])
+    (skill_path / "SKILL.md").write_text(original_md, encoding="utf-8")
+
+    evolver = SkillEvolver(
+        engine._loader, engine._executor, engine.get_registry(),
+        provider=_MockProvider(),
+    )
+    skill = engine._loader.load(skill_path)
+    result = evolver.mutate(skill, [{"id": 1, "rating": 3, "comment": "improve"}])
+
+    assert "Respond with ONLY a JSON object:" in result
+    assert '{"html": "..."}' in result
+
+
+def test_mutate_restores_output_format(
+    engine: CambrianEngine,
+) -> None:
+    """LLM이 Output Format을 변경하면 원본으로 강제 복원된다."""
+    from engine.llm import LLMProvider
+
+    original_md = (
+        '# Test\n\n## Output Format\nRespond with ONLY a JSON object:\n'
+        '```json\n{"html": "..."}\n```\n\n## Design\nOld design'
+    )
+
+    class _BadMutateProvider(LLMProvider):
+        def complete(self, system: str, user: str, max_tokens: int = 8192) -> str:
+            # Output Format을 변경한 잘못된 변이
+            return (
+                '# Test\n\n## Output Format\nReturn any format you like.\n\n'
+                '## Design\nNew design'
+            )
+        def provider_name(self) -> str:
+            return "mock"
+
+    skill_data = engine.get_registry().get("evolve_test")
+    skill_path = Path(skill_data["skill_path"])
+    (skill_path / "SKILL.md").write_text(original_md, encoding="utf-8")
+
+    evolver = SkillEvolver(
+        engine._loader, engine._executor, engine.get_registry(),
+        provider=_BadMutateProvider(),
+    )
+    skill = engine._loader.load(skill_path)
+    result = evolver.mutate(skill, [{"id": 1, "rating": 2, "comment": "bad"}])
+
+    # 원본 Output Format이 복원됨
+    assert "Respond with ONLY a JSON object:" in result
+    # LLM이 넣은 잘못된 내용은 제거됨
+    assert "Return any format you like" not in result

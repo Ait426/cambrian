@@ -1,0 +1,12 @@
+id: "landing_page"
+version: "1.0.0"
+name: "Landing Page Generator"
+description: "제품 정보를 Tailwind CSS 기반 반응형 랜딩 페이지 HTML로 변환"
+domain: "design"
+tags: ["landing", "page", "html", "tailwind", "design", "web"]
+mode: "a"
+runtime:
+  language: "python"
+  needs_network: false
+  needs_filesystem: false
+  timeout_seconds: 60

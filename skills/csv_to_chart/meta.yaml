@@ -1,0 +1,12 @@
+id: "csv_to_chart"
+version: "1.0.0"
+name: "CSV to Chart"
+description: "CSV 데이터를 Chart.js 기반 인터랙티브 차트 HTML로 변환"
+domain: "data_visualization"
+tags: ["csv", "chart", "visualization", "html", "data"]
+mode: "a"
+runtime:
+  language: "python"
+  needs_network: false
+  needs_filesystem: false
+  timeout_seconds: 60

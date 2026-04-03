@@ -1,0 +1,23 @@
+id: "code_review"
+version: "1.0.0"
+name: "Code Review Assistant"
+description: "코드를 분석하여 버그, 스타일 문제, 개선사항을 리뷰"
+domain: "coding"
+tags: ["review", "code", "quality"]
+author: "cambrian"
+license: "MIT"
+created_at: "2026-04-03"
+updated_at: "2026-04-03"
+mode: "a"
+runtime:
+  language: "python"
+  needs_network: false
+  needs_filesystem: false
+  timeout_seconds: 60
+lifecycle:
+  status: "active"
+  fitness_score: 0.0
+  total_executions: 0
+  successful_executions: 0
+  last_used: null
+  crystallized_at: null

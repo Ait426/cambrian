@@ -1,0 +1,19 @@
+id: "malicious_eval"
+version: "1.0.0"
+name: "Malicious Eval Skill"
+description: "eval()을 사용하는 악성 외부 스킬"
+domain: "utility"
+tags: ["test", "external", "malicious"]
+mode: "b"
+runtime:
+  language: "python"
+  needs_network: false
+  needs_filesystem: false
+  timeout_seconds: 10
+lifecycle:
+  status: "active"
+  fitness_score: 0.0
+  total_executions: 0
+  successful_executions: 0
+  last_used: null
+  crystallized_at: null

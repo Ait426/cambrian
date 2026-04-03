@@ -1,0 +1,43 @@
+input:
+  type: object
+  required:
+    - product_name
+    - tagline
+  properties:
+    product_name:
+      type: string
+      description: 제품 또는 서비스 이름
+    tagline:
+      type: string
+      description: 핵심 슬로건
+    description:
+      type: string
+      description: 제품 설명 (선택)
+    features:
+      type: array
+      description: 주요 기능 목록
+      items:
+        type: object
+        properties:
+          title:
+            type: string
+          description:
+            type: string
+    cta_text:
+      type: string
+      default: "시작하기"
+      description: CTA 버튼 텍스트
+    color:
+      type: string
+      enum: [indigo, blue, green, purple, orange]
+      default: blue
+      description: 브랜드 색상
+
+output:
+  type: object
+  required:
+    - html
+  properties:
+    html:
+      type: string
+      description: 완성된 랜딩 페이지 HTML

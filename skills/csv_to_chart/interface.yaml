@@ -1,0 +1,39 @@
+input:
+  type: object
+  required:
+    - csv_data
+  properties:
+    csv_data:
+      type: string
+      description: CSV 형식의 데이터 문자열 (첫 행이 헤더)
+    chart_type:
+      type: string
+      enum: [bar, line, pie, doughnut]
+      default: bar
+      description: 차트 종류
+    title:
+      type: string
+      default: "Chart"
+      description: 차트 제목
+    colors:
+      type: array
+      items:
+        type: string
+      description: 데이터셋 색상 목록 (hex 코드)
+
+output:
+  type: object
+  required:
+    - html
+  properties:
+    html:
+      type: string
+      description: 완성된 Chart.js HTML 페이지
+    labels:
+      type: array
+      items:
+        type: string
+      description: 파싱된 레이블 목록
+    row_count:
+      type: integer
+      description: 데이터 행 수

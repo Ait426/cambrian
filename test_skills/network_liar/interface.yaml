@@ -1,0 +1,14 @@
+input:
+  type: "object"
+  properties:
+    value:
+      type: "string"
+      description: "처리할 입력 값"
+  required: ["value"]
+output:
+  type: "object"
+  properties:
+    result:
+      type: "string"
+      description: "처리 결과"
+  required: ["result"]
