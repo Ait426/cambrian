@@ -107,7 +107,9 @@ def main() -> None:
         "-r",
         type=int,
         default=3,
-        help="최대 재시도 (기본값: 3)",
+        choices=range(0, 11),
+        metavar="N",
+        help="최대 재시도 0~10 (기본값: 3)",
     )
     run_parser.add_argument(
         "--auto-evolve",
@@ -451,7 +453,7 @@ def _handle_absorb(args: argparse.Namespace) -> None:
     engine = _create_engine(args)
 
     try:
-        skill = engine._absorber.absorb(args.path)
+        skill = engine.absorb_skill(args.path)
         print(f"[OK] Absorbed skill '{skill.id}' into pool")
     except SecurityViolationError as exc:
         print("[FAIL] Security violation:", file=sys.stderr)
@@ -474,7 +476,7 @@ def _handle_remove(args: argparse.Namespace) -> None:
     engine = _create_engine(args)
 
     try:
-        engine._absorber.remove(args.skill_id)
+        engine.remove_skill(args.skill_id)
         print(f"[OK] Removed skill '{args.skill_id}'")
     except SkillNotFoundError:
         print(f"[FAIL] Skill '{args.skill_id}' not found.", file=sys.stderr)
@@ -744,7 +746,7 @@ def _handle_export(args: argparse.Namespace) -> None:
     from engine.portability import SkillPorter
 
     engine = _create_engine(args)
-    porter = SkillPorter(engine._loader, engine.get_registry(), args.pool)
+    porter = SkillPorter(engine.get_loader(), engine.get_registry(), args.pool)
 
     try:
         zip_path = porter.export_skill(args.skill_id, Path(args.output))
@@ -763,7 +765,7 @@ def _handle_import(args: argparse.Namespace) -> None:
     from engine.portability import SkillPorter
 
     engine = _create_engine(args)
-    porter = SkillPorter(engine._loader, engine.get_registry(), args.pool)
+    porter = SkillPorter(engine.get_loader(), engine.get_registry(), args.pool)
 
     try:
         skill_id = porter.import_skill(Path(args.path))

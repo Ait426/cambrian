@@ -72,12 +72,15 @@ class SkillExecutor:
         started_at = time.perf_counter()
 
         try:
+            # 보안: 부모 프로세스의 API 키 등이 자식에 전달되지 않도록 최소 환경변수만 허용
+            safe_env = self._build_safe_env()
             completed = subprocess.run(
                 [sys.executable, str(main_py)],
                 input=json_input.encode("utf-8"),
                 capture_output=True,
                 timeout=skill.runtime.timeout_seconds,
                 cwd=str(skill.skill_path),
+                env=safe_env,
             )
             ended_at = time.perf_counter()
             execution_time_ms = int((ended_at - started_at) * 1000)
@@ -159,6 +162,25 @@ class SkillExecutor:
                 execution_time_ms=execution_time_ms,
                 mode="b",
             )
+
+    @staticmethod
+    def _build_safe_env() -> dict[str, str]:
+        """subprocess에 전달할 최소 환경변수를 구성한다.
+
+        Returns:
+            안전한 환경변수 딕셔너리
+        """
+        safe_env: dict[str, str] = {}
+        # 실행에 필수적인 환경변수만 화이트리스트로 허용
+        allowed_keys = ("PATH", "HOME", "LANG", "LC_ALL", "PYTHONPATH", "PYTHONIOENCODING")
+        for key in allowed_keys:
+            value = os.environ.get(key)
+            if value is not None:
+                safe_env[key] = value
+        # UTF-8 출력 보장
+        safe_env.setdefault("LANG", "en_US.UTF-8")
+        safe_env.setdefault("PYTHONIOENCODING", "utf-8")
+        return safe_env
 
     def _execute_mode_a(self, skill: Skill, input_data: dict) -> ExecutionResult:
         """Mode A: LLM이 SKILL.md를 읽고 결과물을 생성한다.

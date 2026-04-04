@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import logging
 import shutil
+import tempfile
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -194,9 +195,9 @@ class SkillEvolver:
         child_skill_md = self.mutate(original_skill, feedback_list)
 
         try:
-            variant_dir = original_skill.skill_path.parent / variant_id
-            if variant_dir.exists():
-                shutil.rmtree(variant_dir)
+            # H-4: 임시 디렉토리 사용으로 시드 스킬 디렉토리 오염 방지
+            variant_dir = Path(tempfile.mkdtemp(prefix=f"{variant_id}_"))
+            shutil.rmtree(variant_dir)
             shutil.copytree(original_skill.skill_path, variant_dir)
             (variant_dir / "SKILL.md").write_text(child_skill_md, encoding="utf-8")
 
@@ -238,9 +239,13 @@ class SkillEvolver:
                 )
 
             if adopted:
-                (original_skill.skill_path / "SKILL.md").write_text(
-                    child_skill_md, encoding="utf-8"
-                )
+                # H-1: 덮어쓰기 전 원본 백업 (LLM 비정상 출력 시 복원 가능)
+                skill_md_path = original_skill.skill_path / "SKILL.md"
+                backup_path = original_skill.skill_path / ".SKILL.md.bak"
+                if skill_md_path.exists():
+                    shutil.copy2(skill_md_path, backup_path)
+                    logger.info("Backup created: %s", backup_path)
+                skill_md_path.write_text(child_skill_md, encoding="utf-8")
                 logger.info("Evolution adopted for skill '%s'", skill_id)
             else:
                 logger.info(

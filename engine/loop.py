@@ -58,6 +58,18 @@ class CambrianEngine:
         # 장기 미사용 스킬 자동 퇴화
         self._registry.decay()
 
+    def __enter__(self) -> "CambrianEngine":
+        """context manager 진입."""
+        return self
+
+    def __exit__(self, exc_type: type | None, exc_val: Exception | None, exc_tb: object) -> None:
+        """context manager 종료 시 DB 연결을 닫는다."""
+        self.close()
+
+    def close(self) -> None:
+        """엔진 리소스를 정리한다. DB 연결을 닫는다."""
+        self._registry.close()
+
     def _register_seed_skills(self, skills_dir: str | Path) -> None:
         """시드 스킬 디렉토리의 모든 스킬을 Registry에 등록한다.
 
@@ -116,6 +128,27 @@ class CambrianEngine:
         for candidate in run_targets:
             skill = self._loader.load(candidate["skill_path"])
             result = self._executor.execute(skill, input_data)
+
+            # H-3: 성공 결과의 출력 스키마 검증
+            if result.success and result.output is not None:
+                output_errors = self._executor.validate_output(skill, result.output)
+                if output_errors:
+                    logger.warning(
+                        "Output schema validation failed for '%s': %s",
+                        skill.id,
+                        output_errors,
+                    )
+                    result = ExecutionResult(
+                        skill_id=result.skill_id,
+                        success=False,
+                        output=result.output,
+                        error=f"Output schema mismatch: {'; '.join(output_errors)}",
+                        stderr=result.stderr,
+                        exit_code=result.exit_code,
+                        execution_time_ms=result.execution_time_ms,
+                        mode=result.mode,
+                    )
+
             self._registry.update_after_execution(skill.id, result)
             results.append((candidate, result))
 
@@ -340,6 +373,29 @@ class CambrianEngine:
     def get_registry(self) -> SkillRegistry:
         """Registry 인스턴스를 반환한다. 테스트·디버깅용."""
         return self._registry
+
+    def get_loader(self) -> SkillLoader:
+        """Loader 인스턴스를 반환한다."""
+        return self._loader
+
+    def absorb_skill(self, path: str | Path) -> "Skill":
+        """외부 스킬을 흡수한다.
+
+        Args:
+            path: 흡수할 스킬 디렉토리 경로
+
+        Returns:
+            흡수된 Skill 객체
+        """
+        return self._absorber.absorb(path)
+
+    def remove_skill(self, skill_id: str) -> None:
+        """흡수된 스킬을 제거한다.
+
+        Args:
+            skill_id: 제거할 스킬 ID
+        """
+        self._absorber.remove(skill_id)
 
     def get_skill_count(self) -> int:
         """등록된 스킬 수를 반환한다."""
