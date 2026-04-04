@@ -283,6 +283,32 @@ def main() -> None:
         help="JSON 출력",
     )
 
+    scan_parser = subparsers.add_parser(
+        "scan",
+        help="프로젝트 분석 + 스킬 추천",
+        parents=[common_parser],
+    )
+    scan_parser.add_argument("path", help="분석할 프로젝트 디렉토리")
+    scan_parser.add_argument(
+        "--depth", type=int, default=4, help="파일트리 스캔 깊이 (기본: 4)",
+    )
+    scan_parser.add_argument(
+        "--max-queries", type=int, default=10, dest="max_queries",
+        help="최대 search 횟수 (기본: 10)",
+    )
+    scan_parser.add_argument(
+        "--top-k", type=int, default=3, dest="top_k",
+        help="gap당 추천 스킬 수 (기본: 3)",
+    )
+    scan_parser.add_argument(
+        "--no-search", action="store_true", dest="no_search",
+        help="search 미실행 (gap 분석까지만)",
+    )
+    scan_parser.add_argument(
+        "--json", action="store_true", dest="json_output",
+        help="JSON 출력",
+    )
+
     args = parser.parse_args()
 
     log_level = logging.DEBUG if args.verbose else logging.WARNING
@@ -329,6 +355,8 @@ def main() -> None:
             _handle_init(args)
         elif args.command == "search":
             _handle_search(args)
+        elif args.command == "scan":
+            _handle_scan(args)
     except KeyboardInterrupt:
         print("\nInterrupted.")
         sys.exit(1)
@@ -901,6 +929,176 @@ def _handle_init(args: argparse.Namespace) -> None:
 
     print(f"\n[OK] Initialized Cambrian project at {target}")
     print(f"Ready! Run: cd {target} && cambrian skills")
+
+
+def _handle_scan(args: argparse.Namespace) -> None:
+    """cambrian scan 처리.
+
+    Args:
+        args: argparse가 파싱한 네임스페이스
+    """
+    path = Path(args.path)
+    if not path.exists():
+        print(f"Error: '{args.path}' 경로가 존재하지 않음", file=sys.stderr)
+        sys.exit(1)
+    if not path.is_dir():
+        print(f"Error: '{args.path}'는 디렉토리가 아님", file=sys.stderr)
+        sys.exit(1)
+
+    engine = _create_engine(args)
+    report = engine.scan(
+        project_path=str(path),
+        max_depth=args.depth,
+        max_queries=args.max_queries,
+        top_k=args.top_k,
+        run_search=not args.no_search,
+    )
+
+    if getattr(args, "json_output", False):
+        print(json.dumps(_scan_report_to_dict(report), indent=2, ensure_ascii=False))
+    else:
+        _print_scan_report(report)
+
+
+def _scan_report_to_dict(report: "ProjectScanReport") -> dict:
+    """ProjectScanReport를 JSON 직렬화 가능한 dict로 변환한다.
+
+    Args:
+        report: 스캔 보고서
+
+    Returns:
+        dict
+    """
+    fp = report.fingerprint
+    return {
+        "fingerprint": {
+            "project_path": fp.project_path,
+            "project_name": fp.project_name,
+            "total_files": fp.total_files,
+            "total_dirs": fp.total_dirs,
+            "languages": fp.languages,
+            "primary_language": fp.primary_language,
+            "frameworks": fp.frameworks,
+            "package_managers": fp.package_managers,
+            "project_types": fp.project_types,
+            "has_tests": fp.has_tests,
+            "has_docs": fp.has_docs,
+            "has_ci": fp.has_ci,
+            "has_docker": fp.has_docker,
+            "has_api": fp.has_api,
+            "has_config": fp.has_config,
+            "detected_capabilities": fp.detected_capabilities,
+            "key_files": fp.key_files,
+            "scan_depth": fp.scan_depth,
+            "warnings": fp.warnings,
+        },
+        "gaps": [
+            {
+                "category": g.category,
+                "description": g.description,
+                "priority": g.priority,
+                "evidence": g.evidence,
+                "suggested_domain": g.suggested_domain,
+                "suggested_tags": g.suggested_tags,
+                "search_query": g.search_query,
+            }
+            for g in report.gaps
+        ],
+        "suggestions": [
+            {
+                "gap_category": s.gap_category,
+                "skill_id": s.skill_id,
+                "skill_name": s.skill_name,
+                "skill_description": s.skill_description,
+                "relevance_score": s.relevance_score,
+                "source": s.source,
+                "match_quality": s.match_quality,
+            }
+            for s in report.suggestions
+        ],
+        "total_gaps": report.total_gaps,
+        "covered_gaps": report.covered_gaps,
+        "uncovered_gaps": report.uncovered_gaps,
+        "search_executed": report.search_executed,
+        "timestamp": report.timestamp,
+    }
+
+
+def _print_scan_report(report: "ProjectScanReport") -> None:
+    """ProjectScanReport를 표 형태로 출력한다.
+
+    Args:
+        report: 스캔 보고서
+    """
+    fp = report.fingerprint
+    print(f"Scan: {fp.project_path}")
+    print("═" * 60)
+    print()
+    print(f"Project: {fp.project_name}")
+    print(f"Files: {fp.total_files} | Dirs: {fp.total_dirs}")
+
+    if fp.languages:
+        lang_parts = [f"{lang} ({count})" for lang, count in sorted(
+            fp.languages.items(), key=lambda x: x[1], reverse=True,
+        )]
+        print(f"Language: {', '.join(lang_parts)}")
+    else:
+        print("Language: (none detected)")
+
+    if fp.frameworks:
+        print(f"Frameworks: {', '.join(fp.frameworks)}")
+    print(f"Type: {', '.join(fp.project_types)}")
+
+    if fp.detected_capabilities:
+        print(f"Capabilities: {', '.join(fp.detected_capabilities)}")
+
+    # gaps
+    print()
+    print("─" * 60)
+    print(f"Capability Gaps ({report.total_gaps} found)")
+    print("─" * 60)
+
+    if not report.gaps:
+        print("No gaps found.")
+    else:
+        print(f"{'#':<3} {'PRI':<6} {'CATEGORY':<20} DESCRIPTION")
+        for idx, gap in enumerate(report.gaps):
+            print(
+                f"{idx + 1:<3} "
+                f"{gap.priority.upper():<6} "
+                f"{gap.category:<20} "
+                f"{gap.description}"
+            )
+
+    # suggestions
+    if report.search_executed:
+        print()
+        print("─" * 60)
+        print(f"Recommended Skills ({len(report.suggestions)} found)")
+        print("─" * 60)
+
+        if report.suggestions:
+            print(f"{'GAP':<20} {'SKILL_ID':<18} {'SCORE':<7} {'MATCH':<9} SOURCE")
+            for s in report.suggestions:
+                source_short = "registry" if s.source == "registry" else "external"
+                print(
+                    f"{s.gap_category:<20} "
+                    f"{s.skill_id:<18} "
+                    f"{s.relevance_score:<7.2f} "
+                    f"{s.match_quality:<9} "
+                    f"{source_short}"
+                )
+
+    # summary
+    print()
+    print("─" * 60)
+    print(
+        f"Summary: {report.total_gaps} gaps, "
+        f"{report.covered_gaps} covered, "
+        f"{report.uncovered_gaps} uncovered"
+    )
+    if report.uncovered_gaps > 0:
+        print("Uncovered gaps → consider: cambrian generate")
 
 
 def _handle_search(args: argparse.Namespace) -> None:

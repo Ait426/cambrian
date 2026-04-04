@@ -219,3 +219,80 @@ class SearchReport:
     registry_hits: int                          # 레지스트리 매칭 수
     external_hits: int                          # 외부 매칭 수
     timestamp: str
+
+
+@dataclass
+class ProjectFingerprint:
+    """프로젝트 구조 분석 결과. 규칙 기반 파싱으로 생성."""
+
+    project_path: str                           # 분석 대상 절대 경로
+    project_name: str                           # 디렉토리 이름
+    total_files: int                            # 전체 파일 수
+    total_dirs: int                             # 전체 디렉토리 수
+
+    # 언어/스택 추정
+    languages: dict[str, int]                   # {"python": 45, ...} 확장자별 파일 수
+    primary_language: str                       # 가장 많은 확장자의 언어
+    frameworks: list[str]                       # 감지된 프레임워크
+    package_managers: list[str]                 # 감지된 패키지 매니저
+
+    # 프로젝트 유형 분류
+    project_types: list[str]                    # ["cli", "web_api", "library", ...]
+
+    # 구조 신호
+    has_tests: bool
+    has_docs: bool
+    has_ci: bool
+    has_docker: bool
+    has_api: bool
+    has_config: bool
+
+    # 감지된 현재 capability
+    detected_capabilities: list[str] = field(default_factory=list)
+
+    # 핵심 파일 목록 (경로만)
+    key_files: list[str] = field(default_factory=list)
+
+    # 메타
+    scan_depth: int = 4
+    warnings: list[str] = field(default_factory=list)
+
+
+@dataclass
+class CapabilityGap:
+    """프로젝트에서 식별된 부족한 capability."""
+
+    category: str                               # gap 범주
+    description: str                            # 사람이 읽을 수 있는 gap 설명
+    priority: str                               # "high" | "medium" | "low"
+    evidence: list[str]                         # gap 판단 근거
+    suggested_domain: str                       # search에 전달할 도메인
+    suggested_tags: list[str]                   # search에 전달할 태그
+    search_query: str                           # search에 전달할 자연어 쿼리
+
+
+@dataclass
+class SkillSuggestion:
+    """gap에 대해 search가 찾은 추천 스킬."""
+
+    gap_category: str                           # 연결된 CapabilityGap.category
+    skill_id: str
+    skill_name: str
+    skill_description: str
+    relevance_score: float                      # search의 relevance_score
+    source: str                                 # "registry" | "external:<path>"
+    match_quality: str                          # "strong" | "partial" | "weak"
+
+
+@dataclass
+class ProjectScanReport:
+    """프로젝트 스캔 최종 보고서."""
+
+    fingerprint: ProjectFingerprint
+    gaps: list[CapabilityGap]                   # 우선순위 내림차순 정렬
+    suggestions: list[SkillSuggestion]          # relevance_score 내림차순 정렬
+    total_gaps: int
+    covered_gaps: int                           # 추천 스킬이 1개 이상 있는 gap 수
+    uncovered_gaps: int                         # 추천 스킬 없는 gap 수
+    search_executed: bool                       # --no-search 시 False
+    timestamp: str

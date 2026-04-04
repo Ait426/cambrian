@@ -17,9 +17,10 @@ from engine.llm import LLMProvider
 from engine.loader import SkillLoader
 from engine.models import (
     BenchmarkReport, EvolutionRecord, ExecutionResult, FailureType,
-    SearchQuery, SearchReport,
+    ProjectScanReport, SearchQuery, SearchReport,
 )
 from engine.registry import SkillRegistry
+from engine.scanner import ProjectScanner
 from engine.search import SkillSearcher
 
 logger = logging.getLogger(__name__)
@@ -54,6 +55,7 @@ class CambrianEngine:
         self._autopsy = Autopsy()
         self._absorber = SkillAbsorber(schemas_dir, skill_pool_dir, self._registry)
         self._searcher = SkillSearcher(self._registry, self._loader)
+        self._scanner = ProjectScanner(searcher=self._searcher)
         self._external_dirs = [Path(path) for path in (external_skill_dirs or [])]
 
         self._register_seed_skills(skills_dir)
@@ -394,6 +396,36 @@ class CambrianEngine:
         """
         external = self._external_dirs if self._external_dirs else None
         return self._searcher.search(query, external_dirs=external)
+
+    def scan(
+        self,
+        project_path: str,
+        max_depth: int = 4,
+        max_queries: int = 10,
+        top_k: int = 3,
+        run_search: bool = True,
+    ) -> ProjectScanReport:
+        """프로젝트를 분석하여 capability gap과 추천 스킬을 반환한다.
+
+        Args:
+            project_path: 분석할 프로젝트 디렉토리 경로
+            max_depth: 파일트리 스캔 최대 깊이
+            max_queries: 최대 search 호출 횟수
+            top_k: gap당 최대 추천 스킬 수
+            run_search: False면 search 미실행 (gap 분석까지만)
+
+        Returns:
+            ProjectScanReport
+        """
+        external = self._external_dirs if self._external_dirs else None
+        return self._scanner.scan(
+            project_path=project_path,
+            max_depth=max_depth,
+            max_queries=max_queries,
+            top_k=top_k,
+            run_search=run_search,
+            external_dirs=external,
+        )
 
     def absorb_skill(self, path: str | Path) -> "Skill":
         """외부 스킬을 흡수한다.
