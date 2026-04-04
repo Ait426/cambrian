@@ -309,6 +309,29 @@ def main() -> None:
         help="JSON 출력",
     )
 
+    fuse_parser = subparsers.add_parser(
+        "fuse",
+        help="스킬 2개 융합",
+        parents=[common_parser],
+    )
+    fuse_parser.add_argument("skill_a", help="첫 번째 소스 스킬 ID")
+    fuse_parser.add_argument("skill_b", help="두 번째 소스 스킬 ID")
+    fuse_parser.add_argument(
+        "--goal", "-g", required=True, help="융합 목적 설명",
+    )
+    fuse_parser.add_argument(
+        "--output-id", "-o", default=None, dest="output_id",
+        help="결과 스킬 ID (미지정 시 자동)",
+    )
+    fuse_parser.add_argument(
+        "--dry-run", action="store_true", dest="dry_run",
+        help="생성만, 등록 안 함",
+    )
+    fuse_parser.add_argument(
+        "--json", action="store_true", dest="json_output",
+        help="JSON 출력",
+    )
+
     args = parser.parse_args()
 
     log_level = logging.DEBUG if args.verbose else logging.WARNING
@@ -357,6 +380,8 @@ def main() -> None:
             _handle_search(args)
         elif args.command == "scan":
             _handle_scan(args)
+        elif args.command == "fuse":
+            _handle_fuse(args)
     except KeyboardInterrupt:
         print("\nInterrupted.")
         sys.exit(1)
@@ -929,6 +954,91 @@ def _handle_init(args: argparse.Namespace) -> None:
 
     print(f"\n[OK] Initialized Cambrian project at {target}")
     print(f"Ready! Run: cd {target} && cambrian skills")
+
+
+def _handle_fuse(args: argparse.Namespace) -> None:
+    """cambrian fuse 처리.
+
+    Args:
+        args: argparse가 파싱한 네임스페이스
+    """
+    from engine.models import FuseRequest
+
+    engine = _create_engine(args)
+    request = FuseRequest(
+        skill_id_a=args.skill_a,
+        skill_id_b=args.skill_b,
+        goal=args.goal,
+        output_id=getattr(args, "output_id", None),
+        dry_run=getattr(args, "dry_run", False),
+    )
+
+    try:
+        result = engine.fuse(request)
+    except ValueError as exc:
+        print(f"Error: {exc}", file=sys.stderr)
+        sys.exit(1)
+
+    if getattr(args, "json_output", False):
+        output = {
+            "success": result.success,
+            "skill_id": result.skill_id,
+            "skill_path": result.skill_path,
+            "source_ids": result.source_ids,
+            "goal": result.goal,
+            "fusion_rationale": result.fusion_rationale,
+            "output_mode": result.output_mode,
+            "validation_passed": result.validation_passed,
+            "validation_errors": result.validation_errors,
+            "security_passed": result.security_passed,
+            "security_violations": result.security_violations,
+            "registered": result.registered,
+            "dry_run": result.dry_run,
+            "warnings": result.warnings,
+        }
+        print(json.dumps(output, indent=2, ensure_ascii=False))
+    else:
+        _print_fuse_result(result)
+
+    if not result.success:
+        sys.exit(1)
+
+
+def _print_fuse_result(result: "FuseResult") -> None:
+    """FuseResult를 표 형태로 출력한다.
+
+    Args:
+        result: 융합 결과
+    """
+    print(f"Fuse: {' + '.join(result.source_ids)}")
+    print(f"Goal: {result.goal}")
+    print("─" * 50)
+
+    if result.success:
+        prefix = "[DRY-RUN]" if result.dry_run else "[OK]"
+        print(f"{prefix} Fused → '{result.skill_id}'")
+        if result.fusion_rationale:
+            print(f"  Rationale: {result.fusion_rationale}")
+        print(f"  Mode: {result.output_mode}")
+        print(f"  Path: {result.skill_path}")
+        print(f"  Validation: {'PASS' if result.validation_passed else 'FAIL'}")
+        print(f"  Security: {'PASS' if result.security_passed else 'FAIL'}")
+        reg_status = "NO (dry-run)" if result.dry_run else ("YES" if result.registered else "NO")
+        print(f"  Registered: {reg_status}")
+    else:
+        print("[FAIL] Fusion failed")
+        if result.validation_errors:
+            print("  Validation errors:")
+            for err in result.validation_errors:
+                print(f"    - {err}")
+        if result.security_violations:
+            print("  Security violations:")
+            for vio in result.security_violations:
+                print(f"    - {vio}")
+        if result.warnings:
+            print("  Warnings:")
+            for warn in result.warnings:
+                print(f"    - {warn}")
 
 
 def _handle_scan(args: argparse.Namespace) -> None:

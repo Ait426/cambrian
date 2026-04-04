@@ -296,3 +296,35 @@ class ProjectScanReport:
     uncovered_gaps: int                         # 추천 스킬 없는 gap 수
     search_executed: bool                       # --no-search 시 False
     timestamp: str
+
+
+@dataclass
+class FuseRequest:
+    """스킬 융합 요청."""
+
+    skill_id_a: str                             # 첫 번째 소스 스킬 ID
+    skill_id_b: str                             # 두 번째 소스 스킬 ID
+    goal: str                                   # 융합 목적 설명 (자연어)
+    output_id: str | None = None                # 결과 스킬 ID (None이면 자동 생성)
+    output_mode: str = "a"                      # 결과 모드 ("a" 고정, v2에서 "b" 확장)
+    dry_run: bool = False                       # True면 등록 안 함
+
+
+@dataclass
+class FuseResult:
+    """스킬 융합 결과."""
+
+    success: bool
+    skill_id: str
+    skill_path: str
+    source_ids: list[str]                       # [skill_id_a, skill_id_b]
+    goal: str
+    fusion_rationale: str                       # LLM이 설명한 융합 근거
+    output_mode: str
+    validation_passed: bool
+    validation_errors: list[str] = field(default_factory=list)
+    security_passed: bool = True
+    security_violations: list[str] = field(default_factory=list)
+    registered: bool = False
+    dry_run: bool = False
+    warnings: list[str] = field(default_factory=list)

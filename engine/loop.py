@@ -17,6 +17,7 @@ from engine.llm import LLMProvider
 from engine.loader import SkillLoader
 from engine.models import (
     BenchmarkReport, EvolutionRecord, ExecutionResult, FailureType,
+    FuseRequest, FuseResult,
     ProjectScanReport, SearchQuery, SearchReport,
 )
 from engine.registry import SkillRegistry
@@ -57,6 +58,19 @@ class CambrianEngine:
         self._searcher = SkillSearcher(self._registry, self._loader)
         self._scanner = ProjectScanner(searcher=self._searcher)
         self._external_dirs = [Path(path) for path in (external_skill_dirs or [])]
+
+        # fuser 초기화 (지연 import 방지를 위해 여기서 생성)
+        from engine.fuser import SkillFuser
+        from engine.security import SecurityScanner as _SecurityScanner
+        from engine.validator import SkillValidator as _SkillValidator
+        self._fuser = SkillFuser(
+            loader=self._loader,
+            validator=_SkillValidator(schemas_dir),
+            scanner=_SecurityScanner(),
+            registry=self._registry,
+            skill_pool_dir=skill_pool_dir,
+            provider=self._provider,
+        )
 
         self._register_seed_skills(skills_dir)
         self._register_pool_skills(skill_pool_dir)
@@ -426,6 +440,17 @@ class CambrianEngine:
             run_search=run_search,
             external_dirs=external,
         )
+
+    def fuse(self, request: FuseRequest) -> FuseResult:
+        """스킬 2개를 융합하여 새 스킬을 생성한다.
+
+        Args:
+            request: FuseRequest 융합 요청
+
+        Returns:
+            FuseResult 융합 결과
+        """
+        return self._fuser.fuse(request)
 
     def absorb_skill(self, path: str | Path) -> "Skill":
         """외부 스킬을 흡수한다.
