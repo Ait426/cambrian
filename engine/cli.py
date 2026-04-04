@@ -367,6 +367,52 @@ def main() -> None:
         help="few-shot 참고 스킬 ID",
     )
 
+    acq_parser = subparsers.add_parser(
+        "acquire",
+        help="프로젝트 capability 자동 확보",
+        parents=[common_parser],
+    )
+    acq_parser.add_argument(
+        "--project", "-p", default=None, help="프로젝트 디렉토리",
+    )
+    acq_parser.add_argument(
+        "--goal", "-g", default=None, help="원하는 capability 설명",
+    )
+    acq_parser.add_argument(
+        "--domain", "-d", default=None, help="도메인 힌트",
+    )
+    acq_parser.add_argument(
+        "--tags", "-t", nargs="+", default=None, help="태그 힌트",
+    )
+    acq_parser.add_argument(
+        "--mode", choices=["advisory", "execute"], default="advisory",
+        dest="acq_mode", help="모드 (기본: advisory)",
+    )
+    acq_parser.add_argument(
+        "--strategy", choices=["conservative", "balanced", "aggressive"],
+        default="conservative", help="전략 (기본: conservative)",
+    )
+    acq_parser.add_argument(
+        "--no-fuse", action="store_true", dest="no_fuse",
+        help="fuse 비허용",
+    )
+    acq_parser.add_argument(
+        "--no-generate", action="store_true", dest="no_generate",
+        help="generate 비허용",
+    )
+    acq_parser.add_argument(
+        "--max-actions", type=int, default=3, dest="max_actions",
+        help="최대 처리 gap 수 (기본: 3)",
+    )
+    acq_parser.add_argument(
+        "--dry-run", action="store_true", dest="dry_run",
+        help="fuse/generate dry-run",
+    )
+    acq_parser.add_argument(
+        "--json", action="store_true", dest="json_output",
+        help="JSON 출력",
+    )
+
     args = parser.parse_args()
 
     log_level = logging.DEBUG if args.verbose else logging.WARNING
@@ -419,6 +465,8 @@ def main() -> None:
             _handle_fuse(args)
         elif args.command == "generate":
             _handle_generate(args)
+        elif args.command == "acquire":
+            _handle_acquire(args)
     except KeyboardInterrupt:
         print("\nInterrupted.")
         sys.exit(1)
@@ -991,6 +1039,167 @@ def _handle_init(args: argparse.Namespace) -> None:
 
     print(f"\n[OK] Initialized Cambrian project at {target}")
     print(f"Ready! Run: cd {target} && cambrian skills")
+
+
+def _handle_acquire(args: argparse.Namespace) -> None:
+    """cambrian acquire 처리.
+
+    Args:
+        args: argparse가 파싱한 네임스페이스
+    """
+    from engine.models import AcquireRequest
+
+    if not args.project and not args.goal:
+        print("Error: --project 또는 --goal 중 하나는 필수", file=sys.stderr)
+        sys.exit(1)
+
+    engine = _create_engine(args)
+    request = AcquireRequest(
+        project_path=args.project,
+        goal=args.goal,
+        domain=getattr(args, "domain", None),
+        tags=getattr(args, "tags", None),
+        mode=getattr(args, "acq_mode", "advisory"),
+        strategy=getattr(args, "strategy", "conservative"),
+        allow_fuse=not getattr(args, "no_fuse", False),
+        allow_generate=not getattr(args, "no_generate", False),
+        max_actions=getattr(args, "max_actions", 3),
+        dry_run=getattr(args, "dry_run", False),
+    )
+    result = engine.acquire(request)
+
+    if getattr(args, "json_output", False):
+        print(json.dumps(_acquire_result_to_dict(result), indent=2, ensure_ascii=False))
+    else:
+        _print_acquire_result(result)
+
+
+def _acquire_result_to_dict(result: "AcquireResult") -> dict:
+    """AcquireResult를 JSON 직렬화 가능한 dict로 변환한다.
+
+    Args:
+        result: acquire 결과
+
+    Returns:
+        dict
+    """
+    plan_dict = None
+    if result.plan:
+        plan_dict = {
+            "actions": [
+                {
+                    "action_type": a.action_type,
+                    "gap_category": a.gap_category,
+                    "description": a.description,
+                    "confidence": a.confidence,
+                    "risk": a.risk,
+                    "reuse_skill_id": a.reuse_skill_id,
+                    "fuse_skill_a": a.fuse_skill_a,
+                    "fuse_skill_b": a.fuse_skill_b,
+                    "generate_goal": a.generate_goal,
+                }
+                for a in result.plan.actions
+            ],
+            "total_gaps": result.plan.total_gaps,
+            "addressable_gaps": result.plan.addressable_gaps,
+            "deferred_gaps": result.plan.deferred_gaps,
+        }
+
+    executed_dict = [
+        {
+            "action_type": e.action.action_type,
+            "executed": e.executed,
+            "success": e.success,
+            "skill_id": e.skill_id,
+            "error": e.error,
+            "skipped_reason": e.skipped_reason,
+        }
+        for e in result.executed_actions
+    ]
+
+    return {
+        "success": result.success,
+        "mode": result.mode,
+        "strategy": result.strategy,
+        "plan": plan_dict,
+        "executed_actions": executed_dict,
+        "summary": result.summary,
+        "warnings": result.warnings,
+    }
+
+
+def _print_acquire_result(result: "AcquireResult") -> None:
+    """AcquireResult를 표 형태로 출력한다.
+
+    Args:
+        result: acquire 결과
+    """
+    print(f"Acquire ({result.mode} / {result.strategy})")
+    print("═" * 55)
+
+    if result.scan_report:
+        fp = result.scan_report.fingerprint
+        print(f"Scan: {fp.project_name} ({fp.total_files} files)")
+        if fp.detected_capabilities:
+            print(f"  Capabilities: {', '.join(fp.detected_capabilities)}")
+        print(f"  Gaps: {result.scan_report.total_gaps} found")
+        print()
+
+    if result.plan:
+        print("─" * 55)
+        print(f"Plan ({len(result.plan.actions)} actions)")
+        print("─" * 55)
+
+        if result.plan.actions:
+            print(f"{'#':<3} {'TYPE':<10} {'CONF':<6} {'RISK':<6} {'GAP':<18} ACTION")
+            for idx, action in enumerate(result.plan.actions):
+                print(
+                    f"{idx + 1:<3} "
+                    f"{action.action_type:<10} "
+                    f"{action.confidence:<6.2f} "
+                    f"{action.risk:<6} "
+                    f"{action.gap_category:<18} "
+                    f"{action.description[:40]}"
+                )
+        else:
+            print("No actions generated.")
+
+        print()
+        print(
+            f"Addressable: {result.plan.addressable_gaps}/{result.plan.total_gaps} gaps"
+            f" | Deferred: {result.plan.deferred_gaps}"
+        )
+
+    if result.executed_actions:
+        print()
+        print("─" * 55)
+        print("Executed Actions")
+        print("─" * 55)
+        print(f"{'#':<3} {'TYPE':<10} {'RESULT':<8} {'DETAIL'}")
+        for idx, e in enumerate(result.executed_actions):
+            if e.executed:
+                status = "[OK]" if e.success else "[FAIL]"
+                detail = e.skill_id or e.error or ""
+            else:
+                status = "[SKIP]"
+                detail = e.skipped_reason
+            print(
+                f"{idx + 1:<3} "
+                f"{e.action.action_type:<10} "
+                f"{status:<8} "
+                f"{detail[:40]}"
+            )
+
+    print()
+    print("─" * 55)
+    print(f"Summary: {result.summary}")
+
+    if result.mode == "advisory" and result.plan and result.plan.addressable_gaps > 0:
+        print("\nTo execute: cambrian acquire ... --mode execute --strategy balanced")
+
+    if result.warnings:
+        for w in result.warnings:
+            print(f"  Warning: {w}")
 
 
 def _handle_generate(args: argparse.Namespace) -> None:

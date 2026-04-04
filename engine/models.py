@@ -366,3 +366,82 @@ class GenerateResult:
     dry_run: bool = False
     existing_alternatives: list[dict] = field(default_factory=list)
     warnings: list[str] = field(default_factory=list)
+
+
+@dataclass
+class AcquireRequest:
+    """capability 확보 요청."""
+
+    project_path: str | None = None         # 프로젝트 경로 (scan용)
+    goal: str | None = None                 # 원하는 capability (자연어)
+    domain: str | None = None               # 도메인 힌트
+    tags: list[str] | None = None           # 태그 힌트
+    mode: str = "advisory"                  # "advisory" | "execute"
+    strategy: str = "conservative"          # "conservative" | "balanced" | "aggressive"
+    allow_fuse: bool = True
+    allow_generate: bool = True
+    max_actions: int = 3
+    dry_run: bool = False
+
+
+@dataclass
+class AcquireAction:
+    """단일 추천/실행 액션."""
+
+    action_type: str                        # "reuse" | "fuse" | "generate" | "defer"
+    gap_category: str                       # 대상 gap category
+    description: str                        # 액션 설명
+    confidence: float                       # 0.0 ~ 1.0
+    risk: str                               # "low" | "medium" | "high"
+
+    # reuse 전용
+    reuse_skill_id: str | None = None
+    reuse_relevance: float = 0.0
+
+    # fuse 전용
+    fuse_skill_a: str | None = None
+    fuse_skill_b: str | None = None
+    fuse_goal: str | None = None
+
+    # generate 전용
+    generate_goal: str | None = None
+    generate_domain: str | None = None
+    generate_tags: list[str] | None = None
+
+
+@dataclass
+class AcquirePlan:
+    """수립된 실행 계획."""
+
+    actions: list[AcquireAction]            # 우선순위 내림차순
+    total_gaps: int
+    addressable_gaps: int                   # 액션이 생성된 gap 수
+    deferred_gaps: int                      # 보류된 gap 수
+    strategy_applied: str
+
+
+@dataclass
+class AcquireActionResult:
+    """실행된 액션의 결과."""
+
+    action: AcquireAction                   # 실행된 액션 원본
+    executed: bool                          # 실제 실행 여부
+    success: bool
+    skill_id: str | None = None
+    skill_path: str | None = None
+    error: str = ""
+    skipped_reason: str = ""
+
+
+@dataclass
+class AcquireResult:
+    """acquire 전체 결과."""
+
+    success: bool
+    mode: str
+    strategy: str
+    scan_report: ProjectScanReport | None = None
+    plan: AcquirePlan | None = None
+    executed_actions: list[AcquireActionResult] = field(default_factory=list)
+    summary: str = ""
+    warnings: list[str] = field(default_factory=list)

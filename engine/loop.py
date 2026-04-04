@@ -16,6 +16,7 @@ from engine.executor import SkillExecutor
 from engine.llm import LLMProvider
 from engine.loader import SkillLoader
 from engine.models import (
+    AcquireRequest, AcquireResult,
     BenchmarkReport, EvolutionRecord, ExecutionResult, FailureType,
     FuseRequest, FuseResult,
     GenerateRequest, GenerateResult,
@@ -85,6 +86,10 @@ class CambrianEngine:
         self._register_seed_skills(skills_dir)
         self._register_pool_skills(skill_pool_dir)
         self._evolution_suggested: str | None = None
+
+        # acquirer는 seed/pool 등록 후 초기화 (search가 등록된 스킬을 참조하므로)
+        from engine.acquirer import SkillAcquirer
+        self._acquirer = SkillAcquirer(engine=self)
 
         # 장기 미사용 스킬 자동 퇴화
         self._registry.decay()
@@ -472,6 +477,17 @@ class CambrianEngine:
             GenerateResult 생성 결과
         """
         return self._generator.generate(request)
+
+    def acquire(self, request: AcquireRequest) -> AcquireResult:
+        """프로젝트 capability를 자동 분석·확보한다.
+
+        Args:
+            request: AcquireRequest 확보 요청
+
+        Returns:
+            AcquireResult 확보 결과
+        """
+        return self._acquirer.acquire(request)
 
     def absorb_skill(self, path: str | Path) -> "Skill":
         """외부 스킬을 흡수한다.
