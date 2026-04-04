@@ -328,3 +328,41 @@ class FuseResult:
     registered: bool = False
     dry_run: bool = False
     warnings: list[str] = field(default_factory=list)
+
+
+@dataclass
+class GenerateRequest:
+    """스킬 생성 요청."""
+
+    goal: str                                   # 생성할 스킬 목적 (자연어, 최소 10자)
+    domain: str                                 # 스킬 도메인
+    tags: list[str]                             # 스킬 태그 (최소 1개)
+    output_id: str | None = None                # 결과 스킬 ID (None이면 자동)
+    output_mode: str = "a"                      # "a" 고정 (v1)
+    project_path: str | None = None             # scan 컨텍스트용 프로젝트 경로
+    reference_skills: list[str] | None = None   # few-shot 참고 스킬 ID
+    dry_run: bool = False
+    skip_search: bool = False                   # 유사 스킬 사전 검색 스킵
+
+
+@dataclass
+class GenerateResult:
+    """스킬 생성 결과."""
+
+    success: bool
+    skill_id: str
+    skill_path: str
+    goal: str
+    domain: str
+    tags: list[str]
+    output_mode: str
+    generation_rationale: str
+    reference_skill_ids: list[str] = field(default_factory=list)
+    validation_passed: bool = False
+    validation_errors: list[str] = field(default_factory=list)
+    security_passed: bool = True
+    security_violations: list[str] = field(default_factory=list)
+    registered: bool = False
+    dry_run: bool = False
+    existing_alternatives: list[dict] = field(default_factory=list)
+    warnings: list[str] = field(default_factory=list)

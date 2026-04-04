@@ -18,6 +18,7 @@ from engine.loader import SkillLoader
 from engine.models import (
     BenchmarkReport, EvolutionRecord, ExecutionResult, FailureType,
     FuseRequest, FuseResult,
+    GenerateRequest, GenerateResult,
     ProjectScanReport, SearchQuery, SearchReport,
 )
 from engine.registry import SkillRegistry
@@ -69,6 +70,15 @@ class CambrianEngine:
             scanner=_SecurityScanner(),
             registry=self._registry,
             skill_pool_dir=skill_pool_dir,
+            provider=self._provider,
+        )
+
+        from engine.generator import SkillGenerator
+        self._generator = SkillGenerator(
+            fuser=self._fuser,
+            registry=self._registry,
+            loader=self._loader,
+            searcher=self._searcher,
             provider=self._provider,
         )
 
@@ -451,6 +461,17 @@ class CambrianEngine:
             FuseResult 융합 결과
         """
         return self._fuser.fuse(request)
+
+    def generate(self, request: GenerateRequest) -> GenerateResult:
+        """스킬을 0에서 자동 생성한다.
+
+        Args:
+            request: GenerateRequest 생성 요청
+
+        Returns:
+            GenerateResult 생성 결과
+        """
+        return self._generator.generate(request)
 
     def absorb_skill(self, path: str | Path) -> "Skill":
         """외부 스킬을 흡수한다.
