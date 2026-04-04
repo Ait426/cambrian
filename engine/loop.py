@@ -15,8 +15,12 @@ from engine.evolution import SkillEvolver
 from engine.executor import SkillExecutor
 from engine.llm import LLMProvider
 from engine.loader import SkillLoader
-from engine.models import BenchmarkReport, EvolutionRecord, ExecutionResult, FailureType
+from engine.models import (
+    BenchmarkReport, EvolutionRecord, ExecutionResult, FailureType,
+    SearchQuery, SearchReport,
+)
 from engine.registry import SkillRegistry
+from engine.search import SkillSearcher
 
 logger = logging.getLogger(__name__)
 
@@ -49,6 +53,7 @@ class CambrianEngine:
         self._registry = SkillRegistry(db_path)
         self._autopsy = Autopsy()
         self._absorber = SkillAbsorber(schemas_dir, skill_pool_dir, self._registry)
+        self._searcher = SkillSearcher(self._registry, self._loader)
         self._external_dirs = [Path(path) for path in (external_skill_dirs or [])]
 
         self._register_seed_skills(skills_dir)
@@ -377,6 +382,18 @@ class CambrianEngine:
     def get_loader(self) -> SkillLoader:
         """Loader 인스턴스를 반환한다."""
         return self._loader
+
+    def search(self, query: SearchQuery) -> SearchReport:
+        """통합 스킬 검색을 실행한다.
+
+        Args:
+            query: SearchQuery 검색 쿼리
+
+        Returns:
+            SearchReport 검색 결과 보고서
+        """
+        external = self._external_dirs if self._external_dirs else None
+        return self._searcher.search(query, external_dirs=external)
 
     def absorb_skill(self, path: str | Path) -> "Skill":
         """외부 스킬을 흡수한다.

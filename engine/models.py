@@ -177,3 +177,45 @@ class BenchmarkReport:
     domain: str
     tags: list[str]
     timestamp: str
+
+
+@dataclass
+class SearchQuery:
+    """통합 검색 쿼리."""
+
+    text: str                                   # 자연어 쿼리 텍스트
+    domain: str | None = None                   # 도메인 필터 (선택)
+    tags: list[str] | None = None               # 태그 필터 (선택)
+    mode: str | None = None                     # "a" | "b" 필터 (선택)
+    include_external: bool = True               # 외부 디렉토리 포함 여부
+    include_dormant: bool = False               # dormant 상태 포함 여부
+    limit: int = 10                             # 최대 결과 수
+
+
+@dataclass
+class SearchResult:
+    """단일 검색 결과."""
+
+    skill_id: str
+    name: str
+    description: str
+    domain: str
+    tags: list[str]
+    mode: str
+    relevance_score: float                      # 0.0 ~ 1.0
+    fitness_score: float
+    source: str                                 # "registry" | "external:<path>"
+    skill_path: str
+    status: str                                 # "active" | "newborn" | "dormant" | "unregistered"
+
+
+@dataclass
+class SearchReport:
+    """통합 검색 결과 보고서."""
+
+    query: SearchQuery
+    results: list[SearchResult]
+    total_scanned: int                          # 전체 스캔된 스킬 수
+    registry_hits: int                          # 레지스트리 매칭 수
+    external_hits: int                          # 외부 매칭 수
+    timestamp: str

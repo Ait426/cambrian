@@ -253,6 +253,36 @@ def main() -> None:
         help="초기화 디렉토리 (기본값: ./cambrian_project)",
     )
 
+    search_parser = subparsers.add_parser(
+        "search",
+        help="통합 스킬 검색",
+        parents=[common_parser],
+    )
+    search_parser.add_argument("query", help="검색 쿼리 (자연어)")
+    search_parser.add_argument(
+        "--domain", "-d", default=None, help="도메인 필터",
+    )
+    search_parser.add_argument(
+        "--tags", "-t", nargs="+", default=None, help="태그 필터",
+    )
+    search_parser.add_argument(
+        "--no-external",
+        action="store_true",
+        help="외부 디렉토리 제외",
+    )
+    search_parser.add_argument(
+        "--limit",
+        type=int,
+        default=10,
+        help="최대 결과 수 (기본값: 10)",
+    )
+    search_parser.add_argument(
+        "--json",
+        action="store_true",
+        dest="json_output",
+        help="JSON 출력",
+    )
+
     args = parser.parse_args()
 
     log_level = logging.DEBUG if args.verbose else logging.WARNING
@@ -297,6 +327,8 @@ def main() -> None:
             _handle_critique(args)
         elif args.command == "init":
             _handle_init(args)
+        elif args.command == "search":
+            _handle_search(args)
     except KeyboardInterrupt:
         print("\nInterrupted.")
         sys.exit(1)
@@ -869,6 +901,84 @@ def _handle_init(args: argparse.Namespace) -> None:
 
     print(f"\n[OK] Initialized Cambrian project at {target}")
     print(f"Ready! Run: cd {target} && cambrian skills")
+
+
+def _handle_search(args: argparse.Namespace) -> None:
+    """cambrian search 처리.
+
+    Args:
+        args: argparse가 파싱한 네임스페이스
+    """
+    from engine.models import SearchQuery
+
+    engine = _create_engine(args)
+    query = SearchQuery(
+        text=args.query,
+        domain=getattr(args, "domain", None),
+        tags=getattr(args, "tags", None),
+        include_external=not getattr(args, "no_external", False),
+        limit=getattr(args, "limit", 10),
+    )
+    report = engine.search(query)
+
+    if getattr(args, "json_output", False):
+        import dataclasses
+        output = {
+            "query": args.query,
+            "results": [
+                {
+                    "rank": idx + 1,
+                    "skill_id": r.skill_id,
+                    "name": r.name,
+                    "description": r.description,
+                    "domain": r.domain,
+                    "tags": r.tags,
+                    "relevance_score": r.relevance_score,
+                    "fitness_score": r.fitness_score,
+                    "source": r.source,
+                    "status": r.status,
+                }
+                for idx, r in enumerate(report.results)
+            ],
+            "total_scanned": report.total_scanned,
+            "registry_hits": report.registry_hits,
+            "external_hits": report.external_hits,
+        }
+        print(json.dumps(output, indent=2, ensure_ascii=False))
+        return
+
+    # 테이블 출력
+    print(
+        f'Search: "{args.query}" '
+        f"(scanned: {report.registry_hits} registry"
+        f" + {report.external_hits} external)"
+    )
+    print("─" * 70)
+
+    if not report.results:
+        print("No results found.")
+        return
+
+    print(
+        f"{'RANK':<5} {'SCORE':<7} {'ID':<22} {'DOMAIN':<12} "
+        f"{'SOURCE':<12} STATUS"
+    )
+    for idx, result in enumerate(report.results):
+        source_short = (
+            "registry" if result.source == "registry"
+            else "external"
+        )
+        print(
+            f"{idx + 1:<5} "
+            f"{result.relevance_score:<7.2f} "
+            f"{result.skill_id:<22} "
+            f"{result.domain:<12} "
+            f"{source_short:<12} "
+            f"{result.status}"
+        )
+
+    print("─" * 70)
+    print(f"{len(report.results)} results found")
 
 
 if __name__ == "__main__":
