@@ -174,6 +174,21 @@ class SkillRegistry:
             );
             """
         )
+        self._conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS adoption_lineage (
+                id                INTEGER PRIMARY KEY AUTOINCREMENT,
+                child_skill_name  TEXT NOT NULL,
+                child_run_id      TEXT NOT NULL,
+                parent_skill_name TEXT,
+                parent_run_id     TEXT,
+                scenario_id       TEXT,
+                policy_hash       TEXT,
+                adopted_at        TEXT NOT NULL,
+                notes             TEXT
+            );
+            """
+        )
         self._conn.commit()
 
     def register(self, skill: Skill) -> None:
@@ -1173,6 +1188,197 @@ class SkillRegistry:
         )
         row = cursor.fetchone()
         return int(row["cnt"]) if row else 0
+
+    # === Adoption Lineage ===
+
+    def add_lineage(
+        self,
+        child_skill_name: str,
+        child_run_id: str,
+        parent_skill_name: str | None = None,
+        parent_run_id: str | None = None,
+        scenario_id: str | None = None,
+        policy_hash: str | None = None,
+        notes: str | None = None,
+    ) -> int:
+        """채택 계보 레코드를 추가한다.
+
+        Args:
+            child_skill_name: 자식 스킬 이름
+            child_run_id: 자식 실행 ID
+            parent_skill_name: 부모 스킬 이름 (None이면 최초 생성)
+            parent_run_id: 부모 실행 ID
+            scenario_id: 시나리오 식별자
+            policy_hash: 정책 해시
+            notes: 메모
+
+        Returns:
+            생성된 lineage ID
+        """
+        adopted_at = datetime.now(timezone.utc).isoformat()
+        cursor = self._conn.execute(
+            """
+            INSERT INTO adoption_lineage
+                (child_skill_name, child_run_id, parent_skill_name,
+                 parent_run_id, scenario_id, policy_hash, adopted_at, notes)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                child_skill_name, child_run_id,
+                parent_skill_name, parent_run_id,
+                scenario_id, policy_hash, adopted_at, notes,
+            ),
+        )
+        self._conn.commit()
+        return int(cursor.lastrowid)
+
+    def get_ancestors(
+        self,
+        skill_name: str,
+        run_id: str,
+    ) -> list[dict]:
+        """run_id 기준 직계 조상 체인을 반환한다 (최신→최초 순).
+
+        Args:
+            skill_name: 스킬 이름
+            run_id: 시작 run ID
+
+        Returns:
+            조상 체인 리스트
+        """
+        ancestors: list[dict] = []
+        current_run_id: str | None = run_id
+        visited: set[str] = set()
+
+        while current_run_id:
+            if current_run_id in visited:
+                break
+            visited.add(current_run_id)
+
+            row = self._conn.execute(
+                """
+                SELECT child_skill_name, child_run_id, parent_skill_name,
+                       parent_run_id, adopted_at, scenario_id, policy_hash
+                FROM adoption_lineage
+                WHERE child_run_id = ?
+                """,
+                (current_run_id,),
+            ).fetchone()
+
+            if not row:
+                break
+
+            ancestors.append({
+                "skill_name": row["child_skill_name"],
+                "run_id": row["child_run_id"],
+                "parent_skill_name": row["parent_skill_name"],
+                "parent_run_id": row["parent_run_id"],
+                "adopted_at": row["adopted_at"],
+                "scenario_id": row["scenario_id"],
+                "policy_hash": row["policy_hash"],
+            })
+            current_run_id = row["parent_run_id"]
+
+        return ancestors
+
+    def get_descendants(
+        self,
+        run_id: str,
+        depth: int = 0,
+        max_depth: int = 10,
+    ) -> list[dict]:
+        """run_id 기준 직계 자손 목록을 반환한다 (재귀).
+
+        Args:
+            run_id: 시작 run ID
+            depth: 현재 깊이
+            max_depth: 최대 깊이
+
+        Returns:
+            자손 트리 리스트
+        """
+        if depth >= max_depth:
+            return []
+
+        rows = self._conn.execute(
+            """
+            SELECT child_skill_name, child_run_id, parent_run_id,
+                   adopted_at, scenario_id, policy_hash
+            FROM adoption_lineage
+            WHERE parent_run_id = ?
+            ORDER BY adopted_at ASC
+            """,
+            (run_id,),
+        ).fetchall()
+
+        result: list[dict] = []
+        for row in rows:
+            node = {
+                "skill_name": row["child_skill_name"],
+                "run_id": row["child_run_id"],
+                "parent_run_id": row["parent_run_id"],
+                "adopted_at": row["adopted_at"],
+                "scenario_id": row["scenario_id"],
+                "policy_hash": row["policy_hash"],
+                "children": self.get_descendants(
+                    row["child_run_id"], depth + 1, max_depth,
+                ),
+            }
+            result.append(node)
+        return result
+
+    def get_adoption_history(
+        self,
+        skill_name: str | None = None,
+        since: str | None = None,
+        until: str | None = None,
+        scenario_id: str | None = None,
+        limit: int = 50,
+    ) -> list[dict]:
+        """필터형 채택 이력을 조회한다.
+
+        Args:
+            skill_name: 스킬 이름 필터
+            since: 시작일 필터 (ISO 문자열)
+            until: 종료일 필터 (ISO 문자열)
+            scenario_id: 시나리오 ID 필터
+            limit: 최대 반환 건수
+
+        Returns:
+            최신순 채택 이력 리스트
+        """
+        clauses: list[str] = []
+        params: list[object] = []
+
+        if skill_name:
+            clauses.append("child_skill_name = ?")
+            params.append(skill_name)
+        if since:
+            clauses.append("adopted_at >= ?")
+            params.append(since)
+        if until:
+            clauses.append("adopted_at <= ?")
+            params.append(until)
+        if scenario_id:
+            clauses.append("scenario_id = ?")
+            params.append(scenario_id)
+
+        where = ("WHERE " + " AND ".join(clauses)) if clauses else ""
+        params.append(limit)
+
+        rows = self._conn.execute(
+            f"""
+            SELECT child_skill_name, child_run_id, parent_skill_name,
+                   parent_run_id, adopted_at, scenario_id, policy_hash, notes
+            FROM adoption_lineage
+            {where}
+            ORDER BY adopted_at DESC
+            LIMIT ?
+            """,
+            tuple(params),
+        ).fetchall()
+
+        return [dict(row) for row in rows]
 
     # === Outcome / Pilot KPI ===
 

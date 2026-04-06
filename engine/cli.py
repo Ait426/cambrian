@@ -661,6 +661,39 @@ def main() -> None:
         "--limit", type=int, default=20, help="최대 결과 수",
     )
 
+    # === lineage: 채택 계보 트리 ===
+    lineage_parser = subparsers.add_parser(
+        "lineage",
+        help="특정 스킬의 채택 계보 트리 출력",
+        parents=[common_parser],
+    )
+    lineage_parser.add_argument("skill_name", help="조회할 스킬 이름")
+    lineage_parser.add_argument(
+        "--run-id", default=None, dest="run_id",
+        help="특정 run_id 기준 (생략 시 가장 최근 채택)",
+    )
+    lineage_parser.add_argument(
+        "--direction", choices=["ancestors", "descendants", "both"],
+        default="both", help="조회 방향 (기본: both)",
+    )
+
+    # === audit: 감사 로그 ===
+    audit_parser = subparsers.add_parser(
+        "audit",
+        help="채택 이력 감사 로그 조회",
+        parents=[common_parser],
+    )
+    audit_sub = audit_parser.add_subparsers(dest="audit_cmd")
+    adopt_audit = audit_sub.add_parser("adoptions", help="채택 이력 테이블 출력")
+    adopt_audit.add_argument("--skill", default=None, help="스킬 이름 필터")
+    adopt_audit.add_argument("--since", default=None, help="시작일 (ISO)")
+    adopt_audit.add_argument("--until", default=None, help="종료일 (ISO)")
+    adopt_audit.add_argument("--scenario", default=None, help="시나리오 ID 필터")
+    adopt_audit.add_argument("--limit", type=int, default=50, help="최대 출력 건수")
+    adopt_audit.add_argument(
+        "--json", action="store_true", dest="json_output", help="JSON 출력",
+    )
+
     args = parser.parse_args()
 
     log_level = logging.DEBUG if args.verbose else logging.WARNING
@@ -735,6 +768,10 @@ def main() -> None:
             _handle_unquarantine(args)
         elif args.command == "governance":
             _handle_governance(args)
+        elif args.command == "lineage":
+            _handle_lineage(args)
+        elif args.command == "audit":
+            _handle_audit(args)
     except KeyboardInterrupt:
         print("\nInterrupted.")
         sys.exit(1)
@@ -2064,6 +2101,41 @@ def _handle_promote(args: argparse.Namespace) -> None:
     except Exception as exc:
         print(f"  [WARN] Adoption record 저장 실패: {exc}", file=sys.stderr)
 
+    # ── lineage 기록 ──
+    try:
+        import uuid as _uuid
+        run_id = str(_uuid.uuid4())[:8]
+
+        # 직전 채택 정보에서 parent 추출
+        latest_path = out_dir / "_latest.json"
+        parent_skill: str | None = None
+        parent_run: str | None = None
+        if latest_path.exists():
+            prev = json.loads(latest_path.read_text(encoding="utf-8"))
+            if prev.get("skill_id") == args.skill_id:
+                parent_skill = prev.get("skill_id")
+                parent_run = prev.get("run_id")
+
+        # _latest.json에 run_id 추가 갱신
+        latest_data = json.loads(latest_path.read_text(encoding="utf-8")) if latest_path.exists() else {}
+        latest_data["run_id"] = run_id
+        latest_path.write_text(
+            json.dumps(latest_data, indent=2, ensure_ascii=False),
+            encoding="utf-8",
+        )
+
+        registry.add_lineage(
+            child_skill_name=args.skill_id,
+            child_run_id=run_id,
+            parent_skill_name=parent_skill,
+            parent_run_id=parent_run,
+            scenario_id=None,
+            policy_hash=None,
+            notes=args.reason,
+        )
+    except Exception:
+        pass  # lineage 실패가 promote를 중단하지 않음
+
     # ── stdout ──
     print(f"[OK] '{args.skill_id}' promoted: {current} → {target}")
     if decision_data:
@@ -2134,6 +2206,123 @@ def _handle_governance(args: argparse.Namespace) -> None:
             f"{log['triggered_by']:<8} "
             f"{log['reason'][:28]:<30} {log['created_at'][:16]}"
         )
+
+
+def _handle_lineage(args: argparse.Namespace) -> None:
+    """cambrian lineage 처리.
+
+    Args:
+        args: argparse가 파싱한 네임스페이스
+    """
+    engine = _create_engine(args)
+    registry = engine.get_registry()
+
+    skill_name = args.skill_name
+    run_id = getattr(args, "run_id", None)
+
+    # run_id 미지정 시 가장 최근 채택 조회
+    if not run_id:
+        history = registry.get_adoption_history(skill_name=skill_name, limit=1)
+        if not history:
+            print(f"[lineage] 채택 기록 없음: {skill_name}")
+            return
+        run_id = history[0]["child_run_id"]
+
+    print(f"\n=== Lineage: {skill_name} (run_id={run_id[:8]}...) ===\n")
+
+    direction = getattr(args, "direction", "both")
+
+    if direction in ("ancestors", "both"):
+        ancestors = registry.get_ancestors(skill_name, run_id)
+        if ancestors:
+            print("◀ ANCESTORS (최신→최초)")
+            for i, a in enumerate(ancestors):
+                indent = "  " * i
+                parent_label = (
+                    f"← {a['parent_skill_name']}"
+                    if a["parent_skill_name"] else "← [origin]"
+                )
+                print(
+                    f"{indent}[{a['adopted_at'][:16]}] "
+                    f"{a['skill_name']} ({a['run_id'][:8]}) {parent_label}"
+                )
+        else:
+            print("◀ ANCESTORS: 없음 (최초 채택)")
+
+    if direction in ("descendants", "both"):
+        descendants = registry.get_descendants(run_id)
+        if descendants:
+            print("\n▶ DESCENDANTS")
+            _print_lineage_tree(descendants, indent=0)
+        else:
+            print("\n▶ DESCENDANTS: 없음 (말단 노드)")
+
+    print()
+
+
+def _print_lineage_tree(nodes: list[dict], indent: int) -> None:
+    """lineage 트리를 ASCII로 출력한다.
+
+    Args:
+        nodes: 자손 노드 리스트
+        indent: 들여쓰기 수준
+    """
+    for node in nodes:
+        prefix = "  " * indent + ("└─ " if indent > 0 else "")
+        print(
+            f"{prefix}[{node['adopted_at'][:16]}] "
+            f"{node['skill_name']} ({node['run_id'][:8]})"
+        )
+        if node.get("children"):
+            _print_lineage_tree(node["children"], indent + 1)
+
+
+def _handle_audit(args: argparse.Namespace) -> None:
+    """cambrian audit 처리.
+
+    Args:
+        args: argparse가 파싱한 네임스페이스
+    """
+    audit_cmd = getattr(args, "audit_cmd", None)
+    if audit_cmd != "adoptions":
+        print("Usage: cambrian audit adoptions [--skill X] [--since Y] [--limit N]")
+        sys.exit(1)
+
+    engine = _create_engine(args)
+    registry = engine.get_registry()
+
+    records = registry.get_adoption_history(
+        skill_name=getattr(args, "skill", None),
+        since=getattr(args, "since", None),
+        until=getattr(args, "until", None),
+        scenario_id=getattr(args, "scenario", None),
+        limit=getattr(args, "limit", 50),
+    )
+
+    if not records:
+        print("[audit] 조건에 맞는 채택 기록 없음")
+        return
+
+    if getattr(args, "json_output", False):
+        print(json.dumps(records, ensure_ascii=False, indent=2))
+        return
+
+    header = (
+        f"{'adopted_at':20} {'skill_name':20} {'parent':20} "
+        f"{'scenario':15} {'policy':8}"
+    )
+    print(f"\n{header}")
+    print("─" * len(header))
+    for r in records:
+        parent = r.get("parent_skill_name") or "—"
+        scenario = (r.get("scenario_id") or "—")[:14]
+        policy = (r.get("policy_hash") or "—")[:7]
+        print(
+            f"{r['adopted_at'][:19]:20} "
+            f"{r['child_skill_name']:20} {parent:20} "
+            f"{scenario:15} {policy:8}"
+        )
+    print(f"\n총 {len(records)}건\n")
 
 
 def _handle_export(args: argparse.Namespace) -> None:
