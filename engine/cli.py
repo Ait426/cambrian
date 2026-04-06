@@ -542,6 +542,19 @@ def main() -> None:
         "--notes", default="", help="실험 메모",
     )
 
+    decide_parser = scenario_sub.add_parser(
+        "decide", help="matrix 결과에서 champion/promotion 판정",
+    )
+    decide_parser.add_argument(
+        "summary_file", help="_matrix_summary.json 경로",
+    )
+    decide_parser.add_argument(
+        "--output", "-o", default=None, help="decision report 저장 경로",
+    )
+    decide_parser.add_argument(
+        "--json", action="store_true", dest="json_output", help="JSON 출력",
+    )
+
     # === snapshot: 실험 스냅샷 비교 ===
     snapshot_parser = subparsers.add_parser(
         "snapshot",
@@ -1384,6 +1397,9 @@ def _handle_scenario(args: argparse.Namespace) -> None:
     if cmd == "matrix":
         _handle_scenario_matrix(args)
         return
+    if cmd == "decide":
+        _handle_scenario_decide(args)
+        return
     if cmd != "run":
         print("Usage: cambrian scenario run <spec.json>")
         sys.exit(1)
@@ -1625,6 +1641,111 @@ def _print_matrix_summary(summary: dict) -> None:
         )
 
     print(f"\nOverall: {summary.get('overall_verdict', '')}")
+
+
+def _handle_scenario_decide(args: argparse.Namespace) -> None:
+    """cambrian scenario decide 처리.
+
+    Args:
+        args: argparse가 파싱한 네임스페이스
+    """
+    from engine.decision import MatrixDecider
+
+    summary_path = Path(args.summary_file)
+    if not summary_path.exists():
+        print(f"File not found: {summary_path}", file=sys.stderr)
+        sys.exit(1)
+
+    try:
+        matrix_summary = json.loads(summary_path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as exc:
+        print(f"Invalid JSON: {exc}", file=sys.stderr)
+        sys.exit(1)
+
+    try:
+        decider = MatrixDecider()
+        decision = decider.decide(matrix_summary)
+        decision["matrix_summary_path"] = str(summary_path.resolve())
+    except ValueError as exc:
+        print(f"[FAIL] {exc}", file=sys.stderr)
+        sys.exit(1)
+
+    if getattr(args, "json_output", False):
+        print(json.dumps(decision, indent=2, ensure_ascii=False))
+    else:
+        _print_decision_report(decision)
+
+    # output 저장
+    output_path = getattr(args, "output", None)
+    if output_path:
+        out = Path(output_path)
+        out.parent.mkdir(parents=True, exist_ok=True)
+        out.write_text(
+            json.dumps(decision, indent=2, ensure_ascii=False),
+            encoding="utf-8",
+        )
+        print(f"\nDecision saved: {out}")
+
+
+def _print_decision_report(decision: dict) -> None:
+    """decision report를 사람이 읽기 좋게 출력한다.
+
+    Args:
+        decision: MatrixDecider.decide() 반환값
+    """
+    name = decision.get("scenario_name", "")
+    baseline = decision.get("baseline_policy", "")
+    profiles = decision.get("profiles", [])
+    champion = decision.get("champion")
+    promotion = decision.get("promotion", {})
+
+    print(f"Matrix Decision: {name}")
+    print("═" * 55)
+    print(f"\nBaseline: {Path(baseline).name if baseline else '-'}")
+
+    print(
+        f"\n{'PROFILE':<22} {'ROLE':<13} {'SUCCESS':>7} {'EVAL':>7} "
+        f"{'AVG_MS':>7} VERDICT"
+    )
+    for p in profiles:
+        pname = Path(p.get("policy_path", "")).stem or "?"
+        role = p.get("role", "?")
+        if role == "champion":
+            role = "★ champion"
+
+        sr = f"{p['success_rate'] * 100:.1f}%" if p.get("success_rate") else "-"
+        ep = (
+            f"{p['eval_pass_rate'] * 100:.1f}%"
+            if p.get("eval_pass_rate") is not None else "-"
+        )
+        ms = f"{p['avg_execution_ms']}ms" if p.get("avg_execution_ms") else "-"
+        verdict = p.get("verdict_vs_baseline") or "-"
+        print(
+            f"  {pname:<20} {role:<13} {sr:>7} {ep:>7} {ms:>7} {verdict}"
+        )
+
+    # Champion
+    if champion:
+        print(f"\nChampion: {Path(champion['policy_path']).name}")
+        print(f"  {champion['selection_reason']}")
+    else:
+        print("\nChampion: (none)")
+
+    # Baseline Decision
+    bd = decision.get("baseline_decision", "")
+    print(f"\nBaseline Decision: {bd}")
+
+    # Promotion
+    if promotion.get("recommend_promote"):
+        print(f"\nPromotion: ✓ RECOMMEND")
+        print(f"  {promotion['reason']}")
+        print(
+            f"  → To promote: cambrian promote <skill_id> "
+            f"--reason \"champion: {Path(promotion.get('recommended_policy', '')).stem}\""
+        )
+    else:
+        print(f"\nPromotion: ✗ NOT RECOMMENDED")
+        print(f"  {promotion.get('reason', '')}")
 
 
 def _handle_snapshot(args: argparse.Namespace) -> None:
