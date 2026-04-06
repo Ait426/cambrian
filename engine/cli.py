@@ -661,6 +661,41 @@ def main() -> None:
         "--limit", type=int, default=20, help="최대 결과 수",
     )
 
+    # === adoption: 채택 관리 ===
+    adoption_parser = subparsers.add_parser(
+        "adoption",
+        help="채택 이력 관리",
+        parents=[common_parser],
+    )
+    adoption_sub = adoption_parser.add_subparsers(
+        dest="adoption_cmd", help="서브 명령어",
+    )
+
+    # adoption rollback
+    rb_parser = adoption_sub.add_parser("rollback", help="이전 adoption으로 롤백")
+    rb_parser.add_argument(
+        "target_path", nargs="?", default=None,
+        help="target adoption record 경로",
+    )
+    rb_parser.add_argument(
+        "--previous", action="store_true",
+        help="직전 adoption으로 롤백",
+    )
+    rb_parser.add_argument(
+        "--to", default=None, dest="to_run_id",
+        help="특정 run_id로 롤백",
+    )
+    rb_parser.add_argument(
+        "--reason", default=None, help="롤백 사유",
+    )
+    rb_parser.add_argument(
+        "--adoptions-dir", default="adoptions", dest="adoptions_dir",
+        help="adoption record 디렉토리 (기본: adoptions/)",
+    )
+
+    # adoption latest
+    adoption_sub.add_parser("latest", help="현재 latest adoption 확인")
+
     # === lineage: 채택 계보 트리 ===
     lineage_parser = subparsers.add_parser(
         "lineage",
@@ -768,6 +803,8 @@ def main() -> None:
             _handle_unquarantine(args)
         elif args.command == "governance":
             _handle_governance(args)
+        elif args.command == "adoption":
+            _handle_adoption(args)
         elif args.command == "lineage":
             _handle_lineage(args)
         elif args.command == "audit":
@@ -2206,6 +2243,139 @@ def _handle_governance(args: argparse.Namespace) -> None:
             f"{log['triggered_by']:<8} "
             f"{log['reason'][:28]:<30} {log['created_at'][:16]}"
         )
+
+
+def _handle_adoption(args: argparse.Namespace) -> None:
+    """cambrian adoption 처리.
+
+    Args:
+        args: argparse가 파싱한 네임스페이스
+    """
+    cmd = getattr(args, "adoption_cmd", None)
+    if cmd == "rollback":
+        _handle_adoption_rollback(args)
+    elif cmd == "latest":
+        _handle_adoption_latest(args)
+    else:
+        print("Usage: cambrian adoption rollback|latest")
+        sys.exit(1)
+
+
+def _handle_adoption_rollback(args: argparse.Namespace) -> None:
+    """cambrian adoption rollback 처리.
+
+    Args:
+        args: argparse가 파싱한 네임스페이스
+    """
+    from engine.rollback import RollbackError, execute_rollback, resolve_previous_adoption
+
+    adoptions_dir = getattr(args, "adoptions_dir", "adoptions")
+    latest_path = Path(adoptions_dir) / "_latest.json"
+
+    if not latest_path.exists():
+        print("[rollback] ✗ 실패 — _latest.json 없음 (채택 기록 없음)", file=sys.stderr)
+        sys.exit(1)
+
+    target_path = getattr(args, "target_path", None)
+    use_previous = getattr(args, "previous", False)
+    to_run_id = getattr(args, "to_run_id", None)
+
+    # --previous: lineage에서 직전 찾기
+    if use_previous and not target_path:
+        current_latest = json.loads(latest_path.read_text(encoding="utf-8"))
+        current_run_id = current_latest.get("run_id")
+        skill_name = current_latest.get("skill_id") or current_latest.get("skill_name")
+
+        if not current_run_id or not skill_name:
+            print("[rollback] ✗ 실패 — latest에 run_id/skill 정보 없음", file=sys.stderr)
+            sys.exit(1)
+
+        engine = _create_engine(args)
+        registry = engine.get_registry()
+        resolved = resolve_previous_adoption(
+            skill_name, current_run_id, registry._conn, adoptions_dir,
+        )
+        if not resolved:
+            print("[rollback] ✗ 실패 — 직전 adoption 기록을 찾을 수 없음", file=sys.stderr)
+            sys.exit(1)
+        target_path = resolved
+
+    # --to <run_id>: adoptions 디렉토리에서 검색
+    if to_run_id and not target_path:
+        adopt_dir = Path(adoptions_dir)
+        found = None
+        if adopt_dir.exists():
+            for f in adopt_dir.glob("adoption_*.json"):
+                try:
+                    data = json.loads(f.read_text(encoding="utf-8"))
+                    if data.get("run_id") == to_run_id:
+                        found = str(f)
+                        break
+                except Exception:
+                    continue
+        if not found:
+            print(f"[rollback] ✗ 실패 — run_id '{to_run_id}' 에 해당하는 record 없음", file=sys.stderr)
+            sys.exit(1)
+        target_path = found
+
+    if not target_path:
+        print("Usage: cambrian adoption rollback <path> | --previous | --to <run_id>", file=sys.stderr)
+        sys.exit(1)
+
+    # DB 연결 (lineage 기록용)
+    db_conn = None
+    try:
+        engine = _create_engine(args)
+        db_conn = engine.get_registry()._conn
+    except Exception:
+        pass
+
+    try:
+        record = execute_rollback(
+            target_path=target_path,
+            current_latest_path=str(latest_path),
+            human_reason=getattr(args, "reason", None),
+            adoptions_dir=adoptions_dir,
+            db_conn=db_conn,
+        )
+
+        prev = record["previous_latest"]
+        tgt = record["target_adoption"]
+        print("[rollback] ✓ 성공")
+        print(f"  skill      : {record['skill_name']}")
+        print(f"  이전 latest : {prev['run_id'][:8]} ({prev['adopted_at'][:16]})")
+        print(f"  복원 target : {tgt['run_id'][:8]} ({tgt['adopted_at'][:16]})")
+        print(f"  record 저장 : {record.get('_record_path', '')}")
+        print(f"  이유        : {record['human_reason'] or '미지정'}")
+
+    except RollbackError as exc:
+        print(f"[rollback] ✗ 실패 — {exc}", file=sys.stderr)
+        print("현재 상태는 변경되지 않았습니다.", file=sys.stderr)
+        sys.exit(1)
+
+
+def _handle_adoption_latest(args: argparse.Namespace) -> None:
+    """cambrian adoption latest 처리.
+
+    Args:
+        args: argparse가 파싱한 네임스페이스
+    """
+    adoptions_dir = getattr(args, "adoptions_dir", "adoptions")
+    latest_path = Path(adoptions_dir) / "_latest.json"
+
+    if not latest_path.exists():
+        print("[adoption] latest 없음 (채택 기록 없음)")
+        return
+
+    data = json.loads(latest_path.read_text(encoding="utf-8"))
+    print(f"Latest Adoption:")
+    print(f"  skill    : {data.get('skill_id') or data.get('skill_name', '?')}")
+    print(f"  run_id   : {data.get('run_id', '?')}")
+    print(f"  promoted : {data.get('promoted_to', '?')}")
+    print(f"  timestamp: {data.get('timestamp', '?')}")
+    action = data.get("action")
+    if action:
+        print(f"  action   : {action}")
 
 
 def _handle_lineage(args: argparse.Namespace) -> None:
