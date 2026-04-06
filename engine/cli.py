@@ -628,6 +628,14 @@ def main() -> None:
         "--reason", default="manual promotion",
         help="승격 사유",
     )
+    promote_parser.add_argument(
+        "--decision", default=None,
+        help="decision.json 경로 (champion/gate 검증 적용)",
+    )
+    promote_parser.add_argument(
+        "--out-dir", default="adoptions", dest="adopt_out_dir",
+        help="adoption record 저장 디렉토리 (기본: adoptions/)",
+    )
 
     # === unquarantine: 격리 해제 ===
     unq_parser = subparsers.add_parser(
@@ -1899,12 +1907,42 @@ def _print_pilot_report(report: dict) -> None:
 def _handle_promote(args: argparse.Namespace) -> None:
     """cambrian promote 처리.
 
+    --decision 지정 시 decision guardrail 적용 후 기존 governance 검증.
+    promote 성공 시 adoption record 저장.
+
     Args:
         args: argparse가 파싱한 네임스페이스
     """
+    import hashlib as _hashlib
+    from datetime import datetime as _dt
+    from datetime import timezone as _tz
+
     engine = _create_engine(args)
     registry = engine.get_registry()
 
+    # ── decision-backed guardrail ──
+    decision_data = None
+    decision_path = getattr(args, "decision", None)
+
+    if decision_path:
+        from engine.decision import MatrixDecider
+
+        dp = Path(decision_path)
+        if not dp.exists():
+            print(f"Decision file not found: {dp}", file=sys.stderr)
+            sys.exit(1)
+        try:
+            decision_data = json.loads(dp.read_text(encoding="utf-8"))
+        except json.JSONDecodeError as exc:
+            print(f"Invalid decision JSON: {exc}", file=sys.stderr)
+            sys.exit(1)
+
+        passed, reason = MatrixDecider.validate_for_promote(decision_data)
+        if not passed:
+            print(f"[BLOCKED] {reason}", file=sys.stderr)
+            sys.exit(1)
+
+    # ── 기존 governance 검증 ──
     try:
         skill_data = registry.get(args.skill_id)
     except SkillNotFoundError:
@@ -1922,8 +1960,8 @@ def _handle_promote(args: argparse.Namespace) -> None:
         )
         sys.exit(1)
 
-    # production 승격 시 최소 조건 확인 (policy 기준)
     policy = engine.get_policy()
+    q_count = 0
     if target == "production":
         min_exec = policy.promote_min_executions
         min_fit = policy.promote_min_fitness
@@ -1951,13 +1989,88 @@ def _handle_promote(args: argparse.Namespace) -> None:
             )
             sys.exit(1)
 
+    # ── promote 실행 ──
     registry.update_release_state(
         args.skill_id,
         new_state=target,
         reason=args.reason,
         triggered_by="manual",
     )
+
+    # ── adoption record 생성 ──
+    out_dir = Path(getattr(args, "adopt_out_dir", "adoptions"))
+    out_dir.mkdir(parents=True, exist_ok=True)
+
+    timestamp = _dt.now(_tz.utc)
+    ts_str = timestamp.strftime("%Y%m%d_%H%M%S")
+
+    decision_prov = None
+    if decision_data and decision_path:
+        raw = Path(decision_path).read_text(encoding="utf-8")
+        d_hash = "sha256:" + _hashlib.sha256(raw.encode()).hexdigest()[:16]
+        decision_prov = {
+            "decision_file": str(Path(decision_path).resolve()),
+            "decision_hash": d_hash,
+            "matrix_summary_path": decision_data.get(
+                "matrix_summary_path", ""
+            ),
+            "champion_policy": (
+                decision_data.get("champion") or {}
+            ).get("policy_path", ""),
+            "baseline_decision": decision_data.get("baseline_decision", ""),
+            "recommend_promote": (
+                decision_data.get("promotion", {}).get("recommend_promote", False)
+            ),
+            "gate_reason": decision_data.get("promotion", {}).get("reason", ""),
+        }
+
+    record = {
+        "_adoption_version": "1.0.0",
+        "timestamp": timestamp.isoformat(),
+        "skill_id": args.skill_id,
+        "promoted_to": target,
+        "previous_release_state": current,
+        "decision_provenance": decision_prov,
+        "human_provenance": {
+            "reason": args.reason,
+            "operator": "",
+        },
+        "governance_check": {
+            "fitness_score": skill_data.get("fitness_score", 0),
+            "total_executions": skill_data.get("total_executions", 0),
+            "quarantine_count": q_count,
+            "governance_passed": True,
+        },
+    }
+
+    filename = f"adoption_{ts_str}_{args.skill_id}.json"
+    filepath = out_dir / filename
+    try:
+        filepath.write_text(
+            json.dumps(record, indent=2, ensure_ascii=False),
+            encoding="utf-8",
+        )
+        # _latest.json 갱신
+        latest = {
+            "latest_adoption": filename,
+            "skill_id": args.skill_id,
+            "promoted_to": target,
+            "timestamp": timestamp.isoformat(),
+        }
+        (out_dir / "_latest.json").write_text(
+            json.dumps(latest, indent=2, ensure_ascii=False),
+            encoding="utf-8",
+        )
+    except Exception as exc:
+        print(f"  [WARN] Adoption record 저장 실패: {exc}", file=sys.stderr)
+
+    # ── stdout ──
     print(f"[OK] '{args.skill_id}' promoted: {current} → {target}")
+    if decision_data:
+        champion = decision_data.get("champion") or {}
+        print(f"  Decision: champion={champion.get('policy_path', '?')}")
+    print(f"  Reason: {args.reason}")
+    print(f"  Adoption record: {filepath}")
 
 
 def _handle_unquarantine(args: argparse.Namespace) -> None:

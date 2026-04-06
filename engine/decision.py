@@ -209,3 +209,28 @@ class MatrixDecider:
         if champion is not None:
             return "replace_with_champion"
         return "keep_baseline"
+
+    @staticmethod
+    def validate_for_promote(decision: dict) -> tuple[bool, str]:
+        """decision artifact가 promote에 적합한지 검증한다.
+
+        Args:
+            decision: decide() 결과 또는 decision.json 내용
+
+        Returns:
+            (passed, reason) 튜플. passed=False면 reason에 차단 사유.
+        """
+        champion = decision.get("champion")
+        if champion is None:
+            return False, "No champion in decision — promote blocked"
+
+        bd = decision.get("baseline_decision")
+        if bd == "keep_baseline":
+            return False, "Decision recommends keep_baseline — promote blocked"
+
+        promo = decision.get("promotion", {})
+        if not promo.get("recommend_promote"):
+            reason = promo.get("reason", "unknown")
+            return False, f"Promotion gate not passed: {reason}"
+
+        return True, "Decision validates promote"
