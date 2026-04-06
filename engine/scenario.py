@@ -6,16 +6,31 @@ JSON spec 파일 1개로 batch run → eval → evolve → promote 추천을
 
 from __future__ import annotations
 
+import hashlib
 import json
 import logging
+import platform
 from collections import Counter
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from engine.loop import CambrianEngine
 
 logger = logging.getLogger(__name__)
+
+
+def _compute_hash(content: str) -> str:
+    """문자열의 SHA-256 해시를 계산한다 (앞 16자).
+
+    Args:
+        content: 해시할 문자열
+
+    Returns:
+        'sha256:' 접두사 + 16자 hex
+    """
+    return "sha256:" + hashlib.sha256(content.encode("utf-8")).hexdigest()[:16]
 
 
 class ScenarioRunner:
@@ -29,11 +44,18 @@ class ScenarioRunner:
         """
         self._engine = engine
 
-    def run_scenario(self, spec: dict) -> dict:
+    def run_scenario(
+        self,
+        spec: dict,
+        scenario_path: str = "",
+        notes: str = "",
+    ) -> dict:
         """scenario spec을 실행하고 report를 반환한다.
 
         Args:
             spec: scenario JSON spec dict
+            scenario_path: spec 파일 경로 (snapshot 컨텍스트용)
+            notes: 실험 메모
 
         Returns:
             실행 결과 report dict
@@ -109,6 +131,8 @@ class ScenarioRunner:
         return self._build_report(
             spec, run_results, eval_result,
             evolve_result, re_eval_result, recommendation,
+            scenario_path=scenario_path,
+            notes=notes,
         )
 
     def _validate_spec(self, spec: dict) -> list[str]:
@@ -254,8 +278,10 @@ class ScenarioRunner:
         evolve_result: dict | None,
         re_eval_result: dict | None,
         recommendation: dict | None,
+        scenario_path: str = "",
+        notes: str = "",
     ) -> dict:
-        """최종 report dict를 조립한다.
+        """최종 report dict를 조립한다 (snapshot 컨텍스트 포함).
 
         Args:
             spec: scenario spec
@@ -264,9 +290,11 @@ class ScenarioRunner:
             evolve_result: evolve 결과 (None이면 미실행)
             re_eval_result: re-eval 결과 (None이면 미실행)
             recommendation: promote 추천 (None이면 winner 없음)
+            scenario_path: spec 파일 경로
+            notes: 실험 메모
 
         Returns:
-            완성된 report dict
+            완성된 report dict (snapshot 컨텍스트 포함)
         """
         total = len(run_results)
         successes = sum(1 for r in run_results if r["success"])
@@ -277,7 +305,43 @@ class ScenarioRunner:
             sum(success_times) // len(success_times) if success_times else 0
         )
 
+        # snapshot 컨텍스트
+        policy = self._engine.get_policy()
+        resolved_policy = policy.to_dict()
+        scenario_hash = _compute_hash(
+            json.dumps(spec, sort_keys=True, ensure_ascii=False)
+        )
+        policy_hash = _compute_hash(
+            json.dumps(resolved_policy, sort_keys=True, ensure_ascii=False)
+        )
+
         return {
+            "_snapshot_version": "1.0.0",
+            "_context": {
+                "scenario_path": (
+                    str(Path(scenario_path).resolve()) if scenario_path else ""
+                ),
+                "scenario_hash": scenario_hash,
+                "policy_source": policy.policy_source,
+                "policy_hash": policy_hash,
+                "resolved_policy": resolved_policy,
+                "run_options": {
+                    "do_eval": spec.get("do_eval", False),
+                    "do_evolve": spec.get("do_evolve", False),
+                    "max_candidates_override": spec.get("max_candidates"),
+                    "retries": spec.get("retries", 3),
+                },
+                "engine_version": "0.3.0",
+                "python_version": platform.python_version(),
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+                "notes": notes,
+            },
+            "_reproducibility_notice": (
+                "Snapshot preserves execution context for comparison. "
+                "LLM-based operations (Mode A, evolve, judge) are "
+                "nondeterministic; identical inputs may produce different "
+                "outputs across runs."
+            ),
             "success": True,
             "scenario_name": spec["name"],
             "domain": spec["domain"],

@@ -519,6 +519,27 @@ def main() -> None:
         "--output", "-o", default=None,
         help="report 저장 경로 (미지정 시 ./reports/<name>_<timestamp>.json)",
     )
+    run_sc_parser.add_argument(
+        "--notes", default="",
+        help="실험 메모 (snapshot에 기록)",
+    )
+
+    # === snapshot: 실험 스냅샷 비교 ===
+    snapshot_parser = subparsers.add_parser(
+        "snapshot",
+        help="실험 스냅샷 관리",
+        parents=[common_parser],
+    )
+    snapshot_sub = snapshot_parser.add_subparsers(
+        dest="snapshot_command", help="서브 명령어",
+    )
+    compare_parser = snapshot_sub.add_parser("compare", help="두 스냅샷 비교")
+    compare_parser.add_argument("file_a", help="스냅샷 A JSON 파일")
+    compare_parser.add_argument("file_b", help="스냅샷 B JSON 파일")
+    compare_parser.add_argument(
+        "--json", action="store_true", dest="json_output",
+        help="JSON 출력",
+    )
 
     # === outcome: 실행 결과 사용 판정 ===
     outcome_parser = subparsers.add_parser(
@@ -663,6 +684,8 @@ def main() -> None:
             _handle_eval(args)
         elif args.command == "scenario":
             _handle_scenario(args)
+        elif args.command == "snapshot":
+            _handle_snapshot(args)
         elif args.command == "outcome":
             _handle_outcome(args)
         elif args.command == "pilot":
@@ -1356,7 +1379,11 @@ def _handle_scenario(args: argparse.Namespace) -> None:
 
     engine = _create_engine(args)
     runner = ScenarioRunner(engine)
-    report = runner.run_scenario(spec)
+    report = runner.run_scenario(
+        spec,
+        scenario_path=str(spec_path.resolve()),
+        notes=getattr(args, "notes", ""),
+    )
 
     # stdout 요약
     _print_scenario_summary(report)
@@ -1471,6 +1498,44 @@ def _print_scenario_summary(report: dict) -> None:
                 f"success_rate={rec.get('success_rate', 0) * 100:.1f}%"
             )
             print(f"  → Run: cambrian promote {rec['skill_id']}")
+
+
+def _handle_snapshot(args: argparse.Namespace) -> None:
+    """cambrian snapshot 처리.
+
+    Args:
+        args: argparse가 파싱한 네임스페이스
+    """
+    from engine.snapshot import SnapshotComparer
+
+    if getattr(args, "snapshot_command", None) != "compare":
+        print("Usage: cambrian snapshot compare <file_a> <file_b>")
+        sys.exit(1)
+
+    path_a = Path(args.file_a)
+    path_b = Path(args.file_b)
+
+    if not path_a.exists():
+        print(f"File not found: {path_a}", file=sys.stderr)
+        sys.exit(1)
+    if not path_b.exists():
+        print(f"File not found: {path_b}", file=sys.stderr)
+        sys.exit(1)
+
+    try:
+        snap_a = json.loads(path_a.read_text(encoding="utf-8"))
+        snap_b = json.loads(path_b.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as exc:
+        print(f"Invalid JSON: {exc}", file=sys.stderr)
+        sys.exit(1)
+
+    comparer = SnapshotComparer()
+    result = comparer.compare(snap_a, snap_b)
+
+    if getattr(args, "json_output", False):
+        print(json.dumps(result, indent=2, ensure_ascii=False))
+    else:
+        print(comparer.format_comparison(result))
 
 
 def _handle_outcome(args: argparse.Namespace) -> None:
