@@ -498,6 +498,22 @@ def main() -> None:
         help="평가 최대 케이스 수 (기본: 20)",
     )
 
+    # === scenario: 시나리오 배치 실행 ===
+    scenario_parser = subparsers.add_parser(
+        "scenario",
+        help="시나리오 배치 실행",
+        parents=[common_parser],
+    )
+    scenario_sub = scenario_parser.add_subparsers(
+        dest="scenario_command", help="서브 명령어",
+    )
+    run_sc_parser = scenario_sub.add_parser("run", help="시나리오 실행")
+    run_sc_parser.add_argument("spec_file", help="scenario JSON spec 파일 경로")
+    run_sc_parser.add_argument(
+        "--output", "-o", default=None,
+        help="report 저장 경로 (미지정 시 ./reports/<name>_<timestamp>.json)",
+    )
+
     # === outcome: 실행 결과 사용 판정 ===
     outcome_parser = subparsers.add_parser(
         "outcome",
@@ -639,6 +655,8 @@ def main() -> None:
             _handle_trace(args)
         elif args.command == "eval":
             _handle_eval(args)
+        elif args.command == "scenario":
+            _handle_scenario(args)
         elif args.command == "outcome":
             _handle_outcome(args)
         elif args.command == "pilot":
@@ -1290,6 +1308,149 @@ def _handle_skill_stats(engine: "CambrianEngine", skill_id: str) -> None:
         )
     else:
         print("  Feedback:   (no feedback)")
+
+
+def _handle_scenario(args: argparse.Namespace) -> None:
+    """cambrian scenario 처리.
+
+    Args:
+        args: argparse가 파싱한 네임스페이스
+    """
+    from datetime import datetime as _dt
+    from engine.scenario import ScenarioRunner
+
+    if getattr(args, "scenario_command", None) != "run":
+        print("Usage: cambrian scenario run <spec.json>")
+        sys.exit(1)
+
+    spec_path = Path(args.spec_file)
+    if not spec_path.exists():
+        print(f"Spec file not found: {spec_path}", file=sys.stderr)
+        sys.exit(1)
+
+    try:
+        spec = json.loads(spec_path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as exc:
+        print(f"Invalid JSON: {exc}", file=sys.stderr)
+        sys.exit(1)
+
+    engine = _create_engine(args)
+    runner = ScenarioRunner(engine)
+    report = runner.run_scenario(spec)
+
+    # stdout 요약
+    _print_scenario_summary(report)
+
+    # report 파일 저장
+    output_path = getattr(args, "output", None)
+    if output_path is None:
+        reports_dir = Path("reports")
+        reports_dir.mkdir(exist_ok=True)
+        timestamp = _dt.now().strftime("%Y%m%d_%H%M%S")
+        output_path = str(
+            reports_dir / f"{spec.get('name', 'scenario')}_{timestamp}.json"
+        )
+
+    out = Path(output_path)
+    out.parent.mkdir(parents=True, exist_ok=True)
+    out.write_text(
+        json.dumps(report, indent=2, ensure_ascii=False),
+        encoding="utf-8",
+    )
+    print(f"\nReport saved: {out}")
+
+
+def _print_scenario_summary(report: dict) -> None:
+    """scenario 실행 결과 요약을 출력한다.
+
+    Args:
+        report: ScenarioRunner.run_scenario() 반환값
+    """
+    name = report.get("scenario_name", "scenario")
+
+    if not report.get("success"):
+        print(f"Scenario: {name}")
+        print("═" * 50)
+        print("\n[FAIL] Spec validation error:")
+        for err in report.get("errors", []):
+            print(f"  - {err}")
+        return
+
+    total = report["total_inputs"]
+    succ = report["successful_inputs"]
+    fail = report["failed_inputs"]
+    rate = report["success_rate"] * 100
+    avg_ms = report["avg_execution_ms"]
+    winner = report.get("winner_skill")
+
+    print(f"Scenario: {name}")
+    print("═" * 50)
+    print(f"\nInputs:   {total} total, {succ} success, {fail} fail → {rate:.1f}%")
+    print(f"Avg time: {avg_ms}ms")
+    if winner:
+        win_count = sum(
+            1 for r in report["run_results"]
+            if r["success"] and r["skill_id"] == winner
+        )
+        print(f"Winner:   {winner} (selected {win_count}/{succ} times)")
+    else:
+        print("Winner:   (none)")
+
+    # Run Results 테이블
+    print(f"\nRun Results:")
+    print(f"  {'#':<4} {'OK':<6} {'SKILL':<20} {'TIME':<8} ERROR")
+    for r in report["run_results"]:
+        ok_str = "[OK]" if r["success"] else "[FAIL]"
+        skill_str = r["skill_id"] or "-"
+        time_str = f"{r['execution_time_ms']}ms"
+        err_str = r.get("error", "")[:50]
+        print(f"  {r['index']:<4} {ok_str:<6} {skill_str:<20} {time_str:<8} {err_str}")
+
+    # Eval
+    eval_r = report.get("eval_result")
+    if eval_r:
+        if "error" in eval_r:
+            print(f"\nEval: error — {eval_r['error'][:80]}")
+        elif "pass_rate" in eval_r:
+            verdict = eval_r.get("verdict", "")
+            print(f"\nEval: pass_rate {eval_r['pass_rate'] * 100:.1f}%, verdict: {verdict}")
+        else:
+            print(f"\nEval: {eval_r}")
+
+    # Evolve
+    evolve_r = report.get("evolve_result")
+    if evolve_r:
+        if "skipped" in evolve_r:
+            print(f"Evolve: skipped ({evolve_r['skipped']})")
+        elif "error" in evolve_r:
+            print(f"Evolve: error — {evolve_r['error'][:80]}")
+        elif "adopted" in evolve_r:
+            adopted_str = "adopted" if evolve_r["adopted"] else "discarded"
+            print(
+                f"Evolve: {adopted_str} "
+                f"(fitness {evolve_r['parent_fitness']:.4f} → {evolve_r['child_fitness']:.4f})"
+            )
+
+    # Re-eval
+    re_eval_r = report.get("re_eval_result")
+    if re_eval_r and "pass_rate" in re_eval_r:
+        print(f"Re-eval: pass_rate {re_eval_r['pass_rate'] * 100:.1f}%, verdict: {re_eval_r.get('verdict', '')}")
+
+    # Promote recommendation
+    rec = report.get("promote_recommendation")
+    if rec:
+        print(f"\nPromote Recommendation:")
+        print(
+            f"  {rec['skill_id']}: {rec.get('release_state', '?')} → "
+            f"{rec['recommendation']}"
+        )
+        if rec.get("eligible"):
+            print(
+                f"  fitness={rec.get('fitness', 0):.4f}, "
+                f"executions={rec.get('executions', 0)}, "
+                f"success_rate={rec.get('success_rate', 0) * 100:.1f}%"
+            )
+            print(f"  → Run: cambrian promote {rec['skill_id']}")
 
 
 def _handle_outcome(args: argparse.Namespace) -> None:
