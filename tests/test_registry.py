@@ -661,3 +661,345 @@ def test_feedback_normal_passes() -> None:
 
     fb_id = registry.add_feedback("fb_test3", 4, "색상이 구려요. 개선 필요.", "{}", "{}")
     assert fb_id > 0
+
+
+# === Phase 4: register() state 보존 테스트 ===
+
+
+def test_register_preserves_runtime_state() -> None:
+    """기존 스킬을 재등록하면 runtime 필드(fitness, executions 등)가 보존된다."""
+    registry = SkillRegistry(":memory:")
+    skill = _make_skill("preserve_rt")
+    registry.register(skill)
+
+    # runtime 상태 누적
+    for _ in range(5):
+        registry.update_after_execution(
+            "preserve_rt",
+            ExecutionResult(skill_id="preserve_rt", success=True, output={}),
+        )
+    before = registry.get("preserve_rt")
+    assert before["total_executions"] == 5
+    assert before["fitness_score"] > 0
+
+    # 동일 ID로 재등록 (메타데이터 변경)
+    skill_v2 = Skill(
+        id="preserve_rt",
+        version="2.0.0",
+        name="Updated Skill",
+        description="Updated description",
+        domain="testing",
+        tags=["test", "updated"],
+        mode="a",
+        runtime=SkillRuntime(language="python"),
+        lifecycle=SkillLifecycle(),  # 기본값 (0, 0, newborn)
+        skill_path=Path("/tmp/preserve_rt_v2"),
+    )
+    registry.register(skill_v2)
+
+    after = registry.get("preserve_rt")
+    # runtime 필드 보존
+    assert after["total_executions"] == 5
+    assert after["successful_executions"] == 5
+    assert after["fitness_score"] == before["fitness_score"]
+    assert after["last_used"] == before["last_used"]
+    # 정적 필드는 갱신
+    assert after["version"] == "2.0.0"
+    assert after["name"] == "Updated Skill"
+    assert after["description"] == "Updated description"
+
+    registry.close()
+
+
+def test_register_preserves_status_and_registered_at() -> None:
+    """재등록 시 status, registered_at, crystallized_at이 보존된다."""
+    registry = SkillRegistry(":memory:")
+    skill = _make_skill("preserve_status")
+    registry.register(skill)
+
+    original = registry.get("preserve_status")
+    original_registered_at = original["registered_at"]
+
+    # status를 active로 변경
+    registry.update_status("preserve_status", "active")
+
+    # 재등록 (lifecycle 기본값 = newborn)
+    skill_v2 = Skill(
+        id="preserve_status",
+        version="2.0.0",
+        name="V2",
+        description="V2 desc",
+        domain="testing",
+        tags=["test"],
+        mode="a",
+        runtime=SkillRuntime(language="python"),
+        lifecycle=SkillLifecycle(),  # status=newborn
+        skill_path=Path("/tmp/preserve_status_v2"),
+    )
+    registry.register(skill_v2)
+
+    after = registry.get("preserve_status")
+    # status는 DB의 active가 보존되어야 함 (Skill 객체의 newborn으로 덮어쓰면 안 됨)
+    assert after["status"] == "active"
+    assert after["registered_at"] == original_registered_at
+
+    registry.close()
+
+
+def test_register_preserves_avg_judge_score() -> None:
+    """재등록 시 avg_judge_score가 보존된다."""
+    registry = SkillRegistry(":memory:")
+    skill = _make_skill("preserve_judge")
+    registry.register(skill)
+
+    # judge 점수 누적
+    registry.update_after_execution(
+        "preserve_judge",
+        ExecutionResult(skill_id="preserve_judge", success=True, output={}),
+        judge_score=8.5,
+    )
+    before = registry.get("preserve_judge")
+    assert before["avg_judge_score"] == 8.5
+
+    # 재등록
+    skill_v2 = Skill(
+        id="preserve_judge",
+        version="2.0.0",
+        name="V2",
+        description="V2",
+        domain="testing",
+        tags=["test"],
+        mode="a",
+        runtime=SkillRuntime(language="python"),
+        lifecycle=SkillLifecycle(),
+        skill_path=Path("/tmp/preserve_judge_v2"),
+    )
+    registry.register(skill_v2)
+
+    after = registry.get("preserve_judge")
+    assert after["avg_judge_score"] == 8.5
+    assert after["version"] == "2.0.0"
+
+    registry.close()
+
+
+def test_register_new_skill_uses_defaults() -> None:
+    """신규 스킬 등록 시 runtime 필드가 기본값으로 설정된다."""
+    registry = SkillRegistry(":memory:")
+    skill = _make_skill("brand_new")
+    registry.register(skill)
+
+    stored = registry.get("brand_new")
+    assert stored["total_executions"] == 0
+    assert stored["successful_executions"] == 0
+    assert stored["fitness_score"] == 0.0
+    assert stored["status"] == "newborn"
+    assert stored["last_used"] is None
+    assert stored["crystallized_at"] is None
+    assert stored["avg_judge_score"] is None
+    assert stored["registered_at"] is not None
+
+    registry.close()
+
+
+def test_register_preserves_state_across_db_reconnect(tmp_path: Path) -> None:
+    """파일 DB로 엔진 생성 → 5회 실행 → 엔진 재생성(동일 DB) → runtime 보존.
+
+    완료 판정 시나리오:
+    registry1에서 스킬 등록 + 5회 실행 → close →
+    registry2(동일 DB) 생성 + register() 재호출 →
+    total_executions=5, fitness > 0 유지.
+    """
+    db_path = tmp_path / "test_reconnect.db"
+
+    # 1차 엔진: 스킬 등록 + 5회 성공 실행
+    registry1 = SkillRegistry(db_path)
+    skill = _make_skill("reconnect_skill")
+    registry1.register(skill)
+
+    for _ in range(5):
+        registry1.update_after_execution(
+            "reconnect_skill",
+            ExecutionResult(
+                skill_id="reconnect_skill", success=True, output={}
+            ),
+        )
+    before = registry1.get("reconnect_skill")
+    assert before["total_executions"] == 5
+    assert before["fitness_score"] > 0
+    registry1.close()
+
+    # 2차 엔진: 동일 DB로 재생성 + register() 재호출
+    registry2 = SkillRegistry(db_path)
+    skill_reloaded = Skill(
+        id="reconnect_skill",
+        version="1.0.0",
+        name="Test Skill",
+        description="A test skill",
+        domain="testing",
+        tags=["test"],
+        mode="a",
+        runtime=SkillRuntime(language="python"),
+        lifecycle=SkillLifecycle(),  # 기본값 (0, 0, newborn)
+        skill_path=Path("."),
+    )
+    registry2.register(skill_reloaded)
+
+    after = registry2.get("reconnect_skill")
+    # runtime 필드 완전 보존
+    assert after["total_executions"] == 5
+    assert after["successful_executions"] == 5
+    assert after["fitness_score"] > 0
+    assert after["fitness_score"] == before["fitness_score"]
+    assert after["last_used"] is not None
+    registry2.close()
+
+
+# === Phase 5: 태그 검색 정밀도 테스트 ===
+
+
+def test_search_exact_tag_match() -> None:
+    """tags=["csv"] 검색 시 tags=["csv", "data"] 스킬이 정확 매칭된다."""
+    registry = SkillRegistry(":memory:")
+    skill = Skill(
+        id="csv_skill", version="1.0.0", name="CSV", description="csv test",
+        domain="data", tags=["csv", "data"], mode="a",
+        runtime=SkillRuntime(language="python"),
+        lifecycle=SkillLifecycle(status="active"),
+        skill_path=Path("/tmp/csv_skill"),
+    )
+    registry.register(skill)
+
+    results = registry.search(tags=["csv"])
+    assert len(results) == 1
+    assert results[0]["id"] == "csv_skill"
+
+    registry.close()
+
+
+def test_search_no_partial_tag_match() -> None:
+    """tags=["test"] 검색 시 tags=["testing"] 스킬은 부분 매칭 안 됨."""
+    registry = SkillRegistry(":memory:")
+    skill = Skill(
+        id="testing_skill", version="1.0.0", name="Testing",
+        description="partial match test",
+        domain="qa", tags=["testing"], mode="a",
+        runtime=SkillRuntime(language="python"),
+        lifecycle=SkillLifecycle(status="active"),
+        skill_path=Path("/tmp/testing_skill"),
+    )
+    registry.register(skill)
+
+    results = registry.search(tags=["test"])
+    assert len(results) == 0
+
+    registry.close()
+
+
+def test_search_multiple_tags_intersection() -> None:
+    """tags=["csv", "report"] 중 하나만 일치해도 매칭된다."""
+    registry = SkillRegistry(":memory:")
+    skill_a = Skill(
+        id="csv_only", version="1.0.0", name="A", description="a",
+        domain="data", tags=["csv", "chart"], mode="a",
+        runtime=SkillRuntime(language="python"),
+        lifecycle=SkillLifecycle(status="active"),
+        skill_path=Path("/tmp/csv_only"),
+    )
+    skill_b = Skill(
+        id="report_only", version="1.0.0", name="B", description="b",
+        domain="data", tags=["report", "pdf"], mode="a",
+        runtime=SkillRuntime(language="python"),
+        lifecycle=SkillLifecycle(status="active"),
+        skill_path=Path("/tmp/report_only"),
+    )
+    registry.register(skill_a)
+    registry.register(skill_b)
+
+    results = registry.search(tags=["csv", "report"])
+    assert len(results) == 2
+    result_ids = {r["id"] for r in results}
+    assert result_ids == {"csv_only", "report_only"}
+
+    registry.close()
+
+
+def test_search_empty_intersection() -> None:
+    """교집합이 0이면 미매칭된다."""
+    registry = SkillRegistry(":memory:")
+    skill = Skill(
+        id="unrelated", version="1.0.0", name="X", description="x",
+        domain="misc", tags=["alpha", "beta"], mode="a",
+        runtime=SkillRuntime(language="python"),
+        lifecycle=SkillLifecycle(status="active"),
+        skill_path=Path("/tmp/unrelated"),
+    )
+    registry.register(skill)
+
+    results = registry.search(tags=["gamma", "delta"])
+    assert len(results) == 0
+
+    registry.close()
+
+
+# === Phase 6: run_traces 테스트 ===
+
+
+def test_add_run_trace() -> None:
+    """trace 저장 + 조회가 정상 동작한다."""
+    registry = SkillRegistry(":memory:")
+    trace_id = registry.add_run_trace(
+        trace_type="competitive_run",
+        domain="testing",
+        tags=["test"],
+        input_summary='{"x": 1}',
+        candidate_count=2,
+        success_count=1,
+        winner_id="skill_a",
+        winner_reason="execution_time=50ms",
+        candidates_json='[{"skill_id": "skill_a"}]',
+        total_ms=150,
+    )
+
+    assert trace_id > 0
+
+    traces = registry.get_run_traces(limit=10)
+    assert len(traces) == 1
+    assert traces[0]["id"] == trace_id
+    assert traces[0]["trace_type"] == "competitive_run"
+    assert traces[0]["winner_id"] == "skill_a"
+    assert traces[0]["candidate_count"] == 2
+    assert traces[0]["tags"] == ["test"]
+
+    registry.close()
+
+
+def test_run_trace_candidates_json() -> None:
+    """candidates_json이 파싱 가능한 JSON으로 저장된다."""
+    import json as json_mod
+
+    registry = SkillRegistry(":memory:")
+    candidates = [
+        {"skill_id": "a", "mode": "b", "success": True, "execution_time_ms": 50},
+        {"skill_id": "b", "mode": "a", "success": False, "execution_time_ms": 200},
+    ]
+    registry.add_run_trace(
+        trace_type="competitive_run",
+        domain="test",
+        tags=[],
+        input_summary="",
+        candidate_count=2,
+        success_count=1,
+        winner_id="a",
+        winner_reason="fastest",
+        candidates_json=json_mod.dumps(candidates),
+        total_ms=250,
+    )
+
+    traces = registry.get_run_traces(limit=1)
+    parsed = json_mod.loads(traces[0]["candidates_json"])
+    assert len(parsed) == 2
+    assert parsed[0]["skill_id"] == "a"
+    assert parsed[1]["success"] is False
+
+    registry.close()

@@ -32,6 +32,10 @@ logger = logging.getLogger(__name__)
 class CambrianEngine:
     """자가 진화 스킬 엔진. 전체 루프를 오케스트레이션한다."""
 
+    MAX_CANDIDATES_PER_RUN: int = 5   # 경쟁 실행 최대 후보 수
+    MAX_MODE_A_PER_RUN: int = 2       # Mode A LLM 호출 상한
+    MAX_EVAL_CASES: int = 20          # 단일 eval 최대 케이스 수
+
     def __init__(
         self,
         schemas_dir: str | Path = "schemas",
@@ -137,28 +141,49 @@ class CambrianEngine:
         self,
         candidates: list[dict],
         input_data: dict,
+        domain: str = "",
+        tags: list[str] | None = None,
     ) -> ExecutionResult | None:
         """후보 스킬을 경쟁 실행하고 최고 결과를 반환한다.
 
         Mode B 후보는 전원, Mode A 후보는 fitness 상위 2개만 실행.
+        승자 선택 기준:
+        - 1차: execution_time_ms 오름차순 (Mode A는 999999 고정)
+        - 2차 (tiebreaker): fitness_score 내림차순
 
         Args:
             candidates: registry.search() 결과 리스트
             input_data: 실행 입력 데이터
+            domain: trace 기록용 도메인
+            tags: trace 기록용 태그
 
         Returns:
-            성공한 결과 중 fitness 최고인 ExecutionResult. 전원 실패 시 None.
+            성공한 결과 중 최적 ExecutionResult. 전원 실패 시 None.
         """
-        MODE_A_LIMIT = 2
-
         mode_b = [c for c in candidates if c["mode"] == "b"]
         mode_a = sorted(
             [c for c in candidates if c["mode"] == "a"],
             key=lambda c: c["fitness_score"],
             reverse=True,
-        )[:MODE_A_LIMIT]
+        )[:self.MAX_MODE_A_PER_RUN]
 
         run_targets = mode_b + mode_a
+        original_candidate_count = len(run_targets)
+        truncated = False
+
+        if len(run_targets) > self.MAX_CANDIDATES_PER_RUN:
+            truncated = True
+            run_targets = sorted(
+                run_targets,
+                key=lambda c: c["fitness_score"],
+                reverse=True,
+            )[:self.MAX_CANDIDATES_PER_RUN]
+            logger.warning(
+                "Budget cap: %d candidates truncated to %d",
+                original_candidate_count,
+                self.MAX_CANDIDATES_PER_RUN,
+            )
+
         results: list[tuple[dict, ExecutionResult]] = []
 
         for candidate in run_targets:
@@ -212,15 +237,64 @@ class CambrianEngine:
                     except Exception as exc:
                         logger.warning("Failed to save auto-feedback: %s", exc)
 
+                # 진화 채택 후 성능 악화 시 자동 롤백 체크
+                self._check_auto_rollback(skill.id)
+
         successful = [
             (candidate, result) for candidate, result in results if result.success
         ]
+
+        # trace용 후보 데이터 조립
+        candidates_data = []
+        for candidate, result in results:
+            candidates_data.append({
+                "skill_id": result.skill_id,
+                "mode": result.mode,
+                "success": result.success,
+                "execution_time_ms": result.execution_time_ms,
+                "fitness_before": candidate["fitness_score"],
+                "error": (result.error[:200] if result.error else ""),
+            })
+        total_ms = sum(r.execution_time_ms for _, r in results)
+        input_summary = json.dumps(input_data, ensure_ascii=False)[:200]
+
+        budget_note = (
+            f"[BUDGET {original_candidate_count}→{self.MAX_CANDIDATES_PER_RUN}] "
+            if truncated else ""
+        )
+
         if not successful:
+            # 전부 실패 시에도 trace 저장
+            try:
+                self._registry.add_run_trace(
+                    trace_type="competitive_run",
+                    domain=domain,
+                    tags=tags or [],
+                    input_summary=input_summary,
+                    candidate_count=len(results),
+                    success_count=0,
+                    winner_id=None,
+                    winner_reason=f"{budget_note}all_failed",
+                    candidates_json=json.dumps(
+                        candidates_data, ensure_ascii=False
+                    ),
+                    total_ms=total_ms,
+                )
+            except Exception:
+                pass
             return None
 
-        best_candidate, best_result = max(
+        # Mode B: execution_time_ms가 짧은 쪽 우선
+        # Mode A: 999999 고정 (실행 시간이 의미 없으므로 최하위)
+        # 동점 처리: fitness_score를 tiebreaker로만 사용
+        best_candidate, best_result = min(
             successful,
-            key=lambda pair: pair[0]["fitness_score"],
+            key=lambda pair: (
+                pair[1].execution_time_ms
+                if pair[1].mode == "b"
+                else 999999,
+                -pair[0]["fitness_score"],
+            ),
         )
         logger.info(
             "Competitive run: %d/%d succeeded, best='%s' (fitness=%.4f)",
@@ -229,7 +303,78 @@ class CambrianEngine:
             best_result.skill_id,
             best_candidate["fitness_score"],
         )
+
+        # 성공 시 trace 저장
+        winner_reason = budget_note + (
+            f"execution_time={best_result.execution_time_ms}ms"
+            if best_result.mode == "b"
+            else f"fitness_tiebreaker={best_candidate['fitness_score']:.4f}"
+        )
+        try:
+            self._registry.add_run_trace(
+                trace_type="competitive_run",
+                domain=domain,
+                tags=tags or [],
+                input_summary=input_summary,
+                candidate_count=len(results),
+                success_count=len(successful),
+                winner_id=best_result.skill_id,
+                winner_reason=winner_reason,
+                candidates_json=json.dumps(
+                    candidates_data, ensure_ascii=False
+                ),
+                total_ms=total_ms,
+            )
+        except Exception:
+            pass
+
         return best_result
+
+    def _check_auto_rollback(self, skill_id: str) -> None:
+        """진화 채택 후 성능이 악화되면 자동으로 이전 버전으로 복원한다.
+
+        조건: fitness < 0.2 + 총 실행 5회 이상 + 최근 adopted 이력 존재.
+        복원 시 해당 record에 auto_rolled_back=1을 마킹한다.
+
+        Args:
+            skill_id: 체크할 스킬 ID
+        """
+        try:
+            skill_data = self._registry.get(skill_id)
+            if skill_data["fitness_score"] >= 0.2:
+                return
+            if skill_data["total_executions"] < 5:
+                return
+
+            history = self._registry.get_evolution_history(skill_id, limit=1)
+            if not history or not history[0]["adopted"]:
+                return
+
+            record = history[0]
+            # 이미 롤백된 record면 스킵
+            if record.get("auto_rolled_back"):
+                return
+
+            # 자동 롤백 실행: parent_skill_md로 SKILL.md 복원
+            skill_path = Path(skill_data["skill_path"])
+            skill_md_path = skill_path / "SKILL.md"
+            skill_md_path.write_text(
+                record["parent_skill_md"], encoding="utf-8"
+            )
+
+            # auto_rolled_back 마킹
+            self._registry._conn.execute(
+                "UPDATE evolution_history SET auto_rolled_back = 1 WHERE id = ?",
+                (record["id"],),
+            )
+            self._registry._conn.commit()
+            logger.warning(
+                "Auto-rollback executed for skill '%s' (record #%d)",
+                skill_id,
+                record["id"],
+            )
+        except Exception:
+            pass  # 롤백 실패는 조용히 무시
 
     def run_task(
         self,
@@ -282,7 +427,9 @@ class CambrianEngine:
                 logger.error("Task failed after %s attempts", max_retries + 1)
                 return last_result
 
-            result = self._run_competitive(candidates, input_data)
+            result = self._run_competitive(
+                candidates, input_data, domain=domain, tags=tags
+            )
 
             if result is not None:
                 logger.info("Task completed with skill '%s'", result.skill_id)
@@ -413,6 +560,276 @@ class CambrianEngine:
     def get_loader(self) -> SkillLoader:
         """Loader 인스턴스를 반환한다."""
         return self._loader
+
+    def get_run_traces(
+        self,
+        trace_type: str | None = None,
+        skill_id: str | None = None,
+        limit: int = 20,
+    ) -> list[dict]:
+        """실행 trace를 조회한다.
+
+        Args:
+            trace_type: trace 유형 필터
+            skill_id: 스킬 ID 필터
+            limit: 최대 반환 개수
+
+        Returns:
+            최신순 trace 목록
+        """
+        return self._registry.get_run_traces(trace_type, skill_id, limit)
+
+    def get_run_trace_by_id(self, trace_id: int) -> dict | None:
+        """특정 run trace를 ID로 조회한다.
+
+        Args:
+            trace_id: 조회할 trace ID
+
+        Returns:
+            trace dict 또는 None
+        """
+        return self._registry.get_run_trace_by_id(trace_id)
+
+    def get_skill_stats(self, skill_id: str) -> dict:
+        """스킬의 운영 통계를 집계한다.
+
+        Args:
+            skill_id: 대상 스킬 ID
+
+        Returns:
+            skill, trace, evolution, rollback, feedback 집계 dict
+
+        Raises:
+            SkillNotFoundError: 해당 ID가 DB에 없을 때
+        """
+        skill_data = self._registry.get(skill_id)
+        trace_stats = self._registry.get_skill_trace_stats(skill_id)
+        evo_stats = self._registry.get_skill_evolution_stats(skill_id)
+        rollback_count = self._registry.get_skill_rollback_count(skill_id)
+        feedback_list = self._registry.get_feedback(skill_id, limit=20)
+
+        avg_feedback = 0.0
+        if feedback_list:
+            avg_feedback = sum(f["rating"] for f in feedback_list) / len(
+                feedback_list
+            )
+
+        return {
+            "skill": skill_data,
+            "trace": trace_stats,
+            "evolution": evo_stats,
+            "rollback_count": rollback_count,
+            "avg_feedback_rating": round(avg_feedback, 1),
+            "feedback_count": len(feedback_list),
+        }
+
+    def evaluate(self, skill_id: str) -> dict:
+        """스킬을 replay set으로 평가하고 스냅샷을 저장한다.
+
+        Args:
+            skill_id: 평가할 스킬 ID
+
+        Returns:
+            snapshot_id, pass_rate, verdict, delta 등 평가 결과 dict
+
+        Raises:
+            SkillNotFoundError: 해당 ID가 DB에 없을 때
+            RuntimeError: evaluation_inputs가 없을 때
+        """
+        skill_data = self._registry.get(skill_id)
+        eval_inputs = self._registry.get_evaluation_inputs(skill_id)
+        if not eval_inputs:
+            raise RuntimeError(
+                f"No evaluation inputs for skill '{skill_id}'. "
+                f"Add with: cambrian eval-input add {skill_id} --input '...'"
+            )
+
+        if len(eval_inputs) > self.MAX_EVAL_CASES:
+            logger.warning(
+                "Budget cap: %d eval cases truncated to %d",
+                len(eval_inputs),
+                self.MAX_EVAL_CASES,
+            )
+            eval_inputs = eval_inputs[:self.MAX_EVAL_CASES]
+
+        skill = self._loader.load(skill_data["skill_path"])
+        results: list[dict] = []
+        pass_count = 0
+        success_times: list[int] = []
+
+        for ei in eval_inputs:
+            input_data = json.loads(ei["input_data"])
+            try:
+                result = self._executor.execute(skill, input_data)
+                success = result.success
+                time_ms = result.execution_time_ms
+                output_preview = (
+                    json.dumps(result.output, ensure_ascii=False)[:200]
+                    if result.output else ""
+                )
+                error = result.error[:200] if result.error else ""
+            except Exception as exc:
+                success = False
+                time_ms = 0
+                output_preview = ""
+                error = str(exc)[:200]
+
+            if success:
+                pass_count += 1
+                if time_ms > 0:
+                    success_times.append(time_ms)
+
+            results.append({
+                "eval_input_id": ei["id"],
+                "description": ei.get("description", ""),
+                "success": success,
+                "execution_time_ms": time_ms,
+                "output_preview": output_preview,
+                "error": error,
+            })
+
+        input_count = len(eval_inputs)
+        fail_count = input_count - pass_count
+        pass_rate = round(pass_count / input_count, 4) if input_count > 0 else 0.0
+        avg_time_ms = (
+            round(sum(success_times) / len(success_times))
+            if success_times else 0
+        )
+        fitness_at_time = float(skill_data["fitness_score"])
+
+        snapshot_id = self._registry.add_evaluation_snapshot(
+            skill_id=skill_id,
+            input_count=input_count,
+            pass_count=pass_count,
+            fail_count=fail_count,
+            pass_rate=pass_rate,
+            avg_time_ms=avg_time_ms,
+            fitness_at_time=fitness_at_time,
+            results_json=json.dumps(results, ensure_ascii=False),
+        )
+
+        # delta/verdict 계산
+        snapshots = self._registry.get_evaluation_snapshots(skill_id, limit=2)
+        delta: dict | None = None
+        verdict = "baseline"
+
+        if len(snapshots) >= 2:
+            prev = snapshots[1]  # 직전 스냅샷
+            d_pass = round(pass_rate - prev["pass_rate"], 4)
+            d_time = avg_time_ms - prev["avg_time_ms"]
+            d_fitness = round(fitness_at_time - prev["fitness_at_time"], 4)
+            delta = {
+                "pass_rate": d_pass,
+                "avg_time_ms": d_time,
+                "fitness": d_fitness,
+                "prev_pass_rate": prev["pass_rate"],
+                "prev_avg_time_ms": prev["avg_time_ms"],
+                "prev_fitness": prev["fitness_at_time"],
+            }
+
+            if d_pass < 0:
+                verdict = "regression"
+            else:
+                improvements = 0
+                if d_pass >= 0:
+                    improvements += 1
+                if d_time <= 0:
+                    improvements += 1
+                if d_fitness >= 0:
+                    improvements += 1
+
+                has_positive = d_pass > 0 or d_time < 0 or d_fitness > 0
+                if improvements >= 2 and has_positive:
+                    verdict = "improving"
+                elif improvements >= 2:
+                    verdict = "stable"
+                else:
+                    verdict = "regression"
+
+        return {
+            "snapshot_id": snapshot_id,
+            "skill_id": skill_id,
+            "input_count": input_count,
+            "pass_count": pass_count,
+            "fail_count": fail_count,
+            "pass_rate": pass_rate,
+            "avg_time_ms": avg_time_ms,
+            "fitness_at_time": fitness_at_time,
+            "results": results,
+            "verdict": verdict,
+            "delta": delta,
+        }
+
+    def get_eval_report(self, skill_id: str, limit: int = 5) -> dict:
+        """스킬의 최근 evaluation 스냅샷 추이를 반환한다.
+
+        Args:
+            skill_id: 대상 스킬 ID
+            limit: 최대 스냅샷 수
+
+        Returns:
+            snapshots 리스트 + trend + latest_verdict
+        """
+        snapshots = self._registry.get_evaluation_snapshots(skill_id, limit)
+        if not snapshots:
+            return {
+                "skill_id": skill_id,
+                "snapshots": [],
+                "trend": "no_data",
+                "latest_verdict": None,
+                "total_snapshots": 0,
+            }
+
+        # 시간순 (오래된 것 먼저)
+        snapshots = list(reversed(snapshots))
+
+        # 각 스냅샷에 delta 추가
+        for i, snap in enumerate(snapshots):
+            if i == 0:
+                snap["delta_verdict"] = "-"
+            else:
+                prev = snapshots[i - 1]
+                d_pass = snap["pass_rate"] - prev["pass_rate"]
+                d_time = snap["avg_time_ms"] - prev["avg_time_ms"]
+                d_fitness = snap["fitness_at_time"] - prev["fitness_at_time"]
+
+                if d_pass < 0:
+                    snap["delta_verdict"] = "regression"
+                else:
+                    imps = 0
+                    if d_pass >= 0:
+                        imps += 1
+                    if d_time <= 0:
+                        imps += 1
+                    if d_fitness >= 0:
+                        imps += 1
+                    has_pos = d_pass > 0 or d_time < 0 or d_fitness > 0
+                    if imps >= 2 and has_pos:
+                        snap["delta_verdict"] = "improving"
+                    elif imps >= 2:
+                        snap["delta_verdict"] = "stable"
+                    else:
+                        snap["delta_verdict"] = "regression"
+
+        # 전체 trend
+        first_rate = snapshots[0]["pass_rate"]
+        last_rate = snapshots[-1]["pass_rate"]
+        if len(snapshots) == 1:
+            trend = "insufficient_data"
+        elif last_rate > first_rate:
+            trend = "improving"
+        elif last_rate < first_rate:
+            trend = "declining"
+        else:
+            trend = "stable"
+
+        return {
+            "skill_id": skill_id,
+            "snapshots": snapshots,
+            "trend": trend,
+            "latest_verdict": snapshots[-1].get("delta_verdict", "-"),
+            "total_snapshots": len(snapshots),
+        }
 
     def search(self, query: SearchQuery) -> SearchReport:
         """통합 스킬 검색을 실행한다.

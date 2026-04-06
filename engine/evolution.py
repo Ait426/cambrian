@@ -25,6 +25,9 @@ class SkillEvolver:
     """스킬의 SKILL.md를 LLM으로 변이시키고 벤치마크로 비교한다."""
 
     TRIAL_COUNT: int = 3  # 진화 비교 시행 횟수
+    ADOPTION_MARGIN: float = 0.5  # 10점 만점 기준 최소 마진
+    ADOPTION_WIN_RATIO: float = 0.5  # 시행 중 variant 승리 비율 (과반)
+    MAX_EVAL_INPUTS: int = 10  # replay set 평가 최대 입력 수
 
     def __init__(
         self,
@@ -210,27 +213,67 @@ class SkillEvolver:
             with open(meta_path, "w", encoding="utf-8") as file:
                 yaml.safe_dump(meta, file, allow_unicode=True, sort_keys=False)
 
-            # TRIAL_COUNT 횟수만큼 원본/variant 실행 후 Judge로 비교
+            # replay set 또는 TRIAL_COUNT 반복으로 원본/variant 비교
             variant_skill = self._loader.load(variant_dir)
             judge = SkillJudge(provider=self._provider)
             verdicts: list[JudgeVerdict] = []
             last_original_result: ExecutionResult | None = None
 
-            for _ in range(self.TRIAL_COUNT):
-                original_result = self._executor.execute(original_skill, test_input)
-                variant_result = self._executor.execute(variant_skill, test_input)
-                verdict = judge.judge(
-                    original_result.output,
-                    variant_result.output,
-                    original_skill.description,
-                    feedback_list,
-                )
-                verdicts.append(verdict)
-                last_original_result = original_result
+            eval_inputs = self._registry.get_evaluation_inputs(skill_id)
+            if eval_inputs:
+                if len(eval_inputs) > self.MAX_EVAL_INPUTS:
+                    logger.warning(
+                        "Budget cap: %d eval inputs truncated to %d",
+                        len(eval_inputs),
+                        self.MAX_EVAL_INPUTS,
+                    )
+                    eval_inputs = eval_inputs[:self.MAX_EVAL_INPUTS]
+                # replay set: 등록된 각 입력으로 비교
+                for eval_item in eval_inputs:
+                    test_data = json.loads(eval_item["input_data"])
+                    original_result = self._executor.execute(
+                        original_skill, test_data
+                    )
+                    variant_result = self._executor.execute(
+                        variant_skill, test_data
+                    )
+                    verdict = judge.judge(
+                        original_result.output,
+                        variant_result.output,
+                        original_skill.description,
+                        feedback_list,
+                    )
+                    verdicts.append(verdict)
+                    last_original_result = original_result
+            else:
+                # 기존 로직: test_input으로 TRIAL_COUNT 반복
+                for _ in range(self.TRIAL_COUNT):
+                    original_result = self._executor.execute(
+                        original_skill, test_input
+                    )
+                    variant_result = self._executor.execute(
+                        variant_skill, test_input
+                    )
+                    verdict = judge.judge(
+                        original_result.output,
+                        variant_result.output,
+                        original_skill.description,
+                        feedback_list,
+                    )
+                    verdicts.append(verdict)
+                    last_original_result = original_result
 
             avg_original = sum(v.original_score for v in verdicts) / len(verdicts)
             avg_variant = sum(v.variant_score for v in verdicts) / len(verdicts)
-            adopted = avg_variant > avg_original
+
+            # 조건 1: 평균 점수 마진
+            margin_met = avg_variant > avg_original + self.ADOPTION_MARGIN
+            # 조건 2: 과반 승리
+            variant_wins = sum(
+                1 for v in verdicts if v.variant_score > v.original_score
+            )
+            majority_met = variant_wins > len(verdicts) * self.ADOPTION_WIN_RATIO
+            adopted = margin_met and majority_met
 
             # 원본 lifecycle 갱신 (Judge 평균 점수 반영)
             if last_original_result is not None:
@@ -249,10 +292,13 @@ class SkillEvolver:
                 logger.info("Evolution adopted for skill '%s'", skill_id)
             else:
                 logger.info(
-                    "Evolution discarded for skill '%s': avg_variant=%.2f <= avg_original=%.2f",
+                    "Evolution discarded for skill '%s': margin=%.2f (need>%.1f), wins=%d/%d (need>%.0f%%)",
                     skill_id,
-                    avg_variant,
-                    avg_original,
+                    avg_variant - avg_original,
+                    self.ADOPTION_MARGIN,
+                    variant_wins,
+                    len(verdicts),
+                    self.ADOPTION_WIN_RATIO * 100,
                 )
 
             child_fitness = round(avg_variant / 10.0, 4)

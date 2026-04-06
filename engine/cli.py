@@ -116,6 +116,13 @@ def main() -> None:
         action="store_true",
         help="fitness < 0.3인 스킬에 자동 진화 실행",
     )
+    run_parser.add_argument(
+        "--max-candidates",
+        type=int,
+        default=None,
+        dest="max_candidates",
+        help="경쟁 실행 최대 후보 수 (기본: 5)",
+    )
 
     subparsers.add_parser(
         "skills",
@@ -144,10 +151,13 @@ def main() -> None:
     )
     remove_parser.add_argument("skill_id", help="제거할 스킬 ID")
 
-    subparsers.add_parser(
+    stats_parser = subparsers.add_parser(
         "stats",
         help="엔진 통계",
         parents=[common_parser],
+    )
+    stats_parser.add_argument(
+        "--skill", "-s", default=None, help="특정 스킬 상세 통계",
     )
 
     benchmark_parser = subparsers.add_parser(
@@ -413,6 +423,81 @@ def main() -> None:
         help="JSON 출력",
     )
 
+    # === eval-input: 진화 평가용 입력 관리 ===
+    eval_input_parser = subparsers.add_parser(
+        "eval-input",
+        help="진화 평가용 입력(replay set) 관리",
+        parents=[common_parser],
+    )
+    eval_input_sub = eval_input_parser.add_subparsers(
+        dest="eval_input_action", help="서브 명령어",
+    )
+
+    eval_add_parser = eval_input_sub.add_parser("add", help="평가 입력 추가")
+    eval_add_parser.add_argument("skill_id", help="대상 스킬 ID")
+    eval_add_parser.add_argument(
+        "--input", "-i", required=True, dest="eval_input_data",
+        help="JSON 입력 문자열",
+    )
+    eval_add_parser.add_argument(
+        "--desc", default="", help="입력 설명",
+    )
+
+    eval_list_parser = eval_input_sub.add_parser("list", help="평가 입력 목록")
+    eval_list_parser.add_argument("skill_id", help="대상 스킬 ID")
+
+    eval_remove_parser = eval_input_sub.add_parser("remove", help="평가 입력 삭제")
+    eval_remove_parser.add_argument("eval_id", type=int, help="삭제할 입력 ID")
+
+    # === trace: 실행/진화 trace 조회 ===
+    trace_parser = subparsers.add_parser(
+        "trace",
+        help="경쟁 실행/진화 판정 trace 조회",
+        parents=[common_parser],
+    )
+    trace_parser.add_argument(
+        "--type", default=None,
+        choices=["competitive_run", "evolution_decision", "auto_rollback"],
+        help="trace 유형 필터",
+    )
+    trace_parser.add_argument(
+        "--skill", default=None, help="승자 스킬 ID로 필터",
+    )
+    trace_parser.add_argument(
+        "--limit", type=int, default=10, help="최대 결과 수 (기본: 10)",
+    )
+    trace_parser.add_argument(
+        "--detail", type=int, default=None, metavar="TRACE_ID",
+        help="특정 trace 상세 조회",
+    )
+
+    # === eval: 스킬 평가 실행/추이 보고 ===
+    eval_parser = subparsers.add_parser(
+        "eval",
+        help="스킬 평가 실행 또는 추이 보고",
+        parents=[common_parser],
+    )
+    eval_parser.add_argument("skill_id", help="평가할 스킬 ID")
+    eval_parser.add_argument(
+        "--report", action="store_true",
+        help="최근 evaluation 추이 보고 (실행 없이 저장된 결과만)",
+    )
+    eval_parser.add_argument(
+        "--detail", type=int, default=None, metavar="SNAPSHOT_ID",
+        help="특정 스냅샷 상세 (입력별 pass/fail)",
+    )
+    eval_parser.add_argument(
+        "--limit", type=int, default=5,
+        help="report 시 최대 스냅샷 수 (기본: 5)",
+    )
+    eval_parser.add_argument(
+        "--max-cases",
+        type=int,
+        default=None,
+        dest="max_cases",
+        help="평가 최대 케이스 수 (기본: 20)",
+    )
+
     args = parser.parse_args()
 
     log_level = logging.DEBUG if args.verbose else logging.WARNING
@@ -467,6 +552,12 @@ def main() -> None:
             _handle_generate(args)
         elif args.command == "acquire":
             _handle_acquire(args)
+        elif args.command == "eval-input":
+            _handle_eval_input(args)
+        elif args.command == "trace":
+            _handle_trace(args)
+        elif args.command == "eval":
+            _handle_eval(args)
     except KeyboardInterrupt:
         print("\nInterrupted.")
         sys.exit(1)
@@ -522,6 +613,9 @@ def _handle_run(args: argparse.Namespace) -> None:
         sys.exit(1)
 
     engine = _create_engine(args)
+    max_cand = getattr(args, "max_candidates", None)
+    if max_cand is not None:
+        engine.MAX_CANDIDATES_PER_RUN = max(1, max_cand)
     result = engine.run_task(
         domain=args.domain,
         tags=args.tags,
@@ -878,33 +972,201 @@ def _handle_rollback(args: argparse.Namespace) -> None:
 
 
 def _handle_stats(args: argparse.Namespace) -> None:
-    """cambrian stats 처리.
+    """cambrian stats 처리. --skill이 있으면 스킬별 상세, 없으면 글로벌.
 
     Args:
         args: argparse가 파싱한 네임스페이스
     """
     engine = _create_engine(args)
+
+    if getattr(args, "skill", None):
+        _handle_skill_stats(engine, args.skill)
+    else:
+        _handle_global_stats(engine)
+
+
+def _handle_global_stats(engine: "CambrianEngine") -> None:
+    """글로벌 엔진 통계를 출력한다.
+
+    Args:
+        engine: CambrianEngine 인스턴스
+    """
     skills = engine.list_skills()
 
-    counts = {
-        "active": 0,
-        "newborn": 0,
-        "dormant": 0,
-        "fossil": 0,
-    }
-
+    counts: dict[str, int] = {"active": 0, "newborn": 0, "dormant": 0, "fossil": 0}
     for skill in skills:
         status = skill["status"]
         if status in counts:
             counts[status] += 1
 
     print("Cambrian Engine Stats")
-    print("---------------------")
-    print(f"Total skills: {len(skills)}")
-    print(f"Active: {counts['active']}")
-    print(f"Newborn: {counts['newborn']}")
-    print(f"Dormant: {counts['dormant']}")
-    print(f"Fossil: {counts['fossil']}")
+    print("═" * 50)
+    print(
+        f"\nSkills: {len(skills)} total "
+        f"({counts['active']} active, {counts['newborn']} newborn, "
+        f"{counts['dormant']} dormant, {counts['fossil']} fossil)"
+    )
+
+    # Top Performers (fitness 상위 5개, fossil 제외)
+    non_fossil = [s for s in skills if s["status"] != "fossil"]
+    top = sorted(non_fossil, key=lambda s: s["fitness_score"], reverse=True)[:5]
+    if top:
+        print("\nTop Performers (by fitness):")
+        print(
+            f"  {'SKILL_ID':<22} {'FITNESS':<9} {'SUCCESS_RATE':<14} "
+            f"{'EXECUTIONS':<12} STATUS"
+        )
+        for s in top:
+            total = s["total_executions"]
+            rate = (
+                f"{s['successful_executions'] / total * 100:.0f}%"
+                if total > 0 else "N/A"
+            )
+            print(
+                f"  {s['id']:<22} {s['fitness_score']:<9.4f} {rate:<14} "
+                f"{total:<12} {s['status']}"
+            )
+
+    # Recent Activity
+    print("\nRecent Activity:")
+    registry = engine.get_registry()
+
+    try:
+        comp_traces = registry.get_run_traces(trace_type="competitive_run", limit=1000)
+        print(f"  Competitive runs:    {len(comp_traces)}")
+    except Exception:
+        print("  Competitive runs:    (not tracked)")
+
+    try:
+        cursor = registry._conn.execute(
+            "SELECT COUNT(*) as total, "
+            "SUM(CASE WHEN adopted=1 THEN 1 ELSE 0 END) as adopted "
+            "FROM evolution_history"
+        )
+        evo_row = cursor.fetchone()
+        evo_total = evo_row["total"] if evo_row else 0
+        evo_adopted = evo_row["adopted"] if evo_row else 0
+        evo_discarded = evo_total - evo_adopted
+        print(
+            f"  Evolution attempts:  {evo_total} "
+            f"({evo_adopted} adopted, {evo_discarded} discarded)"
+        )
+    except Exception:
+        print("  Evolution attempts:  (not tracked)")
+
+    try:
+        rb_traces = registry.get_run_traces(trace_type="auto_rollback", limit=1000)
+        print(f"  Auto-rollbacks:      {len(rb_traces)}")
+    except Exception:
+        print("  Auto-rollbacks:      (not tracked)")
+
+    try:
+        cursor = registry._conn.execute(
+            "SELECT COUNT(*) as cnt, AVG(rating) as avg_r FROM feedback"
+        )
+        fb_row = cursor.fetchone()
+        fb_count = fb_row["cnt"] if fb_row else 0
+        fb_avg = fb_row["avg_r"] if fb_row and fb_row["avg_r"] else 0.0
+        if fb_count > 0:
+            print(f"  Avg feedback:        {fb_avg:.1f}/5 ({fb_count} ratings)")
+        else:
+            print("  Avg feedback:        (no feedback)")
+    except Exception:
+        print("  Avg feedback:        (not tracked)")
+
+    print(
+        f"\nBudget Limits:"
+        f"\n  Max candidates/run: {engine.MAX_CANDIDATES_PER_RUN} | "
+        f"Max Mode A/run: {engine.MAX_MODE_A_PER_RUN} | "
+        f"Max eval cases: {engine.MAX_EVAL_CASES}"
+    )
+
+
+def _handle_skill_stats(engine: "CambrianEngine", skill_id: str) -> None:
+    """스킬별 상세 통계를 출력한다.
+
+    Args:
+        engine: CambrianEngine 인스턴스
+        skill_id: 대상 스킬 ID
+    """
+    try:
+        stats = engine.get_skill_stats(skill_id)
+    except Exception:
+        print(f"Skill '{skill_id}' not found.", file=sys.stderr)
+        sys.exit(1)
+
+    s = stats["skill"]
+    t = stats["trace"]
+    e = stats["evolution"]
+
+    print(f"Skill Stats: {skill_id}")
+    print("═" * 50)
+
+    # Identity
+    print("\nIdentity:")
+    print(f"  Name:        {s['name']}")
+    print(f"  Domain:      {s['domain']}")
+    tags = s["tags"] if isinstance(s["tags"], list) else []
+    print(f"  Tags:        {', '.join(tags) if tags else '(none)'}")
+    print(f"  Mode:        {s['mode']}")
+    print(f"  Status:      {s['status']}")
+    print(f"  Version:     {s['version']}")
+
+    # Performance
+    print("\nPerformance:")
+    print(f"  Fitness:     {s['fitness_score']:.4f}")
+    total = s["total_executions"]
+    succ = s["successful_executions"]
+    if total > 0:
+        rate = f"{succ / total * 100:.1f}%"
+        print(f"  Executions:  {total} ({succ} success, {total - succ} fail) → {rate} success rate")
+    else:
+        print(f"  Executions:  0 → N/A success rate")
+    judge = s.get("avg_judge_score")
+    if judge is not None:
+        print(f"  Avg judge:   {judge:.1f}/10")
+    print(f"  Last used:   {s.get('last_used') or '(never)'}")
+
+    # Competitive Runs
+    print("\nCompetitive Runs (recent 20):")
+    if t["participated"] > 0:
+        print(f"  Participated: {t['participated']} times")
+        print(f"  Won:          {t['won']} times → {t['win_rate'] * 100:.1f}% win rate")
+        print(f"  Avg latency:  {t['avg_execution_ms']}ms")
+        run_total = t["success_in_runs"] + t["fail_in_runs"]
+        if run_total > 0:
+            run_rate = t["success_in_runs"] / run_total * 100
+            print(f"  Run success:  {t['success_in_runs']}/{run_total} ({run_rate:.1f}%)")
+    else:
+        print("  (no competitive run data)")
+
+    # Evolution
+    print("\nEvolution:")
+    if e["total_evolutions"] > 0:
+        print(
+            f"  Total:      {e['total_evolutions']} attempts "
+            f"({e['adopted_count']} adopted, {e['discarded_count']} discarded) "
+            f"→ {e['adoption_rate'] * 100:.1f}% adoption"
+        )
+        if e["last_evolution_adopted"] is not None:
+            adopted_str = "adopted" if e["last_evolution_adopted"] else "discarded"
+            print(
+                f"  Last:       {adopted_str} "
+                f"(fitness {e['last_parent_fitness']:.2f} → {e['last_child_fitness']:.2f})"
+            )
+    else:
+        print("  (no evolution history)")
+
+    # Safety
+    print("\nSafety:")
+    print(f"  Rollbacks:  {stats['rollback_count']}")
+    if stats["feedback_count"] > 0:
+        print(
+            f"  Feedback:   {stats['avg_feedback_rating']}/5 avg "
+            f"({stats['feedback_count']} ratings)"
+        )
+    else:
+        print("  Feedback:   (no feedback)")
 
 
 def _handle_export(args: argparse.Namespace) -> None:
@@ -1628,6 +1890,383 @@ def _handle_search(args: argparse.Namespace) -> None:
 
     print("─" * 70)
     print(f"{len(report.results)} results found")
+
+
+def _handle_eval_input(args: argparse.Namespace) -> None:
+    """eval-input 서브커맨드를 처리한다.
+
+    Args:
+        args: argparse가 파싱한 네임스페이스
+    """
+    engine = _create_engine(args)
+    registry = engine.get_registry()
+    action = getattr(args, "eval_input_action", None)
+
+    if action == "add":
+        # JSON 유효성 검증
+        try:
+            json.loads(args.eval_input_data)
+        except json.JSONDecodeError as exc:
+            print(f"Error: 유효하지 않은 JSON 입력: {exc}", file=sys.stderr)
+            sys.exit(1)
+
+        eval_id = registry.add_evaluation_input(
+            skill_id=args.skill_id,
+            input_data=args.eval_input_data,
+            description=args.desc,
+        )
+        print(f"Evaluation input added (id={eval_id}) for skill '{args.skill_id}'")
+
+    elif action == "list":
+        inputs = registry.get_evaluation_inputs(args.skill_id)
+        if not inputs:
+            print(f"No evaluation inputs for skill '{args.skill_id}'")
+            return
+
+        print(f"Evaluation inputs for '{args.skill_id}':")
+        print("─" * 60)
+        print(f"{'ID':<6} {'DESCRIPTION':<30} CREATED")
+        for item in inputs:
+            desc = item["description"][:28] or "(없음)"
+            print(f"{item['id']:<6} {desc:<30} {item['created_at'][:19]}")
+        print("─" * 60)
+        print(f"{len(inputs)} input(s)")
+
+    elif action == "remove":
+        try:
+            registry.remove_evaluation_input(args.eval_id)
+            print(f"Evaluation input {args.eval_id} removed")
+        except ValueError as exc:
+            print(f"Error: {exc}", file=sys.stderr)
+            sys.exit(1)
+
+    else:
+        print("Usage: cambrian eval-input {add|list|remove}", file=sys.stderr)
+        sys.exit(1)
+
+
+def _handle_trace(args: argparse.Namespace) -> None:
+    """cambrian trace 서브커맨드를 처리한다.
+
+    Args:
+        args: argparse가 파싱한 네임스페이스
+    """
+    engine = _create_engine(args)
+
+    # detail 모드
+    if getattr(args, "detail", None) is not None:
+        _handle_trace_detail(engine, args.detail)
+        return
+
+    # list 모드
+    traces = engine.get_run_traces(
+        trace_type=getattr(args, "type", None),
+        skill_id=getattr(args, "skill", None),
+        limit=args.limit,
+    )
+
+    if not traces:
+        print("No traces found.")
+        return
+
+    print(
+        f"{'ID':<5} {'TYPE':<22} {'WINNER':<18} "
+        f"{'CAND':<6} {'REASON':<40} {'DATE'}"
+    )
+    print("─" * 105)
+
+    for t in traces:
+        trace_type = t["trace_type"]
+        type_map = {
+            "competitive_run": "competitive",
+            "evolution_decision": "evolution",
+            "auto_rollback": "rollback",
+        }
+        type_display = type_map.get(trace_type, trace_type)
+
+        winner = t.get("winner_id") or "(none)"
+        cand_str = f"{t.get('success_count', 0)}/{t.get('candidate_count', 0)}"
+
+        reason_full = t.get("winner_reason", "")
+        reason_short = (
+            (reason_full[:37] + "...") if len(reason_full) > 40 else reason_full
+        )
+
+        date_str = t.get("created_at", "")[:16]
+
+        print(
+            f"{t['id']:<5} {type_display:<22} {winner:<18} "
+            f"{cand_str:<6} {reason_short:<40} {date_str}"
+        )
+
+
+def _handle_trace_detail(engine: "CambrianEngine", trace_id: int) -> None:
+    """특정 trace의 상세 정보를 출력한다.
+
+    Args:
+        engine: CambrianEngine 인스턴스
+        trace_id: 조회할 trace ID
+    """
+    trace = engine.get_run_trace_by_id(trace_id)
+
+    if trace is None:
+        print(f"Trace #{trace_id} not found.", file=sys.stderr)
+        sys.exit(1)
+
+    # 헤더
+    print(f"=== Trace #{trace['id']} ===")
+    print(f"Type:       {trace['trace_type']}")
+    print(f"Domain:     {trace.get('domain', '')}")
+
+    tags_raw = trace.get("tags", [])
+    if isinstance(tags_raw, str):
+        try:
+            tags_list = json.loads(tags_raw)
+        except (json.JSONDecodeError, TypeError):
+            tags_list = []
+    else:
+        tags_list = tags_raw
+    print(f"Tags:       {', '.join(tags_list) if tags_list else '(none)'}")
+
+    print(f"Date:       {trace.get('created_at', '')}")
+    print(f"Input:      {trace.get('input_summary', '')[:200]}")
+    print(f"Total time: {trace.get('total_ms', 0)}ms")
+
+    # 승자
+    winner_id = trace.get("winner_id")
+    if winner_id:
+        print(f"\nWinner:     {winner_id}")
+    else:
+        print("\nWinner:     (none — all candidates failed)")
+    print(f"Reason:     {trace.get('winner_reason', '')}")
+
+    # 후보 파싱
+    candidates_raw = trace.get("candidates_json", "[]")
+    try:
+        candidates = (
+            json.loads(candidates_raw)
+            if isinstance(candidates_raw, str)
+            else candidates_raw
+        )
+    except (json.JSONDecodeError, TypeError):
+        candidates = []
+        print("\n(candidates data could not be parsed)")
+
+    if not candidates:
+        return
+
+    # evolution verdict 형식 감지
+    if "original_score" in candidates[0]:
+        print(f"\nVerdicts ({len(candidates)} trials):")
+        print(f"  {'TRIAL':<7} {'ORIGINAL':<10} {'VARIANT':<10} {'WINNER':<10} REASONING")
+        print(f"  {'─' * 60}")
+        for i, v in enumerate(candidates, 1):
+            orig = f"{v.get('original_score', 0):.1f}"
+            var = f"{v.get('variant_score', 0):.1f}"
+            win = v.get("winner", "?")
+            reason = v.get("reasoning", "")[:30]
+            print(f"  {i:<7} {orig:<10} {var:<10} {win:<10} {reason}")
+    else:
+        # 일반 competitive 형식
+        print(
+            f"\nCandidates ({trace.get('candidate_count', 0)} total, "
+            f"{trace.get('success_count', 0)} succeeded):"
+        )
+        print(
+            f"  {'SKILL_ID':<20} {'MODE':<6} {'OK':<6} "
+            f"{'TIME':<8} {'FITNESS':<8} ERROR"
+        )
+        print(f"  {'─' * 70}")
+        for c in candidates:
+            skill_id = c.get("skill_id", "?")
+            mode = c.get("mode", "?")
+            ok = "[OK]" if c.get("success") else "[FAIL]"
+            time_ms = f"{c.get('execution_time_ms', 0)}ms"
+            fitness = f"{c.get('fitness_before', 0):.4f}"
+            error = c.get("error", "")
+            error_short = (error[:30] + "...") if len(error) > 30 else error
+            marker = " ★" if skill_id == winner_id else ""
+            print(
+                f"  {skill_id:<20} {mode:<6} {ok:<6} "
+                f"{time_ms:<8} {fitness:<8} {error_short}{marker}"
+            )
+
+
+def _handle_eval(args: argparse.Namespace) -> None:
+    """cambrian eval 서브커맨드를 처리한다.
+
+    Args:
+        args: argparse가 파싱한 네임스페이스
+    """
+    engine = _create_engine(args)
+    max_cases = getattr(args, "max_cases", None)
+    if max_cases is not None:
+        engine.MAX_EVAL_CASES = max(1, max_cases)
+
+    if getattr(args, "detail", None) is not None:
+        _handle_eval_detail(engine, args.detail)
+        return
+
+    if getattr(args, "report", False):
+        _handle_eval_report(engine, args.skill_id, args.limit)
+        return
+
+    _handle_eval_run(engine, args.skill_id)
+
+
+def _handle_eval_run(engine: "CambrianEngine", skill_id: str) -> None:
+    """eval 실행 모드: replay set으로 평가 + 스냅샷 저장.
+
+    Args:
+        engine: CambrianEngine 인스턴스
+        skill_id: 평가할 스킬 ID
+    """
+    try:
+        result = engine.evaluate(skill_id)
+    except Exception as exc:
+        print(f"Error: {exc}", file=sys.stderr)
+        sys.exit(1)
+
+    print(f"Evaluation: {skill_id}")
+    print("═" * 50)
+
+    print(f"\nReplay Set: {result['input_count']} inputs")
+    print(
+        f"Results:    {result['pass_count']} pass / {result['fail_count']} fail "
+        f"→ {result['pass_rate'] * 100:.1f}% pass rate"
+    )
+    print(f"Avg time:   {result['avg_time_ms']}ms (successful only)")
+    print(f"Fitness:    {result['fitness_at_time']:.4f}")
+
+    verdict = result["verdict"]
+    delta = result["delta"]
+
+    if verdict == "baseline":
+        print(f"\nVerdict:    {verdict} (first evaluation — no comparison available)")
+    else:
+        arrow = {"improving": "↑", "regression": "↓"}.get(verdict, "→")
+        print(f"\nVerdict:    {verdict} {arrow}")
+        if delta:
+            d_pass = delta["pass_rate"] * 100
+            d_time = delta["avg_time_ms"]
+            d_fit = delta["fitness"]
+            prev_pass = delta["prev_pass_rate"] * 100
+            prev_time = delta["prev_avg_time_ms"]
+            prev_fit = delta["prev_fitness"]
+
+            regression_mark = "  ← REGRESSION" if d_pass < 0 else ""
+            print(
+                f"  pass_rate:  {d_pass:+.1f}% "
+                f"({prev_pass:.1f}% → {result['pass_rate'] * 100:.1f}%)"
+                f"{regression_mark}"
+            )
+            print(
+                f"  avg_time:   {d_time:+d}ms "
+                f"({prev_time}ms → {result['avg_time_ms']}ms)"
+            )
+            print(
+                f"  fitness:    {d_fit:+.4f} "
+                f"({prev_fit:.4f} → {result['fitness_at_time']:.4f})"
+            )
+
+    print(f"\nSnapshot #{result['snapshot_id']} saved.")
+
+
+def _handle_eval_report(
+    engine: "CambrianEngine", skill_id: str, limit: int,
+) -> None:
+    """eval report 모드: 최근 스냅샷 추이를 출력한다.
+
+    Args:
+        engine: CambrianEngine 인스턴스
+        skill_id: 대상 스킬 ID
+        limit: 최대 스냅샷 수
+    """
+    report = engine.get_eval_report(skill_id, limit)
+
+    if not report["snapshots"]:
+        print(f"No evaluation history for '{skill_id}'.")
+        print(f"Run first: cambrian eval {skill_id}")
+        return
+
+    snaps = report["snapshots"]
+    print(
+        f"Evaluation Report: {skill_id} ({report['total_snapshots']} snapshots)"
+    )
+    print("═" * 80)
+
+    print(
+        f"\n{'#':<3} {'DATE':<18} {'INPUTS':<8} {'PASS':<7} "
+        f"{'RATE':<8} {'AVG_MS':<8} {'FITNESS':<9} DELTA"
+    )
+    for i, snap in enumerate(snaps, 1):
+        date_str = snap.get("created_at", "")[:16]
+        pass_str = f"{snap['pass_count']}/{snap['input_count']}"
+        rate_str = f"{snap['pass_rate'] * 100:.1f}%"
+        dv = snap.get("delta_verdict", "-")
+        print(
+            f"{i:<3} {date_str:<18} {snap['input_count']:<8} {pass_str:<7} "
+            f"{rate_str:<8} {snap['avg_time_ms']:<8} "
+            f"{snap['fitness_at_time']:<9.4f} {dv}"
+        )
+
+    trend = report["trend"]
+    first_rate = snaps[0]["pass_rate"] * 100
+    last_rate = snaps[-1]["pass_rate"] * 100
+    arrow = {"improving": "↑", "declining": "↓"}.get(trend, "→")
+    print(
+        f"\nTrend: {trend} {arrow} "
+        f"(pass_rate {first_rate:.1f}% → {last_rate:.1f}% "
+        f"over {report['total_snapshots']} evaluations)"
+    )
+
+
+def _handle_eval_detail(engine: "CambrianEngine", snapshot_id: int) -> None:
+    """eval detail 모드: 특정 스냅샷의 입력별 결과를 출력한다.
+
+    Args:
+        engine: CambrianEngine 인스턴스
+        snapshot_id: 조회할 snapshot ID
+    """
+    snapshot = engine.get_registry().get_evaluation_snapshot_by_id(snapshot_id)
+
+    if snapshot is None:
+        print(f"Snapshot #{snapshot_id} not found.", file=sys.stderr)
+        sys.exit(1)
+
+    print(f"=== Evaluation Snapshot #{snapshot['id']} ===")
+    print(f"Skill:      {snapshot['skill_id']}")
+    print(f"Date:       {snapshot.get('created_at', '')}")
+    print(
+        f"Pass rate:  {snapshot['pass_count']}/{snapshot['input_count']} "
+        f"({snapshot['pass_rate'] * 100:.1f}%)"
+    )
+    print(f"Avg time:   {snapshot['avg_time_ms']}ms")
+    print(f"Fitness:    {snapshot['fitness_at_time']:.4f}")
+
+    results_raw = snapshot.get("results_json", "[]")
+    try:
+        results = json.loads(results_raw) if isinstance(results_raw, str) else results_raw
+    except (json.JSONDecodeError, TypeError):
+        results = []
+        print("\n(results data could not be parsed)")
+
+    if results:
+        print(
+            f"\nInput Results:"
+            f"\n  {'#':<4} {'EVAL_ID':<9} {'DESCRIPTION':<22} "
+            f"{'OK':<7} {'TIME':<8} ERROR"
+        )
+        for i, r in enumerate(results, 1):
+            ok = "[OK]" if r.get("success") else "[FAIL]"
+            desc = r.get("description", "")[:20]
+            time_str = f"{r.get('execution_time_ms', 0)}ms"
+            error = r.get("error", "")
+            error_short = (error[:30] + "...") if len(error) > 30 else error
+            print(
+                f"  {i:<4} {r.get('eval_input_id', '?'):<9} {desc:<22} "
+                f"{ok:<7} {time_str:<8} {error_short}"
+            )
 
 
 if __name__ == "__main__":

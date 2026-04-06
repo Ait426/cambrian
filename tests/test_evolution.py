@@ -852,3 +852,325 @@ def test_mutate_restores_output_format(
     assert "Respond with ONLY a JSON object:" in result
     # LLM이 넣은 잘못된 내용은 제거됨
     assert "Return any format you like" not in result
+
+
+# === Phase 4: adoption threshold 테스트 ===
+
+
+def _patch_evolve_with_verdicts(
+    monkeypatch: pytest.MonkeyPatch,
+    verdicts_list: list[tuple[float, float]],
+) -> None:
+    """evolve() 내부를 mock 처리하여 지정된 verdict 점수를 반환하도록 설정한다.
+
+    Args:
+        monkeypatch: pytest MonkeyPatch 인스턴스
+        verdicts_list: (original_score, variant_score) 튜플 리스트
+    """
+    call_idx = {"i": 0}
+
+    def fake_mutate(
+        self: SkillEvolver, skill: object, feedback_list: list[dict],
+    ) -> str:
+        _ = self, skill, feedback_list
+        return "# Evolved\nThreshold test."
+
+    def fake_execute(
+        self: SkillExecutor, skill: object, input_data: dict,
+    ) -> ExecutionResult:
+        _ = self, input_data
+        sid = getattr(skill, "id")
+        return ExecutionResult(
+            skill_id=sid, success=True,
+            output={"html": f"<p>{sid}</p>"},
+            execution_time_ms=20, mode="a",
+        )
+
+    def fake_judge(
+        self: SkillJudge, original_output: dict | None,
+        variant_output: dict | None, skill_description: str,
+        feedback_list: list[dict],
+    ) -> JudgeVerdict:
+        _ = self, original_output, variant_output, skill_description, feedback_list
+        idx = min(call_idx["i"], len(verdicts_list) - 1)
+        orig, var = verdicts_list[idx]
+        call_idx["i"] += 1
+        winner = "variant" if var > orig else ("tie" if var == orig else "original")
+        return JudgeVerdict(orig, var, f"trial{idx}", winner)
+
+    monkeypatch.setattr(SkillEvolver, "mutate", fake_mutate)
+    monkeypatch.setattr(SkillExecutor, "execute", fake_execute)
+    monkeypatch.setattr(SkillJudge, "judge", fake_judge)
+
+
+def test_evolution_adoption_margin_met(
+    engine: CambrianEngine, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """마진 충족(차이 1.0 > 0.5) + 과반 승리 → adopted=True."""
+    # 3회 모두 variant=7.0, original=6.0 → 마진 1.0, 승리 3/3
+    _patch_evolve_with_verdicts(monkeypatch, [(6.0, 7.0)] * 3)
+
+    engine.feedback("evolve_test", 3, "margin met test")
+    record = engine.evolve("evolve_test", {"query": "hello"})
+
+    assert record.adopted is True
+
+
+def test_evolution_adoption_margin_not_met(
+    engine: CambrianEngine, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """마진 미충족(차이 0.3 < 0.5) → adopted=False. 과반 승리해도 거부."""
+    # 3회 모두 variant=6.3, original=6.0 → 마진 0.3, 승리 3/3
+    _patch_evolve_with_verdicts(monkeypatch, [(6.0, 6.3)] * 3)
+
+    engine.feedback("evolve_test", 3, "margin not met test")
+    record = engine.evolve("evolve_test", {"query": "hello"})
+
+    assert record.adopted is False
+
+
+def test_evolution_adoption_majority_not_met(
+    engine: CambrianEngine, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """마진 충족하지만 3회 중 1회만 승리 → adopted=False."""
+    # trial1: variant 9.0 > original 5.0 (승리)
+    # trial2: variant 5.0 < original 7.0 (패배)
+    # trial3: variant 5.0 < original 7.0 (패배)
+    # avg_variant=6.33, avg_original=6.33 → 마진 0, 하지만 의도적으로
+    # 마진은 충족하도록 조정: (4.0, 8.0), (7.0, 5.0), (7.0, 5.0)
+    # avg_orig=6.0, avg_var=6.0 → 마진 0 → 이것도 안됨
+    # 다시 설계: (3.0, 8.0), (8.0, 5.0), (8.0, 5.0)
+    # avg_orig=6.33, avg_var=6.0 → 마진 음수 → 안됨
+    # 정확히: 마진 충족 + 1/3 승리만
+    # (5.0, 9.0), (7.0, 6.0), (7.0, 6.0)
+    # avg_orig=6.33, avg_var=7.0 → 마진 0.67 > 0.5 ✓, 승리 1/3 ✗
+    _patch_evolve_with_verdicts(monkeypatch, [
+        (5.0, 9.0),  # variant 승리
+        (7.0, 6.0),  # original 승리
+        (7.0, 6.0),  # original 승리
+    ])
+
+    engine.feedback("evolve_test", 3, "majority not met test")
+    record = engine.evolve("evolve_test", {"query": "hello"})
+
+    assert record.adopted is False
+
+
+def test_evolution_adoption_both_conditions(
+    engine: CambrianEngine, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """마진 충족(0.6 > 0.5) + 과반 승리(2/3) → adopted=True."""
+    # trial1: variant 7.0 > original 6.0 (승리)
+    # trial2: variant 7.0 > original 6.0 (승리)
+    # trial3: variant 5.8 < original 6.0 (패배)
+    # avg_orig=6.0, avg_var=6.6 → 마진 0.6 > 0.5 ✓, 승리 2/3 > 1.5 ✓
+    _patch_evolve_with_verdicts(monkeypatch, [
+        (6.0, 7.0),
+        (6.0, 7.0),
+        (6.0, 5.8),
+    ])
+
+    engine.feedback("evolve_test", 3, "both conditions test")
+    record = engine.evolve("evolve_test", {"query": "hello"})
+
+    assert record.adopted is True
+
+
+def test_evolution_adoption_tie(
+    engine: CambrianEngine, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """완전 동점 → margin 0, 승리 0 → adopted=False."""
+    _patch_evolve_with_verdicts(monkeypatch, [(6.0, 6.0)] * 3)
+
+    engine.feedback("evolve_test", 3, "tie test")
+    record = engine.evolve("evolve_test", {"query": "hello"})
+
+    assert record.adopted is False
+
+
+# === Phase 5: replay set 테스트 ===
+
+
+def test_add_evaluation_input(engine: CambrianEngine) -> None:
+    """평가 입력을 추가하고 조회할 수 있다."""
+    registry = engine.get_registry()
+    eval_id = registry.add_evaluation_input(
+        skill_id="evolve_test",
+        input_data='{"query": "hello"}',
+        description="기본 인사 테스트",
+    )
+
+    assert eval_id > 0
+
+    inputs = registry.get_evaluation_inputs("evolve_test")
+    assert len(inputs) == 1
+    assert inputs[0]["id"] == eval_id
+    assert inputs[0]["skill_id"] == "evolve_test"
+    assert inputs[0]["input_data"] == '{"query": "hello"}'
+    assert inputs[0]["description"] == "기본 인사 테스트"
+
+    # 삭제
+    registry.remove_evaluation_input(eval_id)
+    assert len(registry.get_evaluation_inputs("evolve_test")) == 0
+
+
+def test_evolve_with_replay_set(
+    engine: CambrianEngine, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """replay set이 있으면 해당 입력들로 비교를 수행한다."""
+    registry = engine.get_registry()
+    registry.add_evaluation_input(
+        "evolve_test", '{"query": "test1"}', "테스트 입력 1",
+    )
+    registry.add_evaluation_input(
+        "evolve_test", '{"query": "test2"}', "테스트 입력 2",
+    )
+
+    captured_inputs: list[dict] = []
+
+    def fake_mutate(
+        self: SkillEvolver, skill: object, feedback_list: list[dict],
+    ) -> str:
+        _ = self, skill, feedback_list
+        return "# Evolved\nReplay set test."
+
+    def fake_execute(
+        self: SkillExecutor, skill: object, input_data: dict,
+    ) -> ExecutionResult:
+        _ = self
+        captured_inputs.append(input_data)
+        sid = getattr(skill, "id")
+        return ExecutionResult(
+            skill_id=sid, success=True,
+            output={"html": f"<p>{sid}</p>"},
+            execution_time_ms=20, mode="a",
+        )
+
+    def fake_judge(
+        self: SkillJudge, original_output: dict | None,
+        variant_output: dict | None, skill_description: str,
+        feedback_list: list[dict],
+    ) -> JudgeVerdict:
+        _ = self, original_output, variant_output, skill_description, feedback_list
+        return JudgeVerdict(5.0, 8.0, "variant better", "variant")
+
+    monkeypatch.setattr(SkillEvolver, "mutate", fake_mutate)
+    monkeypatch.setattr(SkillExecutor, "execute", fake_execute)
+    monkeypatch.setattr(SkillJudge, "judge", fake_judge)
+
+    engine.feedback("evolve_test", 3, "replay set test")
+    record = engine.evolve("evolve_test", {"query": "ignored"})
+
+    # replay set 2개 → 원본 2회 + variant 2회 = 4회 실행
+    assert len(captured_inputs) == 4
+    # 실행된 입력이 replay set의 입력과 일치
+    assert captured_inputs[0] == {"query": "test1"}
+    assert captured_inputs[1] == {"query": "test1"}
+    assert captured_inputs[2] == {"query": "test2"}
+    assert captured_inputs[3] == {"query": "test2"}
+    assert record.adopted is True
+
+
+def test_evolve_without_replay_set_fallback(
+    engine: CambrianEngine, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """replay set이 없으면 기존 로직(test_input × TRIAL_COUNT)으로 동작한다."""
+    # evolve_test의 평가 입력이 없는 상태 확인
+    registry = engine.get_registry()
+    assert len(registry.get_evaluation_inputs("evolve_test")) == 0
+
+    execute_count = {"count": 0}
+
+    def fake_mutate(
+        self: SkillEvolver, skill: object, feedback_list: list[dict],
+    ) -> str:
+        _ = self, skill, feedback_list
+        return "# Evolved\nFallback test."
+
+    def fake_execute(
+        self: SkillExecutor, skill: object, input_data: dict,
+    ) -> ExecutionResult:
+        _ = self, input_data
+        execute_count["count"] += 1
+        sid = getattr(skill, "id")
+        return ExecutionResult(
+            skill_id=sid, success=True,
+            output={"html": f"<p>{sid}</p>"},
+            execution_time_ms=20, mode="a",
+        )
+
+    def fake_judge(
+        self: SkillJudge, original_output: dict | None,
+        variant_output: dict | None, skill_description: str,
+        feedback_list: list[dict],
+    ) -> JudgeVerdict:
+        _ = self, original_output, variant_output, skill_description, feedback_list
+        return JudgeVerdict(5.0, 8.0, "variant better", "variant")
+
+    monkeypatch.setattr(SkillEvolver, "mutate", fake_mutate)
+    monkeypatch.setattr(SkillExecutor, "execute", fake_execute)
+    monkeypatch.setattr(SkillJudge, "judge", fake_judge)
+
+    engine.feedback("evolve_test", 3, "fallback test")
+    engine.evolve("evolve_test", {"query": "hello"})
+
+    # TRIAL_COUNT=3 → 원본 3회 + variant 3회 = 6회
+    assert execute_count["count"] == 6
+
+
+def test_replay_set_multiple_inputs(
+    engine: CambrianEngine, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """replay set 3개 등록 → evolve 실행 → 3개 verdict 생성."""
+    registry = engine.get_registry()
+    registry.add_evaluation_input(
+        "evolve_test", '{"query": "a"}', "입력 A",
+    )
+    registry.add_evaluation_input(
+        "evolve_test", '{"query": "b"}', "입력 B",
+    )
+    registry.add_evaluation_input(
+        "evolve_test", '{"query": "c"}', "입력 C",
+    )
+
+    judge_count = {"count": 0}
+
+    def fake_mutate(
+        self: SkillEvolver, skill: object, feedback_list: list[dict],
+    ) -> str:
+        _ = self, skill, feedback_list
+        return "# Evolved\nMultiple inputs test."
+
+    def fake_execute(
+        self: SkillExecutor, skill: object, input_data: dict,
+    ) -> ExecutionResult:
+        _ = self, input_data
+        sid = getattr(skill, "id")
+        return ExecutionResult(
+            skill_id=sid, success=True,
+            output={"html": f"<p>{sid}</p>"},
+            execution_time_ms=20, mode="a",
+        )
+
+    def fake_judge(
+        self: SkillJudge, original_output: dict | None,
+        variant_output: dict | None, skill_description: str,
+        feedback_list: list[dict],
+    ) -> JudgeVerdict:
+        _ = self, original_output, variant_output, skill_description, feedback_list
+        judge_count["count"] += 1
+        return JudgeVerdict(5.0, 8.0, f"trial{judge_count['count']}", "variant")
+
+    monkeypatch.setattr(SkillEvolver, "mutate", fake_mutate)
+    monkeypatch.setattr(SkillExecutor, "execute", fake_execute)
+    monkeypatch.setattr(SkillJudge, "judge", fake_judge)
+
+    engine.feedback("evolve_test", 3, "multiple inputs test")
+    record = engine.evolve("evolve_test", {"query": "ignored"})
+
+    # replay set 3개 → Judge 3회 호출
+    assert judge_count["count"] == 3
+    # 3개 verdict reasoning이 모두 기록됨
+    assert "trial1" in record.judge_reasoning
+    assert "trial2" in record.judge_reasoning
+    assert "trial3" in record.judge_reasoning

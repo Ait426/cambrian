@@ -524,8 +524,10 @@ def test_competitive_single_candidate(schemas_dir: Path, tmp_path: Path) -> None
     assert result.skill_id == "hello_world"
 
 
-def test_competitive_multiple_mode_b(schemas_dir: Path, tmp_path: Path) -> None:
-    """여러 Mode B 후보가 성공하면 fitness가 높은 후보를 반환한다."""
+def test_competitive_multiple_mode_b(
+    schemas_dir: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """여러 Mode B 후보가 성공하면 실행 시간이 짧은 후보를 반환한다."""
     skills_dir = tmp_path / "skills"
     pool_dir = tmp_path / "pool"
     _write_mode_b_skill(
@@ -552,6 +554,22 @@ def test_competitive_multiple_mode_b(schemas_dir: Path, tmp_path: Path) -> None:
         db_path=":memory:",
     )
 
+    # 실행 시간을 제어하여 skill_a(50ms) < skill_b(200ms) 설정
+    def fake_execute(skill: object, input_data: dict) -> ExecutionResult:
+        """실행 시간을 제어한 가짜 실행기."""
+        _ = input_data
+        skill_id = getattr(skill, "id")
+        time_map = {"skill_a": 50, "skill_b": 200}
+        return ExecutionResult(
+            skill_id=skill_id,
+            success=True,
+            output={"result": skill_id},
+            execution_time_ms=time_map[skill_id],
+            mode="b",
+        )
+
+    monkeypatch.setattr(engine._executor, "execute", fake_execute)
+
     result = engine.run_task(
         domain="comp_test",
         tags=["compete"],
@@ -559,7 +577,8 @@ def test_competitive_multiple_mode_b(schemas_dir: Path, tmp_path: Path) -> None:
     )
 
     assert result.success is True
-    assert result.skill_id == "skill_b"
+    # 실행 시간이 짧은 skill_a가 승리 (fitness가 낮아도)
+    assert result.skill_id == "skill_a"
 
 
 def test_competitive_all_fail(schemas_dir: Path, tmp_path: Path) -> None:
@@ -705,6 +724,204 @@ def test_competitive_fitness_all_updated(schemas_dir: Path, tmp_path: Path) -> N
     assert skill_b["total_executions"] >= 1
 
 
+# === 경쟁 실행 승자 선택 테스트 (execution_time 기반) ===
+
+
+def test_competitive_mode_b_fastest_wins(
+    schemas_dir: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Mode B 2개 후보: 실행 시간이 짧은 쪽이 승리한다 (fitness 무관)."""
+    skills_dir = tmp_path / "skills"
+    pool_dir = tmp_path / "pool"
+    _write_mode_b_skill(
+        skills_dir, "fast_b", domain="speed", tags=["race"],
+        result_value="fast", fitness_score=0.1,
+    )
+    _write_mode_b_skill(
+        skills_dir, "slow_b", domain="speed", tags=["race"],
+        result_value="slow", fitness_score=0.9,
+    )
+
+    engine = CambrianEngine(
+        schemas_dir=schemas_dir, skills_dir=skills_dir,
+        skill_pool_dir=pool_dir, db_path=":memory:",
+    )
+
+    def fake_execute(skill: object, input_data: dict) -> ExecutionResult:
+        """fast_b=30ms, slow_b=500ms."""
+        _ = input_data
+        sid = getattr(skill, "id")
+        return ExecutionResult(
+            skill_id=sid, success=True, output={"result": sid},
+            execution_time_ms=30 if sid == "fast_b" else 500,
+            mode="b",
+        )
+
+    monkeypatch.setattr(engine._executor, "execute", fake_execute)
+
+    result = engine.run_task(domain="speed", tags=["race"], input_data={})
+
+    assert result.success is True
+    assert result.skill_id == "fast_b"
+
+
+def test_competitive_mode_a_tiebreaker(
+    schemas_dir: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Mode A 2개 후보: 모두 999999이므로 fitness tiebreaker로 높은 쪽 승리."""
+    skills_dir = tmp_path / "skills"
+    pool_dir = tmp_path / "pool"
+    _write_mode_a_skill(
+        skills_dir, "a_high", domain="tie", tags=["tie"], fitness_score=0.9,
+    )
+    _write_mode_a_skill(
+        skills_dir, "a_low", domain="tie", tags=["tie"], fitness_score=0.1,
+    )
+
+    engine = CambrianEngine(
+        schemas_dir=schemas_dir, skills_dir=skills_dir,
+        skill_pool_dir=pool_dir, db_path=":memory:",
+    )
+
+    def fake_execute(skill: object, input_data: dict) -> ExecutionResult:
+        """Mode A 결과 반환."""
+        _ = input_data
+        sid = getattr(skill, "id")
+        return ExecutionResult(
+            skill_id=sid, success=True, output={"result": sid},
+            execution_time_ms=100, mode="a",
+        )
+
+    monkeypatch.setattr(engine._executor, "execute", fake_execute)
+
+    result = engine.run_task(domain="tie", tags=["tie"], input_data={})
+
+    assert result.success is True
+    # Mode A 동점 → fitness tiebreaker → a_high 승리
+    assert result.skill_id == "a_high"
+
+
+def test_competitive_mode_b_over_mode_a(
+    schemas_dir: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Mode B + Mode A 혼합: Mode B 빠른 쪽이 Mode A보다 우선한다."""
+    skills_dir = tmp_path / "skills"
+    pool_dir = tmp_path / "pool"
+    _write_mode_b_skill(
+        skills_dir, "b_fast", domain="mix", tags=["mix"],
+        result_value="b_fast", fitness_score=0.1,
+    )
+    _write_mode_a_skill(
+        skills_dir, "a_top", domain="mix", tags=["mix"], fitness_score=0.9,
+    )
+
+    engine = CambrianEngine(
+        schemas_dir=schemas_dir, skills_dir=skills_dir,
+        skill_pool_dir=pool_dir, db_path=":memory:",
+    )
+
+    def fake_execute(skill: object, input_data: dict) -> ExecutionResult:
+        """b_fast=40ms(mode b), a_top=100ms(mode a)."""
+        _ = input_data
+        sid = getattr(skill, "id")
+        mode = getattr(skill, "mode")
+        return ExecutionResult(
+            skill_id=sid, success=True, output={"result": sid},
+            execution_time_ms=40 if sid == "b_fast" else 100,
+            mode=mode,
+        )
+
+    monkeypatch.setattr(engine._executor, "execute", fake_execute)
+
+    result = engine.run_task(domain="mix", tags=["mix"], input_data={})
+
+    assert result.success is True
+    # Mode B(40ms) < Mode A(999999) → b_fast 승리
+    assert result.skill_id == "b_fast"
+
+
+def test_competitive_single_success(
+    schemas_dir: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """여러 후보 중 1개만 성공하면 해당 후보가 승리한다."""
+    skills_dir = tmp_path / "skills"
+    pool_dir = tmp_path / "pool"
+    _write_mode_b_skill(
+        skills_dir, "winner", domain="single", tags=["single"],
+        result_value="win", fitness_score=0.1,
+    )
+    _write_mode_b_skill(
+        skills_dir, "loser", domain="single", tags=["single"],
+        result_value="lose", fitness_score=0.9,
+    )
+
+    engine = CambrianEngine(
+        schemas_dir=schemas_dir, skills_dir=skills_dir,
+        skill_pool_dir=pool_dir, db_path=":memory:",
+    )
+
+    def fake_execute(skill: object, input_data: dict) -> ExecutionResult:
+        """winner만 성공, loser는 실패."""
+        _ = input_data
+        sid = getattr(skill, "id")
+        if sid == "winner":
+            return ExecutionResult(
+                skill_id=sid, success=True, output={"result": "win"},
+                execution_time_ms=100, mode="b",
+            )
+        return ExecutionResult(
+            skill_id=sid, success=False, error="crash",
+            execution_time_ms=50, mode="b",
+        )
+
+    monkeypatch.setattr(engine._executor, "execute", fake_execute)
+
+    result = engine.run_task(
+        domain="single", tags=["single"], input_data={}, max_retries=0,
+    )
+
+    assert result.success is True
+    assert result.skill_id == "winner"
+
+
+def test_competitive_all_fail_returns_none(
+    schemas_dir: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """모든 후보가 실패하면 None이 반환된다 (최종 결과 실패)."""
+    skills_dir = tmp_path / "skills"
+    pool_dir = tmp_path / "pool"
+    _write_mode_b_skill(
+        skills_dir, "fail_x", domain="allfail", tags=["allfail"],
+        result_value="x", fitness_score=0.5,
+    )
+    _write_mode_b_skill(
+        skills_dir, "fail_y", domain="allfail", tags=["allfail"],
+        result_value="y", fitness_score=0.5,
+    )
+
+    engine = CambrianEngine(
+        schemas_dir=schemas_dir, skills_dir=skills_dir,
+        skill_pool_dir=pool_dir, db_path=":memory:",
+    )
+
+    def fake_execute(skill: object, input_data: dict) -> ExecutionResult:
+        """전원 실패."""
+        _ = input_data
+        sid = getattr(skill, "id")
+        return ExecutionResult(
+            skill_id=sid, success=False, error="total failure",
+            execution_time_ms=10, mode="b",
+        )
+
+    monkeypatch.setattr(engine._executor, "execute", fake_execute)
+
+    result = engine.run_task(
+        domain="allfail", tags=["allfail"], input_data={}, max_retries=0,
+    )
+
+    assert result.success is False
+
+
 # === Autopsy → 자동 피드백 파이프라인 테스트 ===
 
 
@@ -797,3 +1014,361 @@ def test_auto_feedback_validation_bypass() -> None:
             input_data="{}",
             output_data="{}",
         )
+
+
+# === 자동 회귀 롤백 테스트 ===
+
+
+def _setup_rollback_engine(
+    schemas_dir: Path,
+    tmp_path: Path,
+    skill_id: str = "rollback_test",
+) -> tuple:
+    """자동 롤백 테스트용 엔진 + 진화 이력을 세팅한다.
+
+    Returns:
+        (engine, skill_dir) 튜플
+    """
+    from engine.models import EvolutionRecord
+
+    skills_dir = tmp_path / "skills"
+    pool_dir = tmp_path / "pool"
+    skill_dir = _write_mode_b_skill(
+        skills_dir, skill_id, domain="rollback", tags=["rollback"],
+        result_value="ok", fitness_score=0.0,
+    )
+    # SKILL.md에 원본 내용 기록
+    (skill_dir / "SKILL.md").write_text(
+        "# Original SKILL.md", encoding="utf-8",
+    )
+
+    engine = CambrianEngine(
+        schemas_dir=schemas_dir, skills_dir=skills_dir,
+        skill_pool_dir=pool_dir, db_path=":memory:",
+    )
+
+    # adopted=True인 진화 이력 삽입 (parent=원본, child=변이)
+    from datetime import datetime, timezone
+    record = EvolutionRecord(
+        id=0,
+        skill_id=skill_id,
+        parent_skill_md="# Original SKILL.md",
+        child_skill_md="# Evolved SKILL.md",
+        parent_fitness=0.5,
+        child_fitness=0.7,
+        adopted=True,
+        mutation_summary="test mutation",
+        feedback_ids="[]",
+        created_at=datetime.now(timezone.utc).isoformat(),
+        judge_reasoning="variant better",
+    )
+    engine.get_registry().add_evolution_record(record)
+
+    # 현재 SKILL.md를 변이 버전으로 덮어쓰기 (진화 채택 상태 시뮬레이션)
+    (skill_dir / "SKILL.md").write_text(
+        "# Evolved SKILL.md", encoding="utf-8",
+    )
+
+    return engine, skill_dir
+
+
+def test_auto_rollback_triggered(
+    schemas_dir: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """fitness < 0.2 + 최근 adopted 이력 → 롤백 실행, SKILL.md 복원."""
+    engine, skill_dir = _setup_rollback_engine(schemas_dir, tmp_path)
+    skill_id = "rollback_test"
+
+    # 5회 실행: 1회 성공 + 4회 실패 → fitness < 0.2
+    call_count = {"n": 0}
+
+    def fake_execute(skill: object, input_data: dict) -> ExecutionResult:
+        _ = input_data
+        sid = getattr(skill, "id")
+        call_count["n"] += 1
+        if call_count["n"] == 1:
+            return ExecutionResult(
+                skill_id=sid, success=True, output={"result": "ok"},
+                execution_time_ms=10, mode="b",
+            )
+        return ExecutionResult(
+            skill_id=sid, success=False, error="crash",
+            execution_time_ms=10, mode="b",
+        )
+
+    monkeypatch.setattr(engine._executor, "execute", fake_execute)
+
+    # 5회 실행 (단일 후보이므로 _run_competitive 경유 안 함 → run_task 직접)
+    for _ in range(5):
+        engine.run_task(
+            domain="rollback", tags=["rollback"], input_data={},
+            max_retries=0,
+        )
+
+    # fitness 확인
+    skill_data = engine.get_registry().get(skill_id)
+    assert skill_data["fitness_score"] < 0.2
+
+    # SKILL.md가 원본으로 복원됨
+    restored = (skill_dir / "SKILL.md").read_text(encoding="utf-8")
+    assert restored == "# Original SKILL.md"
+
+
+def test_auto_rollback_not_triggered_high_fitness(
+    schemas_dir: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """fitness >= 0.2이면 롤백 미실행."""
+    engine, skill_dir = _setup_rollback_engine(schemas_dir, tmp_path)
+
+    # 5회 모두 성공 → fitness 높음
+    def fake_execute(skill: object, input_data: dict) -> ExecutionResult:
+        _ = input_data
+        sid = getattr(skill, "id")
+        return ExecutionResult(
+            skill_id=sid, success=True, output={"result": "ok"},
+            execution_time_ms=10, mode="b",
+        )
+
+    monkeypatch.setattr(engine._executor, "execute", fake_execute)
+
+    for _ in range(5):
+        engine.run_task(
+            domain="rollback", tags=["rollback"], input_data={},
+            max_retries=0,
+        )
+
+    skill_data = engine.get_registry().get("rollback_test")
+    assert skill_data["fitness_score"] >= 0.2
+
+    # SKILL.md 변이 버전 유지 (롤백 안 됨)
+    content = (skill_dir / "SKILL.md").read_text(encoding="utf-8")
+    assert content == "# Evolved SKILL.md"
+
+
+def test_auto_rollback_not_triggered_no_history(
+    schemas_dir: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """진화 이력 없으면 롤백 미실행."""
+    skills_dir = tmp_path / "skills"
+    pool_dir = tmp_path / "pool"
+    skill_dir = _write_mode_b_skill(
+        skills_dir, "no_history", domain="rollback", tags=["rollback"],
+        result_value="ok", fitness_score=0.0,
+    )
+    (skill_dir / "SKILL.md").write_text(
+        "# Current SKILL.md", encoding="utf-8",
+    )
+
+    engine = CambrianEngine(
+        schemas_dir=schemas_dir, skills_dir=skills_dir,
+        skill_pool_dir=pool_dir, db_path=":memory:",
+    )
+
+    # 5회 전부 실패 → fitness < 0.2이지만 이력 없음
+    def fake_execute(skill: object, input_data: dict) -> ExecutionResult:
+        _ = input_data
+        sid = getattr(skill, "id")
+        return ExecutionResult(
+            skill_id=sid, success=False, error="crash",
+            execution_time_ms=10, mode="b",
+        )
+
+    monkeypatch.setattr(engine._executor, "execute", fake_execute)
+
+    for _ in range(5):
+        engine.run_task(
+            domain="rollback", tags=["rollback"], input_data={},
+            max_retries=0,
+        )
+
+    # 이력 없으므로 SKILL.md 그대로
+    content = (skill_dir / "SKILL.md").read_text(encoding="utf-8")
+    assert content == "# Current SKILL.md"
+
+
+def test_auto_rollback_marks_record(
+    schemas_dir: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """롤백 후 evolution_history의 auto_rolled_back=True로 마킹된다."""
+    engine, _ = _setup_rollback_engine(
+        schemas_dir, tmp_path, skill_id="mark_test",
+    )
+    skill_id = "mark_test"
+
+    # 5회: 1회 성공 + 4회 실패
+    call_count = {"n": 0}
+
+    def fake_execute(skill: object, input_data: dict) -> ExecutionResult:
+        _ = input_data
+        sid = getattr(skill, "id")
+        call_count["n"] += 1
+        if call_count["n"] == 1:
+            return ExecutionResult(
+                skill_id=sid, success=True, output={"result": "ok"},
+                execution_time_ms=10, mode="b",
+            )
+        return ExecutionResult(
+            skill_id=sid, success=False, error="crash",
+            execution_time_ms=10, mode="b",
+        )
+
+    monkeypatch.setattr(engine._executor, "execute", fake_execute)
+
+    for _ in range(5):
+        engine.run_task(
+            domain="rollback", tags=["rollback"], input_data={},
+            max_retries=0,
+        )
+
+    history = engine.get_registry().get_evolution_history(skill_id, limit=1)
+    assert len(history) == 1
+    assert history[0]["auto_rolled_back"] is True
+
+
+# === run_traces 경쟁 실행 trace 테스트 ===
+
+
+def test_competitive_run_saves_trace(
+    schemas_dir: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """경쟁 실행 후 run_traces에 competitive_run 행이 저장된다."""
+    skills_dir = tmp_path / "skills"
+    pool_dir = tmp_path / "pool"
+    _write_mode_b_skill(
+        skills_dir, "trace_a", domain="trace_test", tags=["trace"],
+        result_value="a", fitness_score=0.3,
+    )
+    _write_mode_b_skill(
+        skills_dir, "trace_b", domain="trace_test", tags=["trace"],
+        result_value="b", fitness_score=0.5,
+    )
+
+    engine = CambrianEngine(
+        schemas_dir=schemas_dir, skills_dir=skills_dir,
+        skill_pool_dir=pool_dir, db_path=":memory:",
+    )
+
+    def fake_execute(skill: object, input_data: dict) -> ExecutionResult:
+        _ = input_data
+        sid = getattr(skill, "id")
+        time_map = {"trace_a": 50, "trace_b": 200}
+        return ExecutionResult(
+            skill_id=sid, success=True, output={"result": sid},
+            execution_time_ms=time_map[sid], mode="b",
+        )
+
+    monkeypatch.setattr(engine._executor, "execute", fake_execute)
+
+    engine.run_task(domain="trace_test", tags=["trace"], input_data={"x": "1"})
+
+    traces = engine.get_run_traces(trace_type="competitive_run", limit=1)
+    assert len(traces) == 1
+    trace = traces[0]
+    assert trace["trace_type"] == "competitive_run"
+    assert trace["candidate_count"] == 2
+    assert trace["success_count"] == 2
+    assert trace["winner_id"] == "trace_a"  # 실행시간 50ms < 200ms
+    assert "execution_time=" in trace["winner_reason"]
+    assert trace["domain"] == "trace_test"
+    assert trace["tags"] == ["trace"]
+
+
+def test_competitive_all_fail_saves_trace(
+    schemas_dir: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """전부 실패 시에도 trace가 저장된다 (winner_id=None)."""
+    skills_dir = tmp_path / "skills"
+    pool_dir = tmp_path / "pool"
+    _write_mode_b_skill(
+        skills_dir, "fail_t1", domain="fail_trace", tags=["fail"],
+        result_value="x", fitness_score=0.5,
+    )
+    _write_mode_b_skill(
+        skills_dir, "fail_t2", domain="fail_trace", tags=["fail"],
+        result_value="y", fitness_score=0.5,
+    )
+
+    engine = CambrianEngine(
+        schemas_dir=schemas_dir, skills_dir=skills_dir,
+        skill_pool_dir=pool_dir, db_path=":memory:",
+    )
+
+    def fake_execute(skill: object, input_data: dict) -> ExecutionResult:
+        _ = input_data
+        sid = getattr(skill, "id")
+        return ExecutionResult(
+            skill_id=sid, success=False, error="boom",
+            execution_time_ms=10, mode="b",
+        )
+
+    monkeypatch.setattr(engine._executor, "execute", fake_execute)
+
+    engine.run_task(
+        domain="fail_trace", tags=["fail"], input_data={}, max_retries=0,
+    )
+
+    traces = engine.get_run_traces(trace_type="competitive_run", limit=1)
+    assert len(traces) == 1
+    assert traces[0]["winner_id"] is None
+    assert traces[0]["winner_reason"] == "all_failed"
+    assert traces[0]["success_count"] == 0
+
+
+def test_get_traces_by_skill_id(
+    schemas_dir: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """skill_id 필터로 해당 스킬이 참여한 trace만 조회한다."""
+    skills_dir = tmp_path / "skills"
+    pool_dir = tmp_path / "pool"
+    _write_mode_b_skill(
+        skills_dir, "filter_a", domain="filter", tags=["filter"],
+        result_value="a", fitness_score=0.5,
+    )
+    _write_mode_b_skill(
+        skills_dir, "filter_b", domain="filter", tags=["filter"],
+        result_value="b", fitness_score=0.5,
+    )
+
+    engine = CambrianEngine(
+        schemas_dir=schemas_dir, skills_dir=skills_dir,
+        skill_pool_dir=pool_dir, db_path=":memory:",
+    )
+
+    def fake_execute(skill: object, input_data: dict) -> ExecutionResult:
+        _ = input_data
+        sid = getattr(skill, "id")
+        return ExecutionResult(
+            skill_id=sid, success=True, output={"result": sid},
+            execution_time_ms=50, mode="b",
+        )
+
+    monkeypatch.setattr(engine._executor, "execute", fake_execute)
+
+    engine.run_task(domain="filter", tags=["filter"], input_data={})
+
+    # winner로 필터
+    traces = engine.get_run_traces(skill_id="filter_a")
+    assert len(traces) >= 1
+
+
+def test_get_traces_limit(schemas_dir: Path, tmp_path: Path) -> None:
+    """limit 파라미터로 반환 개수를 제한한다."""
+    registry = SkillRegistry(":memory:")
+    for i in range(5):
+        registry.add_run_trace(
+            trace_type="competitive_run",
+            domain="limit_test",
+            tags=[],
+            input_summary="",
+            candidate_count=1,
+            success_count=1,
+            winner_id=f"skill_{i}",
+            winner_reason="test",
+            candidates_json="[]",
+            total_ms=10,
+        )
+
+    assert len(registry.get_run_traces(limit=3)) == 3
+    assert len(registry.get_run_traces(limit=10)) == 5
+
+    registry.close()

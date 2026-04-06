@@ -79,65 +79,150 @@ class SkillRegistry:
                 mutation_summary TEXT NOT NULL DEFAULT '',
                 feedback_ids     TEXT NOT NULL DEFAULT '[]',
                 judge_reasoning  TEXT NOT NULL DEFAULT '',
-                created_at       TEXT NOT NULL
+                created_at       TEXT NOT NULL,
+                auto_rolled_back INTEGER NOT NULL DEFAULT 0
+            );
+            """
+        )
+        # 기존 DB 마이그레이션: auto_rolled_back 컬럼이 없으면 추가
+        try:
+            self._conn.execute(
+                "ALTER TABLE evolution_history "
+                "ADD COLUMN auto_rolled_back INTEGER NOT NULL DEFAULT 0"
+            )
+            self._conn.commit()
+        except Exception:
+            pass  # 이미 존재하면 무시
+        self._conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS evaluation_inputs (
+                id          INTEGER PRIMARY KEY AUTOINCREMENT,
+                skill_id    TEXT NOT NULL,
+                input_data  TEXT NOT NULL,
+                description TEXT NOT NULL DEFAULT '',
+                created_at  TEXT NOT NULL
+            );
+            """
+        )
+        self._conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS run_traces (
+                id              INTEGER PRIMARY KEY AUTOINCREMENT,
+                trace_type      TEXT NOT NULL,
+                domain          TEXT NOT NULL DEFAULT '',
+                tags            TEXT NOT NULL DEFAULT '[]',
+                input_summary   TEXT NOT NULL DEFAULT '',
+                candidate_count INTEGER NOT NULL DEFAULT 0,
+                success_count   INTEGER NOT NULL DEFAULT 0,
+                winner_id       TEXT,
+                winner_reason   TEXT NOT NULL DEFAULT '',
+                candidates_json TEXT NOT NULL DEFAULT '[]',
+                total_ms        INTEGER NOT NULL DEFAULT 0,
+                created_at      TEXT NOT NULL
+            );
+            """
+        )
+        self._conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS evaluation_snapshots (
+                id              INTEGER PRIMARY KEY AUTOINCREMENT,
+                skill_id        TEXT NOT NULL,
+                input_count     INTEGER NOT NULL DEFAULT 0,
+                pass_count      INTEGER NOT NULL DEFAULT 0,
+                fail_count      INTEGER NOT NULL DEFAULT 0,
+                pass_rate       REAL NOT NULL DEFAULT 0.0,
+                avg_time_ms     INTEGER NOT NULL DEFAULT 0,
+                fitness_at_time REAL NOT NULL DEFAULT 0.0,
+                results_json    TEXT NOT NULL DEFAULT '[]',
+                created_at      TEXT NOT NULL
             );
             """
         )
         self._conn.commit()
 
     def register(self, skill: Skill) -> None:
-        """스킬을 DB에 등록한다. 이미 같은 id가 있으면 UPDATE한다.
+        """스킬을 DB에 등록한다. 이미 같은 id가 있으면 정적 필드만 UPDATE한다.
+
+        신규 스킬이면 INSERT, 기존 스킬이면 runtime 필드
+        (fitness_score, total_executions, successful_executions,
+        last_used, avg_judge_score, status, crystallized_at, registered_at)를
+        보존하고 정적 메타데이터만 갱신한다.
 
         Args:
             skill: 등록할 Skill 객체
         """
-        registered_at = datetime.now(timezone.utc).isoformat()
-        self._conn.execute(
-            """
-            INSERT OR REPLACE INTO skills (
-                id,
-                version,
-                name,
-                description,
-                domain,
-                tags,
-                mode,
-                language,
-                needs_network,
-                needs_filesystem,
-                timeout_seconds,
-                skill_path,
-                status,
-                fitness_score,
-                total_executions,
-                successful_executions,
-                last_used,
-                crystallized_at,
-                registered_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            """,
-            (
-                skill.id,
-                skill.version,
-                skill.name,
-                skill.description,
-                skill.domain,
-                json.dumps(skill.tags),
-                skill.mode,
-                skill.runtime.language,
-                int(skill.runtime.needs_network),
-                int(skill.runtime.needs_filesystem),
-                skill.runtime.timeout_seconds,
-                str(skill.skill_path),
-                skill.lifecycle.status,
-                skill.lifecycle.fitness_score,
-                skill.lifecycle.total_executions,
-                skill.lifecycle.successful_executions,
-                skill.lifecycle.last_used,
-                skill.lifecycle.crystallized_at,
-                registered_at,
-            ),
-        )
+        existing = self._conn.execute(
+            "SELECT id FROM skills WHERE id = ?", (skill.id,)
+        ).fetchone()
+
+        if existing is None:
+            # 신규 스킬: 전체 필드 INSERT
+            registered_at = datetime.now(timezone.utc).isoformat()
+            self._conn.execute(
+                """
+                INSERT INTO skills (
+                    id, version, name, description, domain, tags, mode,
+                    language, needs_network, needs_filesystem, timeout_seconds,
+                    skill_path, status, fitness_score, total_executions,
+                    successful_executions, last_used, crystallized_at,
+                    registered_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    skill.id,
+                    skill.version,
+                    skill.name,
+                    skill.description,
+                    skill.domain,
+                    json.dumps(skill.tags),
+                    skill.mode,
+                    skill.runtime.language,
+                    int(skill.runtime.needs_network),
+                    int(skill.runtime.needs_filesystem),
+                    skill.runtime.timeout_seconds,
+                    str(skill.skill_path),
+                    skill.lifecycle.status,
+                    skill.lifecycle.fitness_score,
+                    skill.lifecycle.total_executions,
+                    skill.lifecycle.successful_executions,
+                    skill.lifecycle.last_used,
+                    skill.lifecycle.crystallized_at,
+                    registered_at,
+                ),
+            )
+        else:
+            # 기존 스킬: 정적 메타데이터만 UPDATE, runtime 필드 보존
+            self._conn.execute(
+                """
+                UPDATE skills SET
+                    version = ?,
+                    name = ?,
+                    description = ?,
+                    domain = ?,
+                    tags = ?,
+                    mode = ?,
+                    language = ?,
+                    needs_network = ?,
+                    needs_filesystem = ?,
+                    timeout_seconds = ?,
+                    skill_path = ?
+                WHERE id = ?
+                """,
+                (
+                    skill.version,
+                    skill.name,
+                    skill.description,
+                    skill.domain,
+                    json.dumps(skill.tags),
+                    skill.mode,
+                    skill.runtime.language,
+                    int(skill.runtime.needs_network),
+                    int(skill.runtime.needs_filesystem),
+                    skill.runtime.timeout_seconds,
+                    str(skill.skill_path),
+                    skill.id,
+                ),
+            )
         self._conn.commit()
 
     def unregister(self, skill_id: str) -> None:
@@ -224,6 +309,16 @@ class SkillRegistry:
 
         cursor = self._conn.execute(query, tuple(params))
         rows = cursor.fetchall()
+
+        # LIKE는 부분 매칭이므로 Python 레벨에서 정확 매칭 후처리
+        if tags is not None and len(tags) > 0:
+            filtered_rows = []
+            for row in rows:
+                row_tags = json.loads(row["tags"])
+                if set(tags) & set(row_tags):
+                    filtered_rows.append(row)
+            rows = filtered_rows
+
         return [self._row_to_dict(row) for row in rows]
 
     def update_after_execution(
@@ -455,6 +550,7 @@ class SkillRegistry:
         for row in rows:
             item = dict(row)
             item["adopted"] = bool(item["adopted"])
+            item["auto_rolled_back"] = bool(item.get("auto_rolled_back", 0))
             results.append(item)
         return results
 
@@ -538,6 +634,414 @@ class SkillRegistry:
             "decay(): %d → dormant, %d → fossil", dormant_count, fossil_count
         )
         return {"dormant": dormant_count, "fossil": fossil_count}
+
+    def add_evaluation_input(
+        self,
+        skill_id: str,
+        input_data: str,
+        description: str = "",
+    ) -> int:
+        """진화 평가용 입력을 추가하고 생성된 ID를 반환한다.
+
+        Args:
+            skill_id: 대상 스킬 ID
+            input_data: JSON 문자열
+            description: 입력 설명
+
+        Returns:
+            생성된 evaluation_input ID
+        """
+        created_at = datetime.now(timezone.utc).isoformat()
+        cursor = self._conn.execute(
+            """
+            INSERT INTO evaluation_inputs (skill_id, input_data, description, created_at)
+            VALUES (?, ?, ?, ?)
+            """,
+            (skill_id, input_data, description, created_at),
+        )
+        self._conn.commit()
+        return int(cursor.lastrowid)
+
+    def get_evaluation_inputs(self, skill_id: str) -> list[dict]:
+        """해당 스킬의 평가 입력 목록을 반환한다.
+
+        Args:
+            skill_id: 대상 스킬 ID
+
+        Returns:
+            등록순 평가 입력 목록
+        """
+        cursor = self._conn.execute(
+            """
+            SELECT * FROM evaluation_inputs
+            WHERE skill_id = ?
+            ORDER BY id ASC
+            """,
+            (skill_id,),
+        )
+        return [dict(row) for row in cursor.fetchall()]
+
+    def remove_evaluation_input(self, eval_id: int) -> None:
+        """평가 입력을 삭제한다.
+
+        Args:
+            eval_id: 삭제할 evaluation_input ID
+
+        Raises:
+            ValueError: 해당 ID가 존재하지 않을 때
+        """
+        cursor = self._conn.execute(
+            "DELETE FROM evaluation_inputs WHERE id = ?", (eval_id,)
+        )
+        self._conn.commit()
+        if cursor.rowcount == 0:
+            raise ValueError(f"Evaluation input not found: {eval_id}")
+
+    def add_run_trace(
+        self,
+        trace_type: str,
+        domain: str,
+        tags: list[str],
+        input_summary: str,
+        candidate_count: int,
+        success_count: int,
+        winner_id: str | None,
+        winner_reason: str,
+        candidates_json: str,
+        total_ms: int,
+    ) -> int:
+        """실행 trace를 저장하고 생성된 ID를 반환한다.
+
+        Args:
+            trace_type: trace 유형 (competitive_run, evolution_decision 등)
+            domain: 도메인
+            tags: 태그 리스트
+            input_summary: 입력 요약 (JSON 문자열 앞부분)
+            candidate_count: 후보 수
+            success_count: 성공 수
+            winner_id: 승자 스킬 ID (None이면 전부 실패)
+            winner_reason: 승자 선택 이유
+            candidates_json: 각 후보 결과 JSON
+            total_ms: 전체 실행 시간
+
+        Returns:
+            생성된 trace ID
+        """
+        created_at = datetime.now(timezone.utc).isoformat()
+        cursor = self._conn.execute(
+            """
+            INSERT INTO run_traces (
+                trace_type, domain, tags, input_summary,
+                candidate_count, success_count, winner_id,
+                winner_reason, candidates_json, total_ms, created_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                trace_type,
+                domain,
+                json.dumps(tags),
+                input_summary,
+                candidate_count,
+                success_count,
+                winner_id,
+                winner_reason,
+                candidates_json,
+                total_ms,
+                created_at,
+            ),
+        )
+        self._conn.commit()
+        return int(cursor.lastrowid)
+
+    def get_run_traces(
+        self,
+        trace_type: str | None = None,
+        skill_id: str | None = None,
+        limit: int = 20,
+    ) -> list[dict]:
+        """실행 trace를 조회한다.
+
+        Args:
+            trace_type: trace 유형 필터 (None이면 전체)
+            skill_id: 스킬 ID 필터 (winner_id 또는 candidates_json에 포함)
+            limit: 최대 반환 개수
+
+        Returns:
+            최신순 trace 목록
+        """
+        query = "SELECT * FROM run_traces WHERE 1=1"
+        params: list[object] = []
+
+        if trace_type is not None:
+            query += " AND trace_type = ?"
+            params.append(trace_type)
+
+        if skill_id is not None:
+            query += " AND (winner_id = ? OR candidates_json LIKE ?)"
+            params.append(skill_id)
+            params.append(f'%"skill_id": "{skill_id}"%')
+
+        query += " ORDER BY id DESC LIMIT ?"
+        params.append(limit)
+
+        cursor = self._conn.execute(query, tuple(params))
+        rows = cursor.fetchall()
+        results: list[dict] = []
+        for row in rows:
+            item = dict(row)
+            item["tags"] = json.loads(item["tags"])
+            results.append(item)
+        return results
+
+    def get_run_trace_by_id(self, trace_id: int) -> dict | None:
+        """특정 run trace를 ID로 조회한다.
+
+        Args:
+            trace_id: 조회할 trace ID
+
+        Returns:
+            trace dict 또는 None (미존재 시)
+        """
+        cursor = self._conn.execute(
+            "SELECT * FROM run_traces WHERE id = ?", (trace_id,)
+        )
+        row = cursor.fetchone()
+        if row is None:
+            return None
+        item = dict(row)
+        item["tags"] = json.loads(item["tags"])
+        return item
+
+    def get_skill_trace_stats(
+        self, skill_id: str, limit: int = 20,
+    ) -> dict:
+        """해당 스킬이 참여한 최근 경쟁 실행 통계를 집계한다.
+
+        Args:
+            skill_id: 대상 스킬 ID
+            limit: 최근 N개 trace 대상
+
+        Returns:
+            participated, won, win_rate, avg_execution_ms 등 집계 dict
+        """
+        empty = {
+            "participated": 0, "won": 0, "win_rate": 0.0,
+            "avg_execution_ms": 0, "success_in_runs": 0, "fail_in_runs": 0,
+        }
+        try:
+            traces = self.get_run_traces(
+                trace_type="competitive_run", skill_id=skill_id, limit=limit,
+            )
+        except Exception:
+            return empty
+
+        participated = 0
+        won = 0
+        total_time = 0
+        time_count = 0
+        success_in_runs = 0
+        fail_in_runs = 0
+
+        for t in traces:
+            # candidates_json에서 해당 skill 항목 추출
+            try:
+                candidates = json.loads(t["candidates_json"])
+            except (json.JSONDecodeError, TypeError):
+                continue
+
+            skill_found = False
+            for c in candidates:
+                if c.get("skill_id") == skill_id:
+                    skill_found = True
+                    if c.get("success"):
+                        success_in_runs += 1
+                    else:
+                        fail_in_runs += 1
+                    ms = c.get("execution_time_ms", 0)
+                    if ms > 0:
+                        total_time += ms
+                        time_count += 1
+                    break
+
+            if skill_found:
+                participated += 1
+                if t.get("winner_id") == skill_id:
+                    won += 1
+
+        return {
+            "participated": participated,
+            "won": won,
+            "win_rate": round(won / participated, 3) if participated > 0 else 0.0,
+            "avg_execution_ms": (
+                round(total_time / time_count) if time_count > 0 else 0
+            ),
+            "success_in_runs": success_in_runs,
+            "fail_in_runs": fail_in_runs,
+        }
+
+    def get_skill_evolution_stats(self, skill_id: str) -> dict:
+        """해당 스킬의 진화 통계를 집계한다.
+
+        Args:
+            skill_id: 대상 스킬 ID
+
+        Returns:
+            total_evolutions, adopted_count, adoption_rate 등 집계 dict
+        """
+        empty = {
+            "total_evolutions": 0, "adopted_count": 0, "discarded_count": 0,
+            "adoption_rate": 0.0, "last_evolution_adopted": None,
+            "last_parent_fitness": None, "last_child_fitness": None,
+        }
+
+        cursor = self._conn.execute(
+            """
+            SELECT
+                COUNT(*) as total,
+                SUM(CASE WHEN adopted = 1 THEN 1 ELSE 0 END) as adopted,
+                SUM(CASE WHEN adopted = 0 THEN 1 ELSE 0 END) as discarded
+            FROM evolution_history WHERE skill_id = ?
+            """,
+            (skill_id,),
+        )
+        row = cursor.fetchone()
+        if row is None or row["total"] == 0:
+            return empty
+
+        total = row["total"]
+        adopted = row["adopted"]
+        discarded = row["discarded"]
+
+        # 최근 진화 조회
+        cursor2 = self._conn.execute(
+            """
+            SELECT parent_fitness, child_fitness, adopted
+            FROM evolution_history WHERE skill_id = ?
+            ORDER BY created_at DESC, id DESC LIMIT 1
+            """,
+            (skill_id,),
+        )
+        last = cursor2.fetchone()
+
+        return {
+            "total_evolutions": total,
+            "adopted_count": adopted,
+            "discarded_count": discarded,
+            "adoption_rate": round(adopted / total, 3) if total > 0 else 0.0,
+            "last_evolution_adopted": bool(last["adopted"]) if last else None,
+            "last_parent_fitness": (
+                float(last["parent_fitness"]) if last else None
+            ),
+            "last_child_fitness": (
+                float(last["child_fitness"]) if last else None
+            ),
+        }
+
+    def get_skill_rollback_count(self, skill_id: str) -> int:
+        """해당 스킬의 자동 롤백 횟수를 반환한다.
+
+        Args:
+            skill_id: 대상 스킬 ID
+
+        Returns:
+            auto_rollback trace 수
+        """
+        try:
+            cursor = self._conn.execute(
+                """
+                SELECT COUNT(*) as cnt FROM run_traces
+                WHERE trace_type = 'auto_rollback'
+                AND winner_reason LIKE ?
+                """,
+                (f"%{skill_id}%",),
+            )
+            row = cursor.fetchone()
+            return int(row["cnt"]) if row else 0
+        except Exception:
+            return 0
+
+    def add_evaluation_snapshot(
+        self,
+        skill_id: str,
+        input_count: int,
+        pass_count: int,
+        fail_count: int,
+        pass_rate: float,
+        avg_time_ms: int,
+        fitness_at_time: float,
+        results_json: str,
+    ) -> int:
+        """평가 스냅샷을 저장하고 생성된 ID를 반환한다.
+
+        Args:
+            skill_id: 대상 스킬 ID
+            input_count: 전체 입력 수
+            pass_count: 성공 수
+            fail_count: 실패 수
+            pass_rate: 성공률 (0.0~1.0)
+            avg_time_ms: 성공 입력 평균 실행 시간
+            fitness_at_time: 평가 시점 fitness
+            results_json: 입력별 결과 JSON
+
+        Returns:
+            생성된 snapshot ID
+        """
+        created_at = datetime.now(timezone.utc).isoformat()
+        cursor = self._conn.execute(
+            """
+            INSERT INTO evaluation_snapshots (
+                skill_id, input_count, pass_count, fail_count,
+                pass_rate, avg_time_ms, fitness_at_time,
+                results_json, created_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                skill_id, input_count, pass_count, fail_count,
+                pass_rate, avg_time_ms, fitness_at_time,
+                results_json, created_at,
+            ),
+        )
+        self._conn.commit()
+        return int(cursor.lastrowid)
+
+    def get_evaluation_snapshots(
+        self, skill_id: str, limit: int = 10,
+    ) -> list[dict]:
+        """해당 스킬의 평가 스냅샷 목록을 반환한다.
+
+        Args:
+            skill_id: 대상 스킬 ID
+            limit: 최대 반환 개수
+
+        Returns:
+            최신순 스냅샷 목록
+        """
+        cursor = self._conn.execute(
+            """
+            SELECT * FROM evaluation_snapshots
+            WHERE skill_id = ?
+            ORDER BY created_at DESC, id DESC
+            LIMIT ?
+            """,
+            (skill_id, limit),
+        )
+        return [dict(row) for row in cursor.fetchall()]
+
+    def get_evaluation_snapshot_by_id(self, snapshot_id: int) -> dict | None:
+        """특정 평가 스냅샷을 ID로 조회한다.
+
+        Args:
+            snapshot_id: 조회할 snapshot ID
+
+        Returns:
+            snapshot dict 또는 None
+        """
+        cursor = self._conn.execute(
+            "SELECT * FROM evaluation_snapshots WHERE id = ?",
+            (snapshot_id,),
+        )
+        row = cursor.fetchone()
+        return dict(row) if row else None
 
     def close(self) -> None:
         """DB 연결을 닫는다."""
