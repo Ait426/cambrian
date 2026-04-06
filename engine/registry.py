@@ -161,6 +161,19 @@ class SkillRegistry:
             );
             """
         )
+        self._conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS outcomes (
+                id              INTEGER PRIMARY KEY AUTOINCREMENT,
+                run_trace_id    INTEGER,
+                skill_id        TEXT NOT NULL,
+                domain          TEXT NOT NULL DEFAULT '',
+                verdict         TEXT NOT NULL,
+                human_note      TEXT NOT NULL DEFAULT '',
+                created_at      TEXT NOT NULL
+            );
+            """
+        )
         self._conn.commit()
 
     def register(self, skill: Skill) -> None:
@@ -1160,6 +1173,197 @@ class SkillRegistry:
         )
         row = cursor.fetchone()
         return int(row["cnt"]) if row else 0
+
+    # === Outcome / Pilot KPI ===
+
+    def add_outcome(
+        self,
+        skill_id: str,
+        verdict: str,
+        run_trace_id: int | None = None,
+        domain: str = "",
+        human_note: str = "",
+    ) -> int:
+        """실행 결과에 대한 사람의 사용 판정을 기록한다.
+
+        Args:
+            skill_id: 대상 스킬 ID
+            verdict: 사용 결과 (approved/edited/rejected/redo)
+            run_trace_id: 연결할 run_trace ID (선택)
+            domain: 스킬 도메인
+            human_note: 사람 메모
+
+        Returns:
+            생성된 outcome ID
+
+        Raises:
+            ValueError: verdict가 유효하지 않은 값일 때
+        """
+        valid_verdicts = {"approved", "edited", "rejected", "redo"}
+        if verdict not in valid_verdicts:
+            raise ValueError(f"Invalid verdict: {verdict}")
+
+        created_at = datetime.now(timezone.utc).isoformat()
+        cursor = self._conn.execute(
+            """
+            INSERT INTO outcomes
+                (run_trace_id, skill_id, domain, verdict, human_note, created_at)
+            VALUES (?, ?, ?, ?, ?, ?)
+            """,
+            (run_trace_id, skill_id, domain, verdict, human_note, created_at),
+        )
+        self._conn.commit()
+        return int(cursor.lastrowid)
+
+    def get_outcomes(
+        self,
+        skill_id: str | None = None,
+        verdict: str | None = None,
+        limit: int = 50,
+    ) -> list[dict]:
+        """outcome 목록을 조회한다.
+
+        Args:
+            skill_id: 스킬 ID 필터
+            verdict: verdict 필터
+            limit: 최대 반환 개수
+
+        Returns:
+            최신순 outcome 목록
+        """
+        query = "SELECT * FROM outcomes WHERE 1=1"
+        params: list[object] = []
+
+        if skill_id is not None:
+            query += " AND skill_id = ?"
+            params.append(skill_id)
+
+        if verdict is not None:
+            query += " AND verdict = ?"
+            params.append(verdict)
+
+        query += " ORDER BY created_at DESC, id DESC LIMIT ?"
+        params.append(limit)
+
+        cursor = self._conn.execute(query, tuple(params))
+        return [dict(row) for row in cursor.fetchall()]
+
+    def get_pilot_kpi(
+        self,
+        skill_id: str | None = None,
+        days: int | None = None,
+    ) -> dict:
+        """파일럿 KPI를 집계한다.
+
+        Args:
+            skill_id: 특정 스킬 필터 (None이면 전체)
+            days: 최근 N일 필터 (None이면 전체)
+
+        Returns:
+            total, approved, edited, rejected, redo + 5개 rate
+        """
+        query = """
+            SELECT
+                COUNT(*) as total,
+                SUM(CASE WHEN verdict = 'approved' THEN 1 ELSE 0 END) as approved,
+                SUM(CASE WHEN verdict = 'edited' THEN 1 ELSE 0 END) as edited,
+                SUM(CASE WHEN verdict = 'rejected' THEN 1 ELSE 0 END) as rejected,
+                SUM(CASE WHEN verdict = 'redo' THEN 1 ELSE 0 END) as redo
+            FROM outcomes WHERE 1=1
+        """
+        params: list[object] = []
+
+        if skill_id is not None:
+            query += " AND skill_id = ?"
+            params.append(skill_id)
+
+        if days is not None:
+            cutoff = (
+                datetime.now(timezone.utc) - timedelta(days=days)
+            ).isoformat()
+            query += " AND created_at >= ?"
+            params.append(cutoff)
+
+        cursor = self._conn.execute(query, tuple(params))
+        row = cursor.fetchone()
+
+        total = int(row["total"]) if row and row["total"] else 0
+        approved = int(row["approved"]) if row and row["approved"] else 0
+        edited = int(row["edited"]) if row and row["edited"] else 0
+        rejected = int(row["rejected"]) if row and row["rejected"] else 0
+        redo = int(row["redo"]) if row and row["redo"] else 0
+
+        return {
+            "total": total,
+            "approved": approved,
+            "edited": edited,
+            "rejected": rejected,
+            "redo": redo,
+            "acceptance_rate": round(approved / total, 3) if total > 0 else 0.0,
+            "edit_rate": round(edited / total, 3) if total > 0 else 0.0,
+            "reject_rate": round(rejected / total, 3) if total > 0 else 0.0,
+            "redo_rate": round(redo / total, 3) if total > 0 else 0.0,
+            "net_useful_rate": (
+                round((approved + edited) / total, 3) if total > 0 else 0.0
+            ),
+        }
+
+    def get_pilot_kpi_by_skill(
+        self,
+        days: int | None = None,
+        limit: int = 10,
+    ) -> list[dict]:
+        """스킬별 파일럿 KPI를 집계한다.
+
+        Args:
+            days: 최근 N일 필터 (None이면 전체)
+            limit: 최대 스킬 수
+
+        Returns:
+            스킬별 KPI 목록 (total 내림차순)
+        """
+        query = """
+            SELECT
+                skill_id,
+                COUNT(*) as total,
+                SUM(CASE WHEN verdict = 'approved' THEN 1 ELSE 0 END) as approved,
+                SUM(CASE WHEN verdict = 'edited' THEN 1 ELSE 0 END) as edited,
+                SUM(CASE WHEN verdict = 'rejected' THEN 1 ELSE 0 END) as rejected,
+                SUM(CASE WHEN verdict = 'redo' THEN 1 ELSE 0 END) as redo
+            FROM outcomes WHERE 1=1
+        """
+        params: list[object] = []
+
+        if days is not None:
+            cutoff = (
+                datetime.now(timezone.utc) - timedelta(days=days)
+            ).isoformat()
+            query += " AND created_at >= ?"
+            params.append(cutoff)
+
+        query += " GROUP BY skill_id ORDER BY total DESC LIMIT ?"
+        params.append(limit)
+
+        cursor = self._conn.execute(query, tuple(params))
+        results: list[dict] = []
+        for row in cursor.fetchall():
+            total = int(row["total"])
+            approved = int(row["approved"]) if row["approved"] else 0
+            edited = int(row["edited"]) if row["edited"] else 0
+            rejected = int(row["rejected"]) if row["rejected"] else 0
+            redo = int(row["redo"]) if row["redo"] else 0
+            results.append({
+                "skill_id": row["skill_id"],
+                "total": total,
+                "approved": approved,
+                "edited": edited,
+                "rejected": rejected,
+                "redo": redo,
+                "net_useful_rate": (
+                    round((approved + edited) / total, 3) if total > 0 else 0.0
+                ),
+            })
+        return results
 
     def close(self) -> None:
         """DB 연결을 닫는다."""

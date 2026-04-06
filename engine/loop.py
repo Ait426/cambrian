@@ -645,6 +645,64 @@ class CambrianEngine:
         """Loader 인스턴스를 반환한다."""
         return self._loader
 
+    def record_outcome(
+        self,
+        skill_id: str,
+        verdict: str,
+        run_trace_id: int | None = None,
+        human_note: str = "",
+    ) -> int:
+        """run 결과에 대한 사람의 사용 판정을 기록한다.
+
+        Args:
+            skill_id: 대상 스킬 ID
+            verdict: 사용 결과 (approved/edited/rejected/redo)
+            run_trace_id: 연결할 run_trace ID (선택)
+            human_note: 사람 메모
+
+        Returns:
+            생성된 outcome ID
+
+        Raises:
+            SkillNotFoundError: 스킬이 존재하지 않을 때
+        """
+        skill_data = self._registry.get(skill_id)
+        return self._registry.add_outcome(
+            skill_id=skill_id,
+            verdict=verdict,
+            run_trace_id=run_trace_id,
+            domain=skill_data.get("domain", ""),
+            human_note=human_note,
+        )
+
+    def get_pilot_report(
+        self,
+        skill_id: str | None = None,
+        days: int | None = None,
+    ) -> dict:
+        """파일럿 KPI 리포트를 반환한다.
+
+        Args:
+            skill_id: 특정 스킬 필터 (None이면 전체)
+            days: 최근 N일 기준 (None이면 전체)
+
+        Returns:
+            global KPI + 스킬별 breakdown + 메타 정보
+        """
+        global_kpi = self._registry.get_pilot_kpi(
+            skill_id=skill_id, days=days,
+        )
+        skill_breakdown = (
+            self._registry.get_pilot_kpi_by_skill(days=days)
+            if skill_id is None else []
+        )
+        return {
+            "global": global_kpi,
+            "by_skill": skill_breakdown,
+            "period_days": days,
+            "skill_filter": skill_id,
+        }
+
     def get_run_traces(
         self,
         trace_type: str | None = None,

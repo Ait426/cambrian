@@ -498,6 +498,46 @@ def main() -> None:
         help="평가 최대 케이스 수 (기본: 20)",
     )
 
+    # === outcome: 실행 결과 사용 판정 ===
+    outcome_parser = subparsers.add_parser(
+        "outcome",
+        help="실행 결과에 대한 사용 결과 기록",
+        parents=[common_parser],
+    )
+    outcome_parser.add_argument("skill_id", help="대상 스킬 ID")
+    outcome_parser.add_argument(
+        "verdict",
+        choices=["approved", "edited", "rejected", "redo"],
+        help="사용 결과",
+    )
+    outcome_parser.add_argument(
+        "--trace", type=int, default=None,
+        help="연결할 run_trace ID (선택)",
+    )
+    outcome_parser.add_argument(
+        "--note", default="",
+        help="사람 메모 (선택)",
+    )
+
+    # === pilot: 파일럿 KPI 리포트 ===
+    pilot_parser = subparsers.add_parser(
+        "pilot",
+        help="파일럿 KPI 리포트",
+        parents=[common_parser],
+    )
+    pilot_parser.add_argument(
+        "--skill", "-s", default=None,
+        help="특정 스킬 필터",
+    )
+    pilot_parser.add_argument(
+        "--days", "-d", type=int, default=None,
+        help="최근 N일 기준 (미지정 시 전체)",
+    )
+    pilot_parser.add_argument(
+        "--json", action="store_true", dest="json_output",
+        help="JSON 출력",
+    )
+
     # === promote: 스킬 release 상태 승격 ===
     promote_parser = subparsers.add_parser(
         "promote",
@@ -599,6 +639,10 @@ def main() -> None:
             _handle_trace(args)
         elif args.command == "eval":
             _handle_eval(args)
+        elif args.command == "outcome":
+            _handle_outcome(args)
+        elif args.command == "pilot":
+            _handle_pilot(args)
         elif args.command == "promote":
             _handle_promote(args)
         elif args.command == "unquarantine":
@@ -1144,6 +1188,21 @@ def _handle_global_stats(engine: "CambrianEngine") -> None:
         f"Max eval cases: {engine.MAX_EVAL_CASES}"
     )
 
+    # Pilot 요약
+    try:
+        pilot = registry.get_pilot_kpi()
+        if pilot["total"] > 0:
+            print(
+                f"\nPilot: {pilot['total']} outcomes, "
+                f"{pilot['net_useful_rate'] * 100:.1f}% net useful "
+                f"({pilot['approved']} approved, {pilot['edited']} edited, "
+                f"{pilot['rejected']} rejected, {pilot['redo']} redo)"
+            )
+        else:
+            print("\nPilot: no outcomes recorded")
+    except Exception:
+        print("\nPilot: no outcomes recorded")
+
 
 def _handle_skill_stats(engine: "CambrianEngine", skill_id: str) -> None:
     """스킬별 상세 통계를 출력한다.
@@ -1231,6 +1290,116 @@ def _handle_skill_stats(engine: "CambrianEngine", skill_id: str) -> None:
         )
     else:
         print("  Feedback:   (no feedback)")
+
+
+def _handle_outcome(args: argparse.Namespace) -> None:
+    """cambrian outcome 처리.
+
+    Args:
+        args: argparse가 파싱한 네임스페이스
+    """
+    engine = _create_engine(args)
+    try:
+        oid = engine.record_outcome(
+            skill_id=args.skill_id,
+            verdict=args.verdict,
+            run_trace_id=getattr(args, "trace", None),
+            human_note=getattr(args, "note", ""),
+        )
+        print(f"[OK] Outcome #{oid} recorded: {args.skill_id} → {args.verdict}")
+    except SkillNotFoundError:
+        print(f"Skill '{args.skill_id}' not found.", file=sys.stderr)
+        sys.exit(1)
+
+
+def _handle_pilot(args: argparse.Namespace) -> None:
+    """cambrian pilot 처리.
+
+    Args:
+        args: argparse가 파싱한 네임스페이스
+    """
+    engine = _create_engine(args)
+    report = engine.get_pilot_report(
+        skill_id=getattr(args, "skill", None),
+        days=getattr(args, "days", None),
+    )
+
+    if getattr(args, "json_output", False):
+        print(json.dumps(report, indent=2, ensure_ascii=False))
+        return
+
+    _print_pilot_report(report)
+
+
+def _print_pilot_report(report: dict) -> None:
+    """파일럿 리포트를 사람이 읽기 좋은 형태로 출력한다.
+
+    Args:
+        report: get_pilot_report() 반환값
+    """
+    g = report["global"]
+    period = report.get("period_days")
+    skill_filter = report.get("skill_filter")
+
+    if g["total"] == 0:
+        print("No pilot outcomes recorded yet.")
+        print(
+            "Record outcomes with: "
+            "cambrian outcome <skill_id> approved|edited|rejected|redo"
+        )
+        return
+
+    # 헤더
+    period_str = f"last {period} days" if period else "all time"
+    if skill_filter:
+        print(f"Pilot Report: {skill_filter} ({period_str})")
+    else:
+        print(f"Pilot Report ({period_str})")
+    print("═" * 50)
+
+    # Overall KPI
+    print(f"\nOverall KPI:")
+    print(f"  Total outcomes:   {g['total']}")
+    print(
+        f"  Approved:         {g['approved']}"
+        f"  ({g['acceptance_rate'] * 100:.1f}%)"
+    )
+    print(
+        f"  Edited:           {g['edited']}"
+        f"  ({g['edit_rate'] * 100:.1f}%)"
+    )
+    print(
+        f"  Rejected:         {g['rejected']}"
+        f"  ({g['reject_rate'] * 100:.1f}%)"
+    )
+    print(
+        f"  Redo:             {g['redo']}"
+        f"  ({g['redo_rate'] * 100:.1f}%)"
+    )
+    net = g["approved"] + g["edited"]
+    print(f"  ─────────────────────────────")
+    print(
+        f"  Net useful:       {net}"
+        f"  ({g['net_useful_rate'] * 100:.1f}%)"
+    )
+
+    # By Skill (글로벌 리포트일 때만)
+    by_skill = report.get("by_skill", [])
+    if by_skill:
+        print(
+            f"\n{'SKILL':<22} {'TOTAL':>5}  {'APPROVED':>8}  "
+            f"{'EDITED':>6}  {'REJECTED':>8}  {'REDO':>4}  {'NET_USEFUL':>10}"
+        )
+        for s in by_skill:
+            t = s["total"]
+            print(
+                f"  {s['skill_id']:<20} {t:>5}  "
+                f"{s['approved']:>3} ({s['approved']*100//t:>2}%)  "
+                f"{s['edited']:>3} ({s['edited']*100//t:>2}%)  "
+                f"{s['rejected']:>3} ({s['rejected']*100//t:>2}%)  "
+                f"{s['redo']:>4}  "
+                f"{s['net_useful_rate']*100:>6.1f}%"
+            )
 
 
 def _handle_promote(args: argparse.Namespace) -> None:
