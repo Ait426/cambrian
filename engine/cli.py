@@ -716,6 +716,22 @@ def main() -> None:
         help="regression 판정 임계값 (기본: 0.15)",
     )
 
+    # adoption rebuild-index
+    adoption_sub.add_parser("rebuild-index", help="file → derived index 재구성")
+
+    # adoption list
+    list_parser = adoption_sub.add_parser("list", help="채택 기록 목록")
+    list_parser.add_argument(
+        "--type", default=None,
+        choices=["adoption", "rollback", "validation"],
+        help="action_type 필터",
+    )
+    list_parser.add_argument("--skill", default=None, help="스킬 이름 필터")
+
+    # adoption show
+    show_parser = adoption_sub.add_parser("show", help="단일 record 조회")
+    show_parser.add_argument("target", help="run_id 또는 파일 경로")
+
     # === lineage: 채택 계보 트리 ===
     lineage_parser = subparsers.add_parser(
         "lineage",
@@ -2278,8 +2294,14 @@ def _handle_adoption(args: argparse.Namespace) -> None:
         _handle_adoption_latest(args)
     elif cmd == "validate":
         _handle_adoption_validate(args)
+    elif cmd == "rebuild-index":
+        _handle_adoption_rebuild_index(args)
+    elif cmd == "list":
+        _handle_adoption_list(args)
+    elif cmd == "show":
+        _handle_adoption_show(args)
     else:
-        print("Usage: cambrian adoption rollback|latest|validate")
+        print("Usage: cambrian adoption rollback|latest|validate|rebuild-index|list|show")
         sys.exit(1)
 
 
@@ -2564,6 +2586,115 @@ def _handle_adoption_validate(args: argparse.Namespace) -> None:
     print(f"  추천 행동     : {verdict_result['recommended_action']} ({verdict_result['verdict_reason']})")
     if record_path:
         print(f"  record 저장   : {record_path}")
+
+
+def _handle_adoption_rebuild_index(args: argparse.Namespace) -> None:
+    """cambrian adoption rebuild-index 처리.
+
+    Args:
+        args: argparse가 파싱한 네임스페이스
+    """
+    from engine.provenance import check_mismatch, rebuild_derived_index
+
+    adoptions_dir = getattr(args, "adoptions_dir", "adoptions")
+    engine = _create_engine(args)
+    conn = engine.get_registry()._conn
+
+    print("[rebuild-index] adoption files → derived index 재구성 중...")
+    result = rebuild_derived_index(adoptions_dir, conn)
+    print(
+        f"  삽입: {result['inserted']}건  "
+        f"스킵: {result['skipped']}건  "
+        f"오류: {result['errors']}건"
+    )
+
+    mismatches = check_mismatch(adoptions_dir, conn)
+    if mismatches:
+        print(f"  [경고] 여전히 {len(mismatches)}건 불일치")
+    else:
+        print("  [OK] file ↔ index 일치 확인")
+
+
+def _handle_adoption_list(args: argparse.Namespace) -> None:
+    """cambrian adoption list 처리.
+
+    Args:
+        args: argparse가 파싱한 네임스페이스
+    """
+    from engine.provenance import scan_adoption_files
+
+    adoptions_dir = getattr(args, "adoptions_dir", "adoptions")
+    records = scan_adoption_files(adoptions_dir)
+
+    # 필터
+    type_filter = getattr(args, "type", None)
+    skill_filter = getattr(args, "skill", None)
+
+    filtered = []
+    for r in records:
+        if r.get("_error"):
+            continue
+        if type_filter and r.get("action_type") != type_filter:
+            continue
+        skill = r.get("skill_name") or r.get("skill_id") or ""
+        if skill_filter and skill != skill_filter:
+            continue
+        filtered.append(r)
+
+    if not filtered:
+        print("[adoption list] 조건에 맞는 기록 없음")
+        return
+
+    print(
+        f"\n{'adopted_at':20} {'action_type':12} {'skill_name':20} {'run_id':10}"
+    )
+    print("─" * 64)
+    for r in filtered:
+        at = (r.get("adopted_at") or r.get("timestamp") or "")[:19]
+        action = r.get("action_type") or "adoption"
+        skill = r.get("skill_name") or r.get("skill_id") or "?"
+        rid = (r.get("run_id") or "?")[:8]
+        print(f"{at:20} {action:12} {skill:20} {rid:10}")
+    print(f"\n총 {len(filtered)}건")
+
+    # 에러 파일 경고
+    err_count = sum(1 for r in records if r.get("_error"))
+    if err_count:
+        print(f"  [경고] 파싱 실패 파일 {err_count}건")
+
+
+def _handle_adoption_show(args: argparse.Namespace) -> None:
+    """cambrian adoption show 처리.
+
+    Args:
+        args: argparse가 파싱한 네임스페이스
+    """
+    from engine.provenance import load_adoption_record, scan_adoption_files
+
+    target = args.target
+    adoptions_dir = getattr(args, "adoptions_dir", "adoptions")
+
+    # 파일 경로인지 run_id인지 판별
+    if Path(target).exists():
+        try:
+            data = load_adoption_record(target)
+            print(json.dumps(data, indent=2, ensure_ascii=False))
+        except ValueError as exc:
+            print(f"[show] 오류: {exc}", file=sys.stderr)
+            sys.exit(1)
+    else:
+        # run_id로 검색
+        records = scan_adoption_files(adoptions_dir)
+        found = None
+        for r in records:
+            if not r.get("_error") and r.get("run_id", "").startswith(target):
+                found = r
+                break
+        if found:
+            print(json.dumps(found, indent=2, ensure_ascii=False))
+        else:
+            print(f"[show] run_id '{target}'에 해당하는 record 없음", file=sys.stderr)
+            sys.exit(1)
 
 
 def _handle_lineage(args: argparse.Namespace) -> None:

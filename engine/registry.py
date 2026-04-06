@@ -1,4 +1,11 @@
-"""Cambrian 스킬 레지스트리."""
+"""Cambrian 스킬 레지스트리.
+
+CACHE/ACCELERATOR ONLY (adoption lineage 관련)
+===============================================
+SOURCE OF TRUTH: adoption record files (see engine/provenance.py)
+adoption_lineage 테이블은 파생 인덱스일 뿐이며, authoritative read에는
+provenance.scan_adoption_files() 또는 reconstruct_lineage()를 사용하라.
+"""
 
 import json
 import logging

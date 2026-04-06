@@ -222,45 +222,53 @@ def execute_rollback(
 def resolve_previous_adoption(
     skill_name: str,
     current_run_id: str,
-    db_conn: sqlite3.Connection,
+    db_conn: sqlite3.Connection | None = None,
     adoptions_dir: str = "adoptions",
 ) -> Optional[str]:
-    """adoption_lineage에서 현재 run_id의 parent를 찾아 경로를 반환한다.
+    """현재 run_id의 직전 adoption record 경로를 반환한다.
+
+    PRIMARY: file-first (provenance.find_previous_adoption).
+    FALLBACK: db_conn 있으면 lineage table 사용.
 
     Args:
         skill_name: 스킬 이름
         current_run_id: 현재 run ID
-        db_conn: SQLite 연결
+        db_conn: SQLite 연결 (cache fallback용, None 허용)
         adoptions_dir: adoption record 디렉토리
 
     Returns:
         이전 adoption record 경로 또는 None
     """
-    row = db_conn.execute(
-        """
-        SELECT parent_run_id FROM adoption_lineage
-        WHERE child_run_id = ? AND child_skill_name = ?
-        ORDER BY adopted_at DESC LIMIT 1
-        """,
-        (current_run_id, skill_name),
-    ).fetchone()
+    # PRIMARY: file-first
+    from engine.provenance import find_previous_adoption
+    result = find_previous_adoption(skill_name, current_run_id, adoptions_dir)
+    if result:
+        return result.get("_source_path") or str(
+            Path(adoptions_dir) / result.get("_source_filename", "")
+        )
 
-    if not row or not row[0]:
-        return None
+    # FALLBACK: cache (db_conn이 있을 때만)
+    if db_conn is not None:
+        row = db_conn.execute(
+            """
+            SELECT parent_run_id FROM adoption_lineage
+            WHERE child_run_id = ? AND child_skill_name = ?
+            ORDER BY adopted_at DESC LIMIT 1
+            """,
+            (current_run_id, skill_name),
+        ).fetchone()
 
-    parent_run_id = row[0]
-
-    # adoptions_dir에서 parent_run_id가 포함된 파일 검색
-    adopt_dir = Path(adoptions_dir)
-    if not adopt_dir.exists():
-        return None
-
-    for f in adopt_dir.glob("adoption_*.json"):
-        try:
-            data = json.loads(f.read_text(encoding="utf-8"))
-            if data.get("run_id") == parent_run_id:
-                return str(f)
-        except Exception:
-            continue
+        if row and row[0]:
+            parent_run_id = row[0]
+            adopt_dir = Path(adoptions_dir)
+            if not adopt_dir.exists():
+                return None
+            for f in adopt_dir.glob("adoption_*.json"):
+                try:
+                    data = json.loads(f.read_text(encoding="utf-8"))
+                    if data.get("run_id") == parent_run_id:
+                        return str(f)
+                except Exception:
+                    continue
 
     return None
