@@ -44,6 +44,7 @@ class CambrianEngine:
         db_path: str | Path = ":memory:",
         external_skill_dirs: list[str | Path] | None = None,
         provider: LLMProvider | None = None,
+        policy_path: str | Path | None = None,
     ):
         """Cambrian 엔진을 초기화한다.
 
@@ -54,7 +55,16 @@ class CambrianEngine:
             db_path: SQLite DB 경로
             external_skill_dirs: 외부 스킬 검색 경로 리스트
             provider: LLM 프로바이더. None이면 필요 시 자동 생성.
+            policy_path: 정책 JSON 파일 경로. None이면 자동 탐색 또는 기본값.
         """
+        from engine.policy import CambrianPolicy
+        self._policy = CambrianPolicy(policy_path)
+
+        # policy 값으로 클래스 상수 덮어쓰기
+        self.MAX_CANDIDATES_PER_RUN = self._policy.max_candidates_per_run
+        self.MAX_MODE_A_PER_RUN = self._policy.max_mode_a_per_run
+        self.MAX_EVAL_CASES = self._policy.max_eval_cases
+
         self._provider = provider
         self._loader = SkillLoader(schemas_dir)
         self._executor = SkillExecutor(provider=self._provider)
@@ -349,7 +359,7 @@ class CambrianEngine:
     def _check_auto_promote(self, skill_id: str) -> None:
         """experimental 스킬이 candidate 조건을 충족하면 자동 승격한다.
 
-        조건: total_executions >= 10, fitness_score >= 0.5, quarantine 이력 < 2회.
+        조건: policy의 promote_min_executions/promote_min_fitness 기준.
 
         Args:
             skill_id: 체크할 스킬 ID
@@ -360,11 +370,11 @@ class CambrianEngine:
                 return
 
             if (
-                skill_data["total_executions"] >= 10
-                and skill_data["fitness_score"] >= 0.5
+                skill_data["total_executions"] >= self._policy.promote_min_executions
+                and skill_data["fitness_score"] >= self._policy.promote_min_fitness
             ):
                 q_count = self._registry.get_quarantine_count(skill_id)
-                if q_count >= 2:
+                if q_count >= self._policy.quarantine_block_count:
                     logger.info(
                         "승격 차단: '%s' quarantine %d회 이력",
                         skill_id, q_count,
@@ -387,7 +397,7 @@ class CambrianEngine:
     def _check_auto_demote(self, skill_id: str) -> None:
         """fitness가 크게 떨어진 candidate/production 스킬을 experimental로 강등한다.
 
-        조건: release_state가 candidate 또는 production이고 fitness < 0.3.
+        조건: release_state가 candidate/production이고 fitness < policy.demote_fitness_threshold.
 
         Args:
             skill_id: 체크할 스킬 ID
@@ -395,7 +405,7 @@ class CambrianEngine:
         try:
             skill_data = self._registry.get(skill_id)
             state = skill_data.get("release_state", "experimental")
-            if state in ("candidate", "production") and skill_data["fitness_score"] < 0.3:
+            if state in ("candidate", "production") and skill_data["fitness_score"] < self._policy.demote_fitness_threshold:
                 self._registry.update_release_state(
                     skill_id,
                     new_state="experimental",
@@ -409,7 +419,7 @@ class CambrianEngine:
     def _check_auto_rollback(self, skill_id: str) -> None:
         """진화 채택 후 성능이 악화되면 자동으로 이전 버전으로 복원한다.
 
-        조건: fitness < 0.2 + 총 실행 5회 이상 + 최근 adopted 이력 존재.
+        조건: fitness < policy.rollback_fitness_threshold + 총 실행 5회 이상 + 최근 adopted 이력 존재.
         복원 시 해당 record에 auto_rolled_back=1을 마킹한다.
 
         Args:
@@ -417,7 +427,7 @@ class CambrianEngine:
         """
         try:
             skill_data = self._registry.get(skill_id)
-            if skill_data["fitness_score"] >= 0.2:
+            if skill_data["fitness_score"] >= self._policy.rollback_fitness_threshold:
                 return
             if skill_data["total_executions"] < 5:
                 return
@@ -640,6 +650,10 @@ class CambrianEngine:
     def get_registry(self) -> SkillRegistry:
         """Registry 인스턴스를 반환한다. 테스트·디버깅용."""
         return self._registry
+
+    def get_policy(self) -> "CambrianPolicy":
+        """현재 적용된 정책을 반환한다."""
+        return self._policy
 
     def get_loader(self) -> SkillLoader:
         """Loader 인스턴스를 반환한다."""
@@ -1162,6 +1176,10 @@ class CambrianEngine:
             self._loader, self._executor, self._registry,
             provider=self._provider,
         )
+        # policy 값 주입
+        evolver.ADOPTION_MARGIN = self._policy.adoption_margin
+        evolver.TRIAL_COUNT = self._policy.trial_count
+        evolver.MAX_EVAL_INPUTS = self._policy.max_eval_inputs_evolve
         return evolver.evolve(skill_id, test_input, feedback_list)
 
     def benchmark(

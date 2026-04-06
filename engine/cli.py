@@ -54,6 +54,12 @@ def main() -> None:
         help="외부 스킬 검색 디렉토리 (여러 개 가능)",
     )
     common_parser.add_argument(
+        "--policy",
+        type=str,
+        default=None,
+        help="정책 JSON 파일 경로 (기본: cambrian_policy.json 또는 내장 기본값)",
+    )
+    common_parser.add_argument(
         "--verbose",
         "-v",
         action="store_true",
@@ -699,6 +705,7 @@ def _create_engine(args: argparse.Namespace) -> CambrianEngine:
         db_path=args.db,
         external_skill_dirs=args.external if args.external else None,
         provider=provider,
+        policy_path=getattr(args, "policy", None),
     )
 
 
@@ -1199,11 +1206,24 @@ def _handle_global_stats(engine: "CambrianEngine") -> None:
         f"Quarantined: {release_counts['quarantined']}"
     )
 
+    # Policy 표시
+    policy = engine.get_policy()
+    print(f"\nPolicy:")
+    print(f"  Source: {policy.policy_source}")
     print(
-        f"\nBudget Limits:"
-        f"\n  Max candidates/run: {engine.MAX_CANDIDATES_PER_RUN} | "
-        f"Max Mode A/run: {engine.MAX_MODE_A_PER_RUN} | "
-        f"Max eval cases: {engine.MAX_EVAL_CASES}"
+        f"  Budget: candidates={policy.max_candidates_per_run}, "
+        f"mode_a={policy.max_mode_a_per_run}, "
+        f"eval_cases={policy.max_eval_cases}"
+    )
+    print(
+        f"  Governance: promote≥{policy.promote_min_executions}exec/"
+        f"{policy.promote_min_fitness:.2f}fit, "
+        f"demote<{policy.demote_fitness_threshold:.2f}, "
+        f"rollback<{policy.rollback_fitness_threshold:.2f}"
+    )
+    print(
+        f"  Evolution: margin={policy.adoption_margin:.2f}, "
+        f"trials={policy.trial_count}"
     )
 
     # Pilot 요약
@@ -1589,26 +1609,31 @@ def _handle_promote(args: argparse.Namespace) -> None:
         )
         sys.exit(1)
 
-    # production 승격 시 최소 조건 확인
+    # production 승격 시 최소 조건 확인 (policy 기준)
+    policy = engine.get_policy()
     if target == "production":
-        if skill_data["total_executions"] < 10:
+        min_exec = policy.promote_min_executions
+        min_fit = policy.promote_min_fitness
+        q_block = policy.quarantine_block_count
+        if skill_data["total_executions"] < min_exec:
             print(
                 f"[FAIL] Cannot promote: total_executions="
-                f"{skill_data['total_executions']} < 10",
+                f"{skill_data['total_executions']} < {min_exec}",
                 file=sys.stderr,
             )
             sys.exit(1)
-        if skill_data["fitness_score"] < 0.5:
+        if skill_data["fitness_score"] < min_fit:
             print(
                 f"[FAIL] Cannot promote: fitness="
-                f"{skill_data['fitness_score']:.4f} < 0.5",
+                f"{skill_data['fitness_score']:.4f} < {min_fit}",
                 file=sys.stderr,
             )
             sys.exit(1)
         q_count = registry.get_quarantine_count(args.skill_id)
-        if q_count >= 2:
+        if q_count >= q_block:
             print(
-                f"[FAIL] Cannot promote: quarantined {q_count} times (max 1)",
+                f"[FAIL] Cannot promote: quarantined {q_count} times "
+                f"(max {q_block - 1})",
                 file=sys.stderr,
             )
             sys.exit(1)
