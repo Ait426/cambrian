@@ -696,6 +696,26 @@ def main() -> None:
     # adoption latest
     adoption_sub.add_parser("latest", help="현재 latest adoption 확인")
 
+    # adoption validate
+    val_parser = adoption_sub.add_parser("validate", help="현재 adoption 재검증")
+    val_parser.add_argument(
+        "--adoption", default=None, dest="adoption_path",
+        help="명시 adoption record 경로 (미지정 시 latest)",
+    )
+    val_parser.add_argument(
+        "--spec", default=None, dest="spec_override",
+        help="scenario spec override 경로",
+    )
+    val_parser.add_argument(
+        "--out-dir", default="adoptions/validations", dest="val_out_dir",
+        help="validation record 저장 디렉토리",
+    )
+    val_parser.add_argument(
+        "--regression-threshold", type=float, default=0.15,
+        dest="regression_threshold",
+        help="regression 판정 임계값 (기본: 0.15)",
+    )
+
     # === lineage: 채택 계보 트리 ===
     lineage_parser = subparsers.add_parser(
         "lineage",
@@ -2256,8 +2276,10 @@ def _handle_adoption(args: argparse.Namespace) -> None:
         _handle_adoption_rollback(args)
     elif cmd == "latest":
         _handle_adoption_latest(args)
+    elif cmd == "validate":
+        _handle_adoption_validate(args)
     else:
-        print("Usage: cambrian adoption rollback|latest")
+        print("Usage: cambrian adoption rollback|latest|validate")
         sys.exit(1)
 
 
@@ -2376,6 +2398,172 @@ def _handle_adoption_latest(args: argparse.Namespace) -> None:
     action = data.get("action")
     if action:
         print(f"  action   : {action}")
+
+
+def _handle_adoption_validate(args: argparse.Namespace) -> None:
+    """cambrian adoption validate 처리.
+
+    Args:
+        args: argparse가 파싱한 네임스페이스
+    """
+    from engine.validation import (
+        ValidationError,
+        compute_verdict,
+        load_comparison_basis,
+        run_fresh_validation,
+        save_validation_record,
+    )
+
+    adoptions_dir = getattr(args, "adoptions_dir", "adoptions")
+    val_out_dir = getattr(args, "val_out_dir", "adoptions/validations")
+
+    # 1. adoption 로드
+    adoption_path = getattr(args, "adoption_path", None)
+    if adoption_path:
+        p = Path(adoption_path)
+        if not p.exists():
+            print(f"[validate] ✗ error — adoption 파일 없음: {p}", file=sys.stderr)
+            sys.exit(1)
+        try:
+            adoption = json.loads(p.read_text(encoding="utf-8"))
+        except Exception as exc:
+            print(f"[validate] ✗ error — {exc}", file=sys.stderr)
+            sys.exit(1)
+    else:
+        latest_path = Path(adoptions_dir) / "_latest.json"
+        if not latest_path.exists():
+            print("[validate] ✗ error — _latest.json 없음 (채택 기록 없음)", file=sys.stderr)
+            sys.exit(1)
+        adoption = json.loads(latest_path.read_text(encoding="utf-8"))
+
+    skill_name = adoption.get("skill_id") or adoption.get("skill_name") or "unknown"
+    run_id = adoption.get("run_id", "?")
+    adopted_at = adoption.get("timestamp") or adoption.get("adopted_at") or ""
+
+    # 2. comparison basis
+    basis = load_comparison_basis(adoption, adoptions_dir)
+
+    # 3. fresh run
+    scenario_ref = adoption.get("scenario_ref") or adoption.get("scenario_id")
+    spec_override = getattr(args, "spec_override", None)
+
+    fresh_run = None
+    try:
+        engine = _create_engine(args)
+        fresh_run = run_fresh_validation(
+            scenario_ref=scenario_ref,
+            spec_override=spec_override,
+            skill_name=skill_name,
+            engine=engine,
+        )
+    except ValidationError as exc:
+        # fresh run 실패 → basis만으로 inconclusive 또는 error
+        if basis["basis_metrics"] and not spec_override and not scenario_ref:
+            # spec 없으면 inconclusive
+            fresh_run = {"run_id": "", "report_path": None, "fresh_metrics": {}}
+        else:
+            # error verdict
+            record = {
+                "schema_version": "1.0",
+                "action_type": "validation",
+                "skill_name": skill_name,
+                "timestamp": "",
+                "target_adoption": {"run_id": run_id, "adopted_at": adopted_at, "record_path": ""},
+                "scenario_ref": scenario_ref,
+                "spec_override": spec_override,
+                "comparison_basis": basis,
+                "fresh_run": None,
+                "metric_deltas": {},
+                "verdict": "error",
+                "verdict_reason": str(exc),
+                "recommended_action": "investigate",
+                "notes": None,
+                "operator": "cli",
+            }
+            try:
+                rp = save_validation_record(record, val_out_dir)
+                print(f"  record 저장   : {rp}")
+            except Exception:
+                pass
+            print(f"[validate] ✗ error — {exc}", file=sys.stderr)
+            print("현재 adoption 상태는 변경되지 않았습니다.", file=sys.stderr)
+            sys.exit(1)
+    except Exception as exc:
+        print(f"[validate] ✗ error — {exc}", file=sys.stderr)
+        print("현재 adoption 상태는 변경되지 않았습니다.", file=sys.stderr)
+        sys.exit(1)
+
+    # 4. verdict
+    reg_threshold = getattr(args, "regression_threshold", 0.15)
+    verdict_result = compute_verdict(
+        basis["basis_metrics"],
+        fresh_run["fresh_metrics"],
+        regression_threshold=reg_threshold,
+    )
+
+    # 5. validation record 저장
+    from datetime import datetime as _dt, timezone as _tz
+    record = {
+        "schema_version": "1.0",
+        "action_type": "validation",
+        "skill_name": skill_name,
+        "timestamp": _dt.now(_tz.utc).isoformat(),
+        "target_adoption": {
+            "run_id": run_id,
+            "adopted_at": adopted_at,
+            "record_path": str(adoption_path or ""),
+        },
+        "scenario_ref": scenario_ref,
+        "spec_override": spec_override,
+        "comparison_basis": basis,
+        "fresh_run": fresh_run,
+        "metric_deltas": verdict_result["metric_deltas"],
+        "verdict": verdict_result["verdict"],
+        "verdict_reason": verdict_result["verdict_reason"],
+        "recommended_action": verdict_result["recommended_action"],
+        "notes": None,
+        "operator": "cli",
+    }
+
+    record_path = ""
+    try:
+        record_path = save_validation_record(record, val_out_dir)
+    except Exception as exc:
+        print(f"  [WARN] record 저장 실패: {exc}", file=sys.stderr)
+
+    # 6. CLI 출력
+    verdict = verdict_result["verdict"]
+
+    if verdict == "inconclusive":
+        print(f"[validate] ⚠ inconclusive")
+        print(f"  reason: {verdict_result['verdict_reason']}")
+        print("  채택 기록을 확인하거나 --spec으로 직접 비교 기준을 제공하라.")
+        if record_path:
+            print(f"  record 저장   : {record_path}")
+        return
+
+    icon_map = {"worse": "⚠", "better": "✓", "neutral": "─", "unknown": "?"}
+
+    print(f"[validate] ✓ 재검증 완료")
+    print(f"  skill         : {skill_name}")
+    print(f"  adoption      : {run_id[:8]} ({adopted_at[:16]})")
+    print(f"  비교 기준     : {basis['source']} ({basis.get('ref_path') or 'inline'})")
+    print(f"  fresh run     : {fresh_run['run_id']}")
+    print()
+    print(f"  metric 비교:")
+    for name, delta in verdict_result["metric_deltas"].items():
+        icon = icon_map.get(delta["direction"], "?")
+        basis_v = delta.get("basis")
+        fresh_v = delta.get("fresh")
+        pct = delta.get("delta_pct", 0) * 100
+        basis_s = f"{basis_v:.4f}" if basis_v is not None else "?"
+        fresh_s = f"{fresh_v:.4f}" if fresh_v is not None else "?"
+        print(f"    {name:<16}: {basis_s} → {fresh_s}  ({pct:+.1f}%)  {icon}")
+    print()
+    print(f"  verdict       : {verdict}")
+    print(f"  추천 행동     : {verdict_result['recommended_action']} ({verdict_result['verdict_reason']})")
+    if record_path:
+        print(f"  record 저장   : {record_path}")
 
 
 def _handle_lineage(args: argparse.Namespace) -> None:
