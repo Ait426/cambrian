@@ -168,6 +168,15 @@ class CambrianEngine:
         )[:self.MAX_MODE_A_PER_RUN]
 
         run_targets = mode_b + mode_a
+
+        # release_state 기반 정렬: production > candidate > experimental
+        _state_priority = {"production": 0, "candidate": 1, "experimental": 2}
+        run_targets.sort(
+            key=lambda c: _state_priority.get(
+                c.get("release_state", "experimental"), 99
+            )
+        )
+
         original_candidate_count = len(run_targets)
         truncated = False
 
@@ -175,8 +184,12 @@ class CambrianEngine:
             truncated = True
             run_targets = sorted(
                 run_targets,
-                key=lambda c: c["fitness_score"],
-                reverse=True,
+                key=lambda c: (
+                    _state_priority.get(
+                        c.get("release_state", "experimental"), 99
+                    ),
+                    -c["fitness_score"],
+                ),
             )[:self.MAX_CANDIDATES_PER_RUN]
             logger.warning(
                 "Budget cap: %d candidates truncated to %d",
@@ -237,6 +250,8 @@ class CambrianEngine:
                     except Exception as exc:
                         logger.warning("Failed to save auto-feedback: %s", exc)
 
+                # fitness 하락 시 자동 강등 체크
+                self._check_auto_demote(skill.id)
                 # 진화 채택 후 성능 악화 시 자동 롤백 체크
                 self._check_auto_rollback(skill.id)
 
@@ -328,7 +343,68 @@ class CambrianEngine:
         except Exception:
             pass
 
+        self._check_auto_promote(best_result.skill_id)
         return best_result
+
+    def _check_auto_promote(self, skill_id: str) -> None:
+        """experimental 스킬이 candidate 조건을 충족하면 자동 승격한다.
+
+        조건: total_executions >= 10, fitness_score >= 0.5, quarantine 이력 < 2회.
+
+        Args:
+            skill_id: 체크할 스킬 ID
+        """
+        try:
+            skill_data = self._registry.get(skill_id)
+            if skill_data.get("release_state") != "experimental":
+                return
+
+            if (
+                skill_data["total_executions"] >= 10
+                and skill_data["fitness_score"] >= 0.5
+            ):
+                q_count = self._registry.get_quarantine_count(skill_id)
+                if q_count >= 2:
+                    logger.info(
+                        "승격 차단: '%s' quarantine %d회 이력",
+                        skill_id, q_count,
+                    )
+                    return
+
+                self._registry.update_release_state(
+                    skill_id,
+                    new_state="candidate",
+                    reason=(
+                        f"auto: executions={skill_data['total_executions']}, "
+                        f"fitness={skill_data['fitness_score']:.4f}"
+                    ),
+                    triggered_by="auto",
+                )
+                logger.info("자동 승격: '%s' → candidate", skill_id)
+        except Exception:
+            pass  # 승격 실패가 실행을 중단하지 않음
+
+    def _check_auto_demote(self, skill_id: str) -> None:
+        """fitness가 크게 떨어진 candidate/production 스킬을 experimental로 강등한다.
+
+        조건: release_state가 candidate 또는 production이고 fitness < 0.3.
+
+        Args:
+            skill_id: 체크할 스킬 ID
+        """
+        try:
+            skill_data = self._registry.get(skill_id)
+            state = skill_data.get("release_state", "experimental")
+            if state in ("candidate", "production") and skill_data["fitness_score"] < 0.3:
+                self._registry.update_release_state(
+                    skill_id,
+                    new_state="experimental",
+                    reason=f"auto: fitness dropped to {skill_data['fitness_score']:.4f}",
+                    triggered_by="auto",
+                )
+                logger.warning("자동 강등: '%s' → experimental", skill_id)
+        except Exception:
+            pass
 
     def _check_auto_rollback(self, skill_id: str) -> None:
         """진화 채택 후 성능이 악화되면 자동으로 이전 버전으로 복원한다.
@@ -372,6 +448,14 @@ class CambrianEngine:
                 "Auto-rollback executed for skill '%s' (record #%d)",
                 skill_id,
                 record["id"],
+            )
+
+            # 롤백된 스킬을 quarantine 상태로 격리
+            self._registry.update_release_state(
+                skill_id,
+                new_state="quarantined",
+                reason=f"auto_rollback: fitness={skill_data['fitness_score']:.4f}",
+                triggered_by="auto",
             )
         except Exception:
             pass  # 롤백 실패는 조용히 무시

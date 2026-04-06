@@ -498,6 +498,47 @@ def main() -> None:
         help="평가 최대 케이스 수 (기본: 20)",
     )
 
+    # === promote: 스킬 release 상태 승격 ===
+    promote_parser = subparsers.add_parser(
+        "promote",
+        help="스킬을 production으로 승격",
+        parents=[common_parser],
+    )
+    promote_parser.add_argument("skill_id", help="승격할 스킬 ID")
+    promote_parser.add_argument(
+        "--to", default="production",
+        choices=["candidate", "production"],
+        help="목표 상태 (기본: production)",
+    )
+    promote_parser.add_argument(
+        "--reason", default="manual promotion",
+        help="승격 사유",
+    )
+
+    # === unquarantine: 격리 해제 ===
+    unq_parser = subparsers.add_parser(
+        "unquarantine",
+        help="격리된 스킬 해제 (experimental로 복귀)",
+        parents=[common_parser],
+    )
+    unq_parser.add_argument("skill_id", help="해제할 스킬 ID")
+    unq_parser.add_argument(
+        "--reason", default="manual unquarantine", help="해제 사유",
+    )
+
+    # === governance: release governance 이력 조회 ===
+    gov_parser = subparsers.add_parser(
+        "governance",
+        help="release governance 이력 조회",
+        parents=[common_parser],
+    )
+    gov_parser.add_argument(
+        "--skill", default=None, help="특정 스킬 필터",
+    )
+    gov_parser.add_argument(
+        "--limit", type=int, default=20, help="최대 결과 수",
+    )
+
     args = parser.parse_args()
 
     log_level = logging.DEBUG if args.verbose else logging.WARNING
@@ -558,6 +599,12 @@ def main() -> None:
             _handle_trace(args)
         elif args.command == "eval":
             _handle_eval(args)
+        elif args.command == "promote":
+            _handle_promote(args)
+        elif args.command == "unquarantine":
+            _handle_unquarantine(args)
+        elif args.command == "governance":
+            _handle_governance(args)
     except KeyboardInterrupt:
         print("\nInterrupted.")
         sys.exit(1)
@@ -1074,6 +1121,22 @@ def _handle_global_stats(engine: "CambrianEngine") -> None:
     except Exception:
         print("  Avg feedback:        (not tracked)")
 
+    # Release States 요약
+    release_counts: dict[str, int] = {
+        "production": 0, "candidate": 0, "experimental": 0, "quarantined": 0,
+    }
+    for skill in skills:
+        rs = skill.get("release_state", "experimental")
+        if rs in release_counts:
+            release_counts[rs] += 1
+    print(
+        f"\nRelease States:"
+        f"\n  Production: {release_counts['production']} | "
+        f"Candidate: {release_counts['candidate']} | "
+        f"Experimental: {release_counts['experimental']} | "
+        f"Quarantined: {release_counts['quarantined']}"
+    )
+
     print(
         f"\nBudget Limits:"
         f"\n  Max candidates/run: {engine.MAX_CANDIDATES_PER_RUN} | "
@@ -1110,6 +1173,7 @@ def _handle_skill_stats(engine: "CambrianEngine", skill_id: str) -> None:
     print(f"  Tags:        {', '.join(tags) if tags else '(none)'}")
     print(f"  Mode:        {s['mode']}")
     print(f"  Status:      {s['status']}")
+    print(f"  Release:     {s.get('release_state', 'experimental')}")
     print(f"  Version:     {s['version']}")
 
     # Performance
@@ -1167,6 +1231,128 @@ def _handle_skill_stats(engine: "CambrianEngine", skill_id: str) -> None:
         )
     else:
         print("  Feedback:   (no feedback)")
+
+
+def _handle_promote(args: argparse.Namespace) -> None:
+    """cambrian promote 처리.
+
+    Args:
+        args: argparse가 파싱한 네임스페이스
+    """
+    engine = _create_engine(args)
+    registry = engine.get_registry()
+
+    try:
+        skill_data = registry.get(args.skill_id)
+    except SkillNotFoundError:
+        print(f"Skill '{args.skill_id}' not found.", file=sys.stderr)
+        sys.exit(1)
+
+    current = skill_data.get("release_state", "experimental")
+    target = getattr(args, "to", "production")
+
+    if current == "quarantined":
+        print(
+            "[FAIL] Cannot promote quarantined skill. "
+            "Use 'cambrian unquarantine' first.",
+            file=sys.stderr,
+        )
+        sys.exit(1)
+
+    # production 승격 시 최소 조건 확인
+    if target == "production":
+        if skill_data["total_executions"] < 10:
+            print(
+                f"[FAIL] Cannot promote: total_executions="
+                f"{skill_data['total_executions']} < 10",
+                file=sys.stderr,
+            )
+            sys.exit(1)
+        if skill_data["fitness_score"] < 0.5:
+            print(
+                f"[FAIL] Cannot promote: fitness="
+                f"{skill_data['fitness_score']:.4f} < 0.5",
+                file=sys.stderr,
+            )
+            sys.exit(1)
+        q_count = registry.get_quarantine_count(args.skill_id)
+        if q_count >= 2:
+            print(
+                f"[FAIL] Cannot promote: quarantined {q_count} times (max 1)",
+                file=sys.stderr,
+            )
+            sys.exit(1)
+
+    registry.update_release_state(
+        args.skill_id,
+        new_state=target,
+        reason=args.reason,
+        triggered_by="manual",
+    )
+    print(f"[OK] '{args.skill_id}' promoted: {current} → {target}")
+
+
+def _handle_unquarantine(args: argparse.Namespace) -> None:
+    """cambrian unquarantine 처리.
+
+    Args:
+        args: argparse가 파싱한 네임스페이스
+    """
+    engine = _create_engine(args)
+    registry = engine.get_registry()
+
+    try:
+        skill_data = registry.get(args.skill_id)
+    except SkillNotFoundError:
+        print(f"Skill '{args.skill_id}' not found.", file=sys.stderr)
+        sys.exit(1)
+
+    current = skill_data.get("release_state", "experimental")
+    if current != "quarantined":
+        print(
+            f"Skill '{args.skill_id}' is not quarantined (current: {current}).",
+            file=sys.stderr,
+        )
+        sys.exit(1)
+
+    registry.update_release_state(
+        args.skill_id,
+        new_state="experimental",
+        reason=args.reason,
+        triggered_by="manual",
+    )
+    print(f"[OK] '{args.skill_id}' unquarantined → experimental")
+
+
+def _handle_governance(args: argparse.Namespace) -> None:
+    """cambrian governance 처리.
+
+    Args:
+        args: argparse가 파싱한 네임스페이스
+    """
+    engine = _create_engine(args)
+    registry = engine.get_registry()
+    logs = registry.get_governance_log(
+        skill_id=getattr(args, "skill", None),
+        limit=args.limit,
+    )
+
+    if not logs:
+        print("No governance history.")
+        return
+
+    print(
+        f"{'ID':<5} {'SKILL':<20} {'FROM':<14} {'TO':<14} "
+        f"{'BY':<8} {'REASON':<30} {'DATE'}"
+    )
+    print("─" * 105)
+    for log in logs:
+        print(
+            f"{log['id']:<5} {log['skill_id']:<20} "
+            f"{log['from_state']:<14} {log['to_state']:<14} "
+            f"{log['triggered_by']:<8} "
+            f"{log['reason'][:28]:<30} {log['created_at'][:16]}"
+        )
 
 
 def _handle_export(args: argparse.Namespace) -> None:

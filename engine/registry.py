@@ -43,6 +43,7 @@ class SkillRegistry:
                 timeout_seconds       INTEGER NOT NULL DEFAULT 30,
                 skill_path            TEXT NOT NULL,
                 status                TEXT NOT NULL DEFAULT 'newborn',
+                release_state         TEXT NOT NULL DEFAULT 'experimental',
                 fitness_score         REAL NOT NULL DEFAULT 0.0,
                 total_executions      INTEGER NOT NULL DEFAULT 0,
                 successful_executions INTEGER NOT NULL DEFAULT 0,
@@ -124,6 +125,28 @@ class SkillRegistry:
         )
         self._conn.execute(
             """
+            CREATE TABLE IF NOT EXISTS governance_log (
+                id           INTEGER PRIMARY KEY AUTOINCREMENT,
+                skill_id     TEXT NOT NULL,
+                from_state   TEXT NOT NULL,
+                to_state     TEXT NOT NULL,
+                reason       TEXT NOT NULL DEFAULT '',
+                triggered_by TEXT NOT NULL DEFAULT 'auto',
+                created_at   TEXT NOT NULL
+            );
+            """
+        )
+        # 기존 DB 마이그레이션: release_state 컬럼이 없으면 추가
+        try:
+            self._conn.execute(
+                "ALTER TABLE skills "
+                "ADD COLUMN release_state TEXT NOT NULL DEFAULT 'experimental'"
+            )
+            self._conn.commit()
+        except Exception:
+            pass  # 이미 존재하면 무시
+        self._conn.execute(
+            """
             CREATE TABLE IF NOT EXISTS evaluation_snapshots (
                 id              INTEGER PRIMARY KEY AUTOINCREMENT,
                 skill_id        TEXT NOT NULL,
@@ -163,10 +186,10 @@ class SkillRegistry:
                 INSERT INTO skills (
                     id, version, name, description, domain, tags, mode,
                     language, needs_network, needs_filesystem, timeout_seconds,
-                    skill_path, status, fitness_score, total_executions,
-                    successful_executions, last_used, crystallized_at,
-                    registered_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    skill_path, status, release_state, fitness_score,
+                    total_executions, successful_executions, last_used,
+                    crystallized_at, registered_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     skill.id,
@@ -182,6 +205,7 @@ class SkillRegistry:
                     skill.runtime.timeout_seconds,
                     str(skill.skill_path),
                     skill.lifecycle.status,
+                    "experimental",
                     skill.lifecycle.fitness_score,
                     skill.lifecycle.total_executions,
                     skill.lifecycle.successful_executions,
@@ -264,6 +288,7 @@ class SkillRegistry:
         status: str | None = None,
         mode: str | None = None,
         min_fitness: float | None = None,
+        release_state: str | None = None,
     ) -> list[dict]:
         """조건에 맞는 스킬 목록을 검색한다.
 
@@ -273,6 +298,7 @@ class SkillRegistry:
             status: 상태 필터
             mode: 모드 필터
             min_fitness: 최소 적응도
+            release_state: release 상태 필터. 미지정 시 quarantined 제외.
 
         Returns:
             매칭되는 스킬 메타데이터 dict 리스트
@@ -289,6 +315,12 @@ class SkillRegistry:
             params.append(status)
         else:
             query += " AND status != 'fossil'"
+
+        if release_state is not None:
+            query += " AND release_state = ?"
+            params.append(release_state)
+        else:
+            query += " AND release_state != 'quarantined'"
 
         if mode is not None:
             query += " AND mode = ?"
@@ -1042,6 +1074,92 @@ class SkillRegistry:
         )
         row = cursor.fetchone()
         return dict(row) if row else None
+
+    def update_release_state(
+        self,
+        skill_id: str,
+        new_state: str,
+        reason: str,
+        triggered_by: str = "auto",
+    ) -> None:
+        """스킬의 release_state를 변경하고 governance_log에 기록한다.
+
+        Args:
+            skill_id: 대상 스킬 ID
+            new_state: 새 release 상태
+            reason: 변경 사유
+            triggered_by: 'auto' 또는 'manual'
+
+        Raises:
+            ValueError: new_state가 유효하지 않은 값일 때
+            SkillNotFoundError: 해당 ID가 DB에 없을 때
+        """
+        valid_states = {"experimental", "candidate", "production", "quarantined"}
+        if new_state not in valid_states:
+            raise ValueError(f"Invalid release_state: {new_state}")
+
+        current = self.get(skill_id)
+        from_state = current.get("release_state", "experimental")
+
+        self._conn.execute(
+            "UPDATE skills SET release_state = ? WHERE id = ?",
+            (new_state, skill_id),
+        )
+
+        created_at = datetime.now(timezone.utc).isoformat()
+        self._conn.execute(
+            """
+            INSERT INTO governance_log
+                (skill_id, from_state, to_state, reason, triggered_by, created_at)
+            VALUES (?, ?, ?, ?, ?, ?)
+            """,
+            (skill_id, from_state, new_state, reason, triggered_by, created_at),
+        )
+        self._conn.commit()
+
+    def get_governance_log(
+        self,
+        skill_id: str | None = None,
+        limit: int = 20,
+    ) -> list[dict]:
+        """governance 이력을 조회한다.
+
+        Args:
+            skill_id: 특정 스킬만 필터 (None이면 전체)
+            limit: 최대 반환 개수
+
+        Returns:
+            최신순 governance log 목록
+        """
+        query = "SELECT * FROM governance_log WHERE 1=1"
+        params: list[object] = []
+
+        if skill_id is not None:
+            query += " AND skill_id = ?"
+            params.append(skill_id)
+
+        query += " ORDER BY created_at DESC, id DESC LIMIT ?"
+        params.append(limit)
+
+        cursor = self._conn.execute(query, tuple(params))
+        return [dict(row) for row in cursor.fetchall()]
+
+    def get_quarantine_count(self, skill_id: str) -> int:
+        """해당 스킬이 quarantine된 총 횟수를 반환한다.
+
+        Args:
+            skill_id: 대상 스킬 ID
+
+        Returns:
+            quarantine 전이 횟수
+        """
+        cursor = self._conn.execute(
+            "SELECT COUNT(*) as cnt FROM governance_log "
+            "WHERE skill_id = ? AND to_state = 'quarantined'",
+            (skill_id,),
+        )
+        row = cursor.fetchone()
+        return int(row["cnt"]) if row else 0
 
     def close(self) -> None:
         """DB 연결을 닫는다."""
