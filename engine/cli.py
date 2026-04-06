@@ -524,6 +524,24 @@ def main() -> None:
         help="실험 메모 (snapshot에 기록)",
     )
 
+    matrix_parser = scenario_sub.add_parser("matrix", help="다중 policy 배치 실행")
+    matrix_parser.add_argument("spec_file", help="scenario JSON spec 파일")
+    matrix_parser.add_argument(
+        "--policies", nargs="+", required=True,
+        help="policy 파일 경로 목록 (첫 번째가 baseline)",
+    )
+    matrix_parser.add_argument(
+        "--baseline", default=None,
+        help="baseline policy 경로 (미지정 시 첫 번째 policy)",
+    )
+    matrix_parser.add_argument(
+        "--out-dir", "-o", default=None, dest="out_dir",
+        help="결과 저장 디렉토리",
+    )
+    matrix_parser.add_argument(
+        "--notes", default="", help="실험 메모",
+    )
+
     # === snapshot: 실험 스냅샷 비교 ===
     snapshot_parser = subparsers.add_parser(
         "snapshot",
@@ -1362,7 +1380,11 @@ def _handle_scenario(args: argparse.Namespace) -> None:
     from datetime import datetime as _dt
     from engine.scenario import ScenarioRunner
 
-    if getattr(args, "scenario_command", None) != "run":
+    cmd = getattr(args, "scenario_command", None)
+    if cmd == "matrix":
+        _handle_scenario_matrix(args)
+        return
+    if cmd != "run":
         print("Usage: cambrian scenario run <spec.json>")
         sys.exit(1)
 
@@ -1498,6 +1520,111 @@ def _print_scenario_summary(report: dict) -> None:
                 f"success_rate={rec.get('success_rate', 0) * 100:.1f}%"
             )
             print(f"  → Run: cambrian promote {rec['skill_id']}")
+
+
+def _handle_scenario_matrix(args: argparse.Namespace) -> None:
+    """cambrian scenario matrix 처리.
+
+    Args:
+        args: argparse가 파싱한 네임스페이스
+    """
+    from engine.scenario import ScenarioRunner
+
+    spec_path = Path(args.spec_file)
+    if not spec_path.exists():
+        print(f"Spec file not found: {spec_path}", file=sys.stderr)
+        sys.exit(1)
+
+    try:
+        spec = json.loads(spec_path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as exc:
+        print(f"Invalid JSON: {exc}", file=sys.stderr)
+        sys.exit(1)
+
+    policy_paths = args.policies
+
+    # 실행 전 전체 policy 파일 존재 검증
+    for pp in policy_paths:
+        if not Path(pp).exists():
+            print(f"Policy file not found: {pp}", file=sys.stderr)
+            sys.exit(1)
+
+    baseline = getattr(args, "baseline", None)
+    if baseline and baseline not in policy_paths:
+        print(
+            f"Baseline '{baseline}' is not in policies list.",
+            file=sys.stderr,
+        )
+        sys.exit(1)
+
+    if len(policy_paths) == 1:
+        print("[WARN] Only 1 policy — no comparison possible.")
+
+    engine = _create_engine(args)
+    runner = ScenarioRunner(engine)
+
+    out_dir = getattr(args, "out_dir", None)
+    summary = runner.run_matrix(
+        spec=spec,
+        policy_paths=policy_paths,
+        baseline_path=baseline,
+        scenario_path=str(spec_path.resolve()),
+        notes=getattr(args, "notes", ""),
+        out_dir=Path(out_dir) if out_dir else None,
+    )
+
+    if not summary.get("success", True):
+        print("[FAIL] Matrix run failed:")
+        for err in summary.get("errors", []):
+            print(f"  - {err}")
+        sys.exit(1)
+
+    # stdout 요약
+    _print_matrix_summary(summary)
+    print(f"\nResults saved: {summary.get('scenario_path', '')}")
+
+
+def _print_matrix_summary(summary: dict) -> None:
+    """matrix 실행 결과 요약을 출력한다.
+
+    Args:
+        summary: run_matrix() 반환값
+    """
+    name = summary.get("scenario_name", "matrix")
+    profiles = summary.get("profiles", [])
+    baseline = summary.get("baseline_policy", "")
+
+    print(f"Matrix Run: {name} ({len(profiles)} policies)")
+    print("═" * 55)
+    print(f"\nBaseline: {Path(baseline).name}")
+    print(
+        f"\n{'PROFILE':<22} {'SUCCESS':>7} {'EVAL':>7} {'AVG_MS':>7} "
+        f"{'PROMOTE':<18} VERDICT"
+    )
+    for p in profiles:
+        pname = Path(p["policy_path"]).stem
+        if p["is_baseline"]:
+            pname += " (base)"
+
+        if p.get("verdict_vs_baseline") == "error":
+            print(f"  {pname:<20} {'[ERROR]':>7} {'-':>7} {'-':>7} {'-':<18} error")
+            continue
+
+        sr = f"{p['success_rate'] * 100:.1f}%" if p["success_rate"] else "0.0%"
+        ep = f"{p['eval_pass_rate'] * 100:.1f}%" if p.get("eval_pass_rate") is not None else "-"
+        ms = f"{p['avg_execution_ms']}ms"
+        prom = p.get("promote_recommendation") or "-"
+        verdict = p.get("verdict_vs_baseline") or "-"
+
+        # verdict 아이콘
+        icon = {"improved": "↑", "regressed": "↓", "mixed": "↔", "equivalent": "="}.get(verdict, "")
+        verdict_str = f"{verdict} {icon}" if icon else verdict
+
+        print(
+            f"  {pname:<20} {sr:>7} {ep:>7} {ms:>7} {prom:<18} {verdict_str}"
+        )
+
+    print(f"\nOverall: {summary.get('overall_verdict', '')}")
 
 
 def _handle_snapshot(args: argparse.Namespace) -> None:

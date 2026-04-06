@@ -359,3 +359,181 @@ class ScenarioRunner:
             "promote_recommendation": recommendation,
             "timestamp": datetime.now(timezone.utc).isoformat(),
         }
+
+    def run_matrix(
+        self,
+        spec: dict,
+        policy_paths: list[str],
+        baseline_path: str | None = None,
+        scenario_path: str = "",
+        notes: str = "",
+        out_dir: Path | None = None,
+    ) -> dict:
+        """동일 spec을 여러 policy로 순차 실행하고 비교 요약을 반환한다.
+
+        Args:
+            spec: scenario JSON spec dict
+            policy_paths: policy 파일 경로 목록
+            baseline_path: baseline policy 경로 (None이면 첫 번째)
+            scenario_path: spec 파일 경로 (snapshot용)
+            notes: 실험 메모
+            out_dir: 결과 저장 디렉토리 (None이면 자동 생성)
+
+        Returns:
+            matrix summary dict
+        """
+        from engine.policy import CambrianPolicy
+        from engine.snapshot import SnapshotComparer
+
+        # 1. spec 검증
+        errors = self._validate_spec(spec)
+        if errors:
+            return {"success": False, "errors": errors}
+
+        # 2. baseline 결정
+        if baseline_path is None:
+            baseline_path = policy_paths[0]
+        if baseline_path not in policy_paths:
+            return {
+                "success": False,
+                "errors": [
+                    f"baseline '{baseline_path}' is not in policies list"
+                ],
+            }
+
+        # 3. out_dir 결정
+        if out_dir is None:
+            ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+            out_dir = Path("matrix_runs") / f"{spec.get('name', 'matrix')}_{ts}"
+        else:
+            out_dir = Path(out_dir)
+        out_dir.mkdir(parents=True, exist_ok=True)
+
+        # 4. 각 policy 순차 실행
+        profiles: list[dict] = []
+        snapshots: dict[str, dict] = {}
+
+        for policy_path in policy_paths:
+            is_baseline = (policy_path == baseline_path)
+            policy_name = Path(policy_path).stem
+
+            try:
+                policy = CambrianPolicy(policy_path)
+
+                # engine에 policy 적용
+                self._engine.MAX_CANDIDATES_PER_RUN = policy.max_candidates_per_run
+                self._engine.MAX_MODE_A_PER_RUN = policy.max_mode_a_per_run
+                self._engine.MAX_EVAL_CASES = policy.max_eval_cases
+                self._engine._policy = policy
+
+                # scenario 실행
+                snapshot = self.run_scenario(spec, scenario_path, notes)
+
+                # 개별 snapshot 저장
+                prefix = "baseline__" if is_baseline else "profile__"
+                snap_file = f"{prefix}{policy_name}.json"
+                snap_path = out_dir / snap_file
+                snap_path.write_text(
+                    json.dumps(snapshot, indent=2, ensure_ascii=False),
+                    encoding="utf-8",
+                )
+
+                snapshots[policy_path] = snapshot
+                profiles.append({
+                    "policy_path": policy_path,
+                    "policy_hash": snapshot.get("_context", {}).get(
+                        "policy_hash", ""
+                    ),
+                    "is_baseline": is_baseline,
+                    "snapshot_file": snap_file,
+                    "success_rate": snapshot.get("success_rate", 0.0),
+                    "eval_pass_rate": (
+                        snapshot.get("eval_result", {}) or {}
+                    ).get("pass_rate"),
+                    "avg_execution_ms": snapshot.get("avg_execution_ms", 0),
+                    "winner_skill": snapshot.get("winner_skill"),
+                    "promote_recommendation": (
+                        snapshot.get("promote_recommendation", {}) or {}
+                    ).get("recommendation"),
+                    "verdict_vs_baseline": None,
+                })
+            except Exception as exc:
+                logger.warning("Policy '%s' 실행 실패: %s", policy_path, exc)
+                prefix = "baseline__" if is_baseline else "profile__"
+                snap_file = f"{prefix}{policy_name}.json"
+                profiles.append({
+                    "policy_path": policy_path,
+                    "policy_hash": "",
+                    "is_baseline": is_baseline,
+                    "snapshot_file": snap_file,
+                    "success_rate": 0.0,
+                    "eval_pass_rate": None,
+                    "avg_execution_ms": 0,
+                    "winner_skill": None,
+                    "promote_recommendation": None,
+                    "verdict_vs_baseline": "error",
+                })
+
+        # 5. baseline 대비 verdict 계산
+        baseline_snapshot = snapshots.get(baseline_path)
+        if baseline_snapshot:
+            comparer = SnapshotComparer()
+            for profile in profiles:
+                if profile["is_baseline"]:
+                    continue
+                if profile["verdict_vs_baseline"] == "error":
+                    continue
+
+                other_snapshot = snapshots.get(profile["policy_path"])
+                if other_snapshot:
+                    result = comparer.compare(baseline_snapshot, other_snapshot)
+                    raw_verdict = result["verdict"]
+                    # verdict 매핑: b_better→improved, a_better→regressed
+                    verdict_map = {
+                        "b_better": "improved",
+                        "a_better": "regressed",
+                        "equivalent": "equivalent",
+                        "mixed": "mixed",
+                    }
+                    profile["verdict_vs_baseline"] = verdict_map.get(
+                        raw_verdict, raw_verdict
+                    )
+
+        # 6. overall verdict
+        verdict_counts = {"improved": 0, "regressed": 0, "mixed": 0, "equivalent": 0, "error": 0}
+        for p in profiles:
+            v = p.get("verdict_vs_baseline")
+            if v and v in verdict_counts:
+                verdict_counts[v] += 1
+        overall = (
+            f"{verdict_counts['improved']} improved, "
+            f"{verdict_counts['mixed']} mixed, "
+            f"{verdict_counts['regressed']} regressed"
+        )
+
+        # 7. summary 조립
+        scenario_hash = _compute_hash(
+            json.dumps(spec, sort_keys=True, ensure_ascii=False)
+        )
+        summary = {
+            "_matrix_version": "1.0.0",
+            "scenario_name": spec.get("name", ""),
+            "scenario_path": (
+                str(Path(scenario_path).resolve()) if scenario_path else ""
+            ),
+            "scenario_hash": scenario_hash,
+            "baseline_policy": baseline_path,
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "notes": notes,
+            "profiles": profiles,
+            "overall_verdict": overall,
+        }
+
+        # summary 저장
+        summary_path = out_dir / "_matrix_summary.json"
+        summary_path.write_text(
+            json.dumps(summary, indent=2, ensure_ascii=False),
+            encoding="utf-8",
+        )
+
+        return summary
