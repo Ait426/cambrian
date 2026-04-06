@@ -17,11 +17,12 @@ class MatrixDecider:
     PROMOTE_MIN_SUCCESS_RATE: float = 0.5
     PROMOTE_MIN_EVAL_PASS_RATE: float = 0.5
 
-    def decide(self, matrix_summary: dict) -> dict:
+    def decide(self, matrix_summary: dict, policy: dict | None = None) -> dict:
         """matrix summary를 분석하여 decision report를 반환한다.
 
         Args:
             matrix_summary: run_matrix() 결과 또는 _matrix_summary.json 내용
+            policy: resolved policy dict (None이면 내장 기본값)
 
         Returns:
             decision report dict
@@ -56,7 +57,7 @@ class MatrixDecider:
                     break
 
         # 5. promotion gate
-        promotion = self._evaluate_promotion_gate(champion)
+        promotion = self._evaluate_promotion_gate(champion, policy=policy)
 
         # 6. baseline decision
         baseline_decision = self._determine_baseline_decision(champion)
@@ -147,11 +148,16 @@ class MatrixDecider:
         )
         return selected
 
-    def _evaluate_promotion_gate(self, champion: dict | None) -> dict:
+    def _evaluate_promotion_gate(
+        self,
+        champion: dict | None,
+        policy: dict | None = None,
+    ) -> dict:
         """champion의 promotion gate를 평가한다.
 
         Args:
             champion: 선정된 champion 또는 None
+            policy: resolved policy dict (None이면 클래스 기본값)
 
         Returns:
             promotion recommendation dict
@@ -163,27 +169,36 @@ class MatrixDecider:
                 "reason": "No champion found — keep baseline",
             }
 
+        # policy 기반 threshold
+        promo_policy = (policy or {}).get("promotion", {})
+        min_sr = promo_policy.get(
+            "min_success_rate", self.PROMOTE_MIN_SUCCESS_RATE,
+        )
+        min_epr = promo_policy.get(
+            "min_eval_pass_rate", self.PROMOTE_MIN_EVAL_PASS_RATE,
+        )
+
         sr = champion.get("success_rate") or 0
         epr = champion.get("eval_pass_rate")
-        policy = champion.get("policy_path", "")
+        policy_path = champion.get("policy_path", "")
 
-        if sr < self.PROMOTE_MIN_SUCCESS_RATE:
+        if sr < min_sr:
             return {
                 "recommend_promote": False,
-                "recommended_policy": policy,
+                "recommended_policy": policy_path,
                 "reason": (
                     f"Champion success_rate {sr:.2f} "
-                    f"below threshold {self.PROMOTE_MIN_SUCCESS_RATE}"
+                    f"below policy threshold {min_sr}"
                 ),
             }
 
-        if epr is not None and epr < self.PROMOTE_MIN_EVAL_PASS_RATE:
+        if epr is not None and epr < min_epr:
             return {
                 "recommend_promote": False,
-                "recommended_policy": policy,
+                "recommended_policy": policy_path,
                 "reason": (
                     f"Champion eval_pass_rate {epr:.2f} "
-                    f"below threshold {self.PROMOTE_MIN_EVAL_PASS_RATE}"
+                    f"below policy threshold {min_epr}"
                 ),
             }
 

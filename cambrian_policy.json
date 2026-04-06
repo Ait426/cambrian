@@ -15,5 +15,17 @@
   "evolution": {
     "adoption_margin": 0.5,
     "trial_count": 3
+  },
+  "decision": {
+    "fitness_tolerance_pct": 0.05,
+    "latency_tolerance_pct": 0.10
+  },
+  "promotion": {
+    "min_success_rate": 0.70,
+    "min_eval_pass_rate": 0.60
+  },
+  "validation": {
+    "watch_degradation_pct": 0.05,
+    "regressed_degradation_pct": 0.15
   }
 }

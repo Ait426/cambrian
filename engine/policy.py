@@ -34,6 +34,18 @@ class CambrianPolicy:
             "adoption_margin": 0.5,
             "trial_count": 3,
         },
+        "decision": {
+            "fitness_tolerance_pct": 0.05,
+            "latency_tolerance_pct": 0.10,
+        },
+        "promotion": {
+            "min_success_rate": 0.70,
+            "min_eval_pass_rate": 0.60,
+        },
+        "validation": {
+            "watch_degradation_pct": 0.05,
+            "regressed_degradation_pct": 0.15,
+        },
     }
 
     # 각 필드의 기대 타입과 양수 여부
@@ -54,6 +66,18 @@ class CambrianPolicy:
         "evolution": {
             "adoption_margin": (float, False),
             "trial_count": (int, True),
+        },
+        "decision": {
+            "fitness_tolerance_pct": (float, False),
+            "latency_tolerance_pct": (float, False),
+        },
+        "promotion": {
+            "min_success_rate": (float, False),
+            "min_eval_pass_rate": (float, False),
+        },
+        "validation": {
+            "watch_degradation_pct": (float, False),
+            "regressed_degradation_pct": (float, False),
         },
     }
 
@@ -107,6 +131,18 @@ class CambrianPolicy:
         # evolution
         self.adoption_margin: float = merged["evolution"]["adoption_margin"]
         self.trial_count: int = merged["evolution"]["trial_count"]
+
+        # decision
+        self.fitness_tolerance_pct: float = merged["decision"]["fitness_tolerance_pct"]
+        self.latency_tolerance_pct: float = merged["decision"]["latency_tolerance_pct"]
+
+        # promotion
+        self.promotion_min_success_rate: float = merged["promotion"]["min_success_rate"]
+        self.promotion_min_eval_pass_rate: float = merged["promotion"]["min_eval_pass_rate"]
+
+        # validation
+        self.watch_degradation_pct: float = merged["validation"]["watch_degradation_pct"]
+        self.regressed_degradation_pct: float = merged["validation"]["regressed_degradation_pct"]
 
     def _load(self, path: Path) -> dict:
         """JSON 파일을 읽어 dict로 반환한다.
@@ -190,9 +226,9 @@ class CambrianPolicy:
         import copy
         merged = copy.deepcopy(self.DEFAULTS)
 
-        for section in ("budget", "governance", "evolution"):
+        for section in merged:
             user_section = data.get(section)
-            if isinstance(user_section, dict):
+            if isinstance(user_section, dict) and isinstance(merged.get(section), dict):
                 for key, value in user_section.items():
                     if key in merged[section]:
                         merged[section][key] = value
@@ -222,6 +258,18 @@ class CambrianPolicy:
             "evolution": {
                 "adoption_margin": self.adoption_margin,
                 "trial_count": self.trial_count,
+            },
+            "decision": {
+                "fitness_tolerance_pct": self.fitness_tolerance_pct,
+                "latency_tolerance_pct": self.latency_tolerance_pct,
+            },
+            "promotion": {
+                "min_success_rate": self.promotion_min_success_rate,
+                "min_eval_pass_rate": self.promotion_min_eval_pass_rate,
+            },
+            "validation": {
+                "watch_degradation_pct": self.watch_degradation_pct,
+                "regressed_degradation_pct": self.regressed_degradation_pct,
             },
             "source": self.policy_source,
         }

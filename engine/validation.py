@@ -204,8 +204,11 @@ def compute_verdict(
     fresh_metrics: dict,
     regression_threshold: float = REGRESSION_THRESHOLD,
     watch_threshold: float = WATCH_THRESHOLD,
+    policy: dict | None = None,
 ) -> dict:
     """basis와 fresh metrics를 비교하여 verdict를 산출한다.
+
+    policy가 제공되면 validation 섹션의 threshold를 사용한다.
 
     Args:
         basis_metrics: 채택 당시 metrics
@@ -217,6 +220,14 @@ def compute_verdict(
         {"metric_deltas": dict, "verdict": str, "verdict_reason": str,
          "recommended_action": str}
     """
+    # policy 기반 threshold override
+    if policy is not None:
+        val_policy = policy.get("validation", {})
+        if "regressed_degradation_pct" in val_policy:
+            regression_threshold = val_policy["regressed_degradation_pct"]
+        if "watch_degradation_pct" in val_policy:
+            watch_threshold = val_policy["watch_degradation_pct"]
+
     if not basis_metrics or not fresh_metrics:
         return {
             "metric_deltas": {},
@@ -225,6 +236,10 @@ def compute_verdict(
                 "comparison basis or fresh metrics unavailable"
             ),
             "recommended_action": "investigate",
+            "applied_thresholds": {
+                "watch_degradation_pct": watch_threshold,
+                "regressed_degradation_pct": regression_threshold,
+            },
         }
 
     # latency류: 높아지면 악화 (inverted)
@@ -311,6 +326,10 @@ def compute_verdict(
         "verdict": worst_verdict,
         "verdict_reason": worst_reason,
         "recommended_action": action_map.get(worst_verdict, "investigate"),
+        "applied_thresholds": {
+            "watch_degradation_pct": watch_threshold,
+            "regressed_degradation_pct": regression_threshold,
+        },
     }
 
 
