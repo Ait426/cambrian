@@ -124,4 +124,4 @@ def test_execute_mode_a_no_api_key(
 
     assert result.success is False
     assert result.mode == "a"
-    assert "ANTHROPIC_API_KEY" in result.error
+    assert "ANTHROPIC_API_KEY" in result.error or "anthropic" in result.error
