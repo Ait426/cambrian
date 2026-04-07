@@ -1,4 +1,11 @@
-"""Cambrian 스킬 레지스트리."""
+"""Cambrian 스킬 레지스트리.
+
+CACHE/ACCELERATOR ONLY (adoption lineage 관련)
+===============================================
+SOURCE OF TRUTH: adoption record files (see engine/provenance.py)
+adoption_lineage 테이블은 파생 인덱스일 뿐이며, authoritative read에는
+provenance.scan_adoption_files() 또는 reconstruct_lineage()를 사용하라.
+"""
 
 import json
 import logging
@@ -43,6 +50,7 @@ class SkillRegistry:
                 timeout_seconds       INTEGER NOT NULL DEFAULT 30,
                 skill_path            TEXT NOT NULL,
                 status                TEXT NOT NULL DEFAULT 'newborn',
+                release_state         TEXT NOT NULL DEFAULT 'experimental',
                 fitness_score         REAL NOT NULL DEFAULT 0.0,
                 total_executions      INTEGER NOT NULL DEFAULT 0,
                 successful_executions INTEGER NOT NULL DEFAULT 0,
@@ -124,6 +132,28 @@ class SkillRegistry:
         )
         self._conn.execute(
             """
+            CREATE TABLE IF NOT EXISTS governance_log (
+                id           INTEGER PRIMARY KEY AUTOINCREMENT,
+                skill_id     TEXT NOT NULL,
+                from_state   TEXT NOT NULL,
+                to_state     TEXT NOT NULL,
+                reason       TEXT NOT NULL DEFAULT '',
+                triggered_by TEXT NOT NULL DEFAULT 'auto',
+                created_at   TEXT NOT NULL
+            );
+            """
+        )
+        # 기존 DB 마이그레이션: release_state 컬럼이 없으면 추가
+        try:
+            self._conn.execute(
+                "ALTER TABLE skills "
+                "ADD COLUMN release_state TEXT NOT NULL DEFAULT 'experimental'"
+            )
+            self._conn.commit()
+        except Exception:
+            pass  # 이미 존재하면 무시
+        self._conn.execute(
+            """
             CREATE TABLE IF NOT EXISTS evaluation_snapshots (
                 id              INTEGER PRIMARY KEY AUTOINCREMENT,
                 skill_id        TEXT NOT NULL,
@@ -135,6 +165,34 @@ class SkillRegistry:
                 fitness_at_time REAL NOT NULL DEFAULT 0.0,
                 results_json    TEXT NOT NULL DEFAULT '[]',
                 created_at      TEXT NOT NULL
+            );
+            """
+        )
+        self._conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS outcomes (
+                id              INTEGER PRIMARY KEY AUTOINCREMENT,
+                run_trace_id    INTEGER,
+                skill_id        TEXT NOT NULL,
+                domain          TEXT NOT NULL DEFAULT '',
+                verdict         TEXT NOT NULL,
+                human_note      TEXT NOT NULL DEFAULT '',
+                created_at      TEXT NOT NULL
+            );
+            """
+        )
+        self._conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS adoption_lineage (
+                id                INTEGER PRIMARY KEY AUTOINCREMENT,
+                child_skill_name  TEXT NOT NULL,
+                child_run_id      TEXT NOT NULL,
+                parent_skill_name TEXT,
+                parent_run_id     TEXT,
+                scenario_id       TEXT,
+                policy_hash       TEXT,
+                adopted_at        TEXT NOT NULL,
+                notes             TEXT
             );
             """
         )
@@ -163,10 +221,10 @@ class SkillRegistry:
                 INSERT INTO skills (
                     id, version, name, description, domain, tags, mode,
                     language, needs_network, needs_filesystem, timeout_seconds,
-                    skill_path, status, fitness_score, total_executions,
-                    successful_executions, last_used, crystallized_at,
-                    registered_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    skill_path, status, release_state, fitness_score,
+                    total_executions, successful_executions, last_used,
+                    crystallized_at, registered_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     skill.id,
@@ -182,6 +240,7 @@ class SkillRegistry:
                     skill.runtime.timeout_seconds,
                     str(skill.skill_path),
                     skill.lifecycle.status,
+                    "experimental",
                     skill.lifecycle.fitness_score,
                     skill.lifecycle.total_executions,
                     skill.lifecycle.successful_executions,
@@ -264,6 +323,7 @@ class SkillRegistry:
         status: str | None = None,
         mode: str | None = None,
         min_fitness: float | None = None,
+        release_state: str | None = None,
     ) -> list[dict]:
         """조건에 맞는 스킬 목록을 검색한다.
 
@@ -273,6 +333,7 @@ class SkillRegistry:
             status: 상태 필터
             mode: 모드 필터
             min_fitness: 최소 적응도
+            release_state: release 상태 필터. 미지정 시 quarantined 제외.
 
         Returns:
             매칭되는 스킬 메타데이터 dict 리스트
@@ -289,6 +350,12 @@ class SkillRegistry:
             params.append(status)
         else:
             query += " AND status != 'fossil'"
+
+        if release_state is not None:
+            query += " AND release_state = ?"
+            params.append(release_state)
+        else:
+            query += " AND release_state != 'quarantined'"
 
         if mode is not None:
             query += " AND mode = ?"
@@ -1042,6 +1109,474 @@ class SkillRegistry:
         )
         row = cursor.fetchone()
         return dict(row) if row else None
+
+    def update_release_state(
+        self,
+        skill_id: str,
+        new_state: str,
+        reason: str,
+        triggered_by: str = "auto",
+    ) -> None:
+        """스킬의 release_state를 변경하고 governance_log에 기록한다.
+
+        Args:
+            skill_id: 대상 스킬 ID
+            new_state: 새 release 상태
+            reason: 변경 사유
+            triggered_by: 'auto' 또는 'manual'
+
+        Raises:
+            ValueError: new_state가 유효하지 않은 값일 때
+            SkillNotFoundError: 해당 ID가 DB에 없을 때
+        """
+        valid_states = {"experimental", "candidate", "production", "quarantined"}
+        if new_state not in valid_states:
+            raise ValueError(f"Invalid release_state: {new_state}")
+
+        current = self.get(skill_id)
+        from_state = current.get("release_state", "experimental")
+
+        self._conn.execute(
+            "UPDATE skills SET release_state = ? WHERE id = ?",
+            (new_state, skill_id),
+        )
+
+        created_at = datetime.now(timezone.utc).isoformat()
+        self._conn.execute(
+            """
+            INSERT INTO governance_log
+                (skill_id, from_state, to_state, reason, triggered_by, created_at)
+            VALUES (?, ?, ?, ?, ?, ?)
+            """,
+            (skill_id, from_state, new_state, reason, triggered_by, created_at),
+        )
+        self._conn.commit()
+
+    def get_governance_log(
+        self,
+        skill_id: str | None = None,
+        limit: int = 20,
+    ) -> list[dict]:
+        """governance 이력을 조회한다.
+
+        Args:
+            skill_id: 특정 스킬만 필터 (None이면 전체)
+            limit: 최대 반환 개수
+
+        Returns:
+            최신순 governance log 목록
+        """
+        query = "SELECT * FROM governance_log WHERE 1=1"
+        params: list[object] = []
+
+        if skill_id is not None:
+            query += " AND skill_id = ?"
+            params.append(skill_id)
+
+        query += " ORDER BY created_at DESC, id DESC LIMIT ?"
+        params.append(limit)
+
+        cursor = self._conn.execute(query, tuple(params))
+        return [dict(row) for row in cursor.fetchall()]
+
+    def get_quarantine_count(self, skill_id: str) -> int:
+        """해당 스킬이 quarantine된 총 횟수를 반환한다.
+
+        Args:
+            skill_id: 대상 스킬 ID
+
+        Returns:
+            quarantine 전이 횟수
+        """
+        cursor = self._conn.execute(
+            "SELECT COUNT(*) as cnt FROM governance_log "
+            "WHERE skill_id = ? AND to_state = 'quarantined'",
+            (skill_id,),
+        )
+        row = cursor.fetchone()
+        return int(row["cnt"]) if row else 0
+
+    # === Adoption Lineage ===
+
+    def add_lineage(
+        self,
+        child_skill_name: str,
+        child_run_id: str,
+        parent_skill_name: str | None = None,
+        parent_run_id: str | None = None,
+        scenario_id: str | None = None,
+        policy_hash: str | None = None,
+        notes: str | None = None,
+    ) -> int:
+        """채택 계보 레코드를 추가한다.
+
+        Args:
+            child_skill_name: 자식 스킬 이름
+            child_run_id: 자식 실행 ID
+            parent_skill_name: 부모 스킬 이름 (None이면 최초 생성)
+            parent_run_id: 부모 실행 ID
+            scenario_id: 시나리오 식별자
+            policy_hash: 정책 해시
+            notes: 메모
+
+        Returns:
+            생성된 lineage ID
+        """
+        adopted_at = datetime.now(timezone.utc).isoformat()
+        cursor = self._conn.execute(
+            """
+            INSERT INTO adoption_lineage
+                (child_skill_name, child_run_id, parent_skill_name,
+                 parent_run_id, scenario_id, policy_hash, adopted_at, notes)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                child_skill_name, child_run_id,
+                parent_skill_name, parent_run_id,
+                scenario_id, policy_hash, adopted_at, notes,
+            ),
+        )
+        self._conn.commit()
+        return int(cursor.lastrowid)
+
+    def get_ancestors(
+        self,
+        skill_name: str,
+        run_id: str,
+    ) -> list[dict]:
+        """run_id 기준 직계 조상 체인을 반환한다 (최신→최초 순).
+
+        Args:
+            skill_name: 스킬 이름
+            run_id: 시작 run ID
+
+        Returns:
+            조상 체인 리스트
+        """
+        ancestors: list[dict] = []
+        current_run_id: str | None = run_id
+        visited: set[str] = set()
+
+        while current_run_id:
+            if current_run_id in visited:
+                break
+            visited.add(current_run_id)
+
+            row = self._conn.execute(
+                """
+                SELECT child_skill_name, child_run_id, parent_skill_name,
+                       parent_run_id, adopted_at, scenario_id, policy_hash
+                FROM adoption_lineage
+                WHERE child_run_id = ?
+                """,
+                (current_run_id,),
+            ).fetchone()
+
+            if not row:
+                break
+
+            ancestors.append({
+                "skill_name": row["child_skill_name"],
+                "run_id": row["child_run_id"],
+                "parent_skill_name": row["parent_skill_name"],
+                "parent_run_id": row["parent_run_id"],
+                "adopted_at": row["adopted_at"],
+                "scenario_id": row["scenario_id"],
+                "policy_hash": row["policy_hash"],
+            })
+            current_run_id = row["parent_run_id"]
+
+        return ancestors
+
+    def get_descendants(
+        self,
+        run_id: str,
+        depth: int = 0,
+        max_depth: int = 10,
+    ) -> list[dict]:
+        """run_id 기준 직계 자손 목록을 반환한다 (재귀).
+
+        Args:
+            run_id: 시작 run ID
+            depth: 현재 깊이
+            max_depth: 최대 깊이
+
+        Returns:
+            자손 트리 리스트
+        """
+        if depth >= max_depth:
+            return []
+
+        rows = self._conn.execute(
+            """
+            SELECT child_skill_name, child_run_id, parent_run_id,
+                   adopted_at, scenario_id, policy_hash
+            FROM adoption_lineage
+            WHERE parent_run_id = ?
+            ORDER BY adopted_at ASC
+            """,
+            (run_id,),
+        ).fetchall()
+
+        result: list[dict] = []
+        for row in rows:
+            node = {
+                "skill_name": row["child_skill_name"],
+                "run_id": row["child_run_id"],
+                "parent_run_id": row["parent_run_id"],
+                "adopted_at": row["adopted_at"],
+                "scenario_id": row["scenario_id"],
+                "policy_hash": row["policy_hash"],
+                "children": self.get_descendants(
+                    row["child_run_id"], depth + 1, max_depth,
+                ),
+            }
+            result.append(node)
+        return result
+
+    def get_adoption_history(
+        self,
+        skill_name: str | None = None,
+        since: str | None = None,
+        until: str | None = None,
+        scenario_id: str | None = None,
+        limit: int = 50,
+    ) -> list[dict]:
+        """필터형 채택 이력을 조회한다.
+
+        Args:
+            skill_name: 스킬 이름 필터
+            since: 시작일 필터 (ISO 문자열)
+            until: 종료일 필터 (ISO 문자열)
+            scenario_id: 시나리오 ID 필터
+            limit: 최대 반환 건수
+
+        Returns:
+            최신순 채택 이력 리스트
+        """
+        clauses: list[str] = []
+        params: list[object] = []
+
+        if skill_name:
+            clauses.append("child_skill_name = ?")
+            params.append(skill_name)
+        if since:
+            clauses.append("adopted_at >= ?")
+            params.append(since)
+        if until:
+            clauses.append("adopted_at <= ?")
+            params.append(until)
+        if scenario_id:
+            clauses.append("scenario_id = ?")
+            params.append(scenario_id)
+
+        where = ("WHERE " + " AND ".join(clauses)) if clauses else ""
+        params.append(limit)
+
+        rows = self._conn.execute(
+            f"""
+            SELECT child_skill_name, child_run_id, parent_skill_name,
+                   parent_run_id, adopted_at, scenario_id, policy_hash, notes
+            FROM adoption_lineage
+            {where}
+            ORDER BY adopted_at DESC
+            LIMIT ?
+            """,
+            tuple(params),
+        ).fetchall()
+
+        return [dict(row) for row in rows]
+
+    # === Outcome / Pilot KPI ===
+
+    def add_outcome(
+        self,
+        skill_id: str,
+        verdict: str,
+        run_trace_id: int | None = None,
+        domain: str = "",
+        human_note: str = "",
+    ) -> int:
+        """실행 결과에 대한 사람의 사용 판정을 기록한다.
+
+        Args:
+            skill_id: 대상 스킬 ID
+            verdict: 사용 결과 (approved/edited/rejected/redo)
+            run_trace_id: 연결할 run_trace ID (선택)
+            domain: 스킬 도메인
+            human_note: 사람 메모
+
+        Returns:
+            생성된 outcome ID
+
+        Raises:
+            ValueError: verdict가 유효하지 않은 값일 때
+        """
+        valid_verdicts = {"approved", "edited", "rejected", "redo"}
+        if verdict not in valid_verdicts:
+            raise ValueError(f"Invalid verdict: {verdict}")
+
+        created_at = datetime.now(timezone.utc).isoformat()
+        cursor = self._conn.execute(
+            """
+            INSERT INTO outcomes
+                (run_trace_id, skill_id, domain, verdict, human_note, created_at)
+            VALUES (?, ?, ?, ?, ?, ?)
+            """,
+            (run_trace_id, skill_id, domain, verdict, human_note, created_at),
+        )
+        self._conn.commit()
+        return int(cursor.lastrowid)
+
+    def get_outcomes(
+        self,
+        skill_id: str | None = None,
+        verdict: str | None = None,
+        limit: int = 50,
+    ) -> list[dict]:
+        """outcome 목록을 조회한다.
+
+        Args:
+            skill_id: 스킬 ID 필터
+            verdict: verdict 필터
+            limit: 최대 반환 개수
+
+        Returns:
+            최신순 outcome 목록
+        """
+        query = "SELECT * FROM outcomes WHERE 1=1"
+        params: list[object] = []
+
+        if skill_id is not None:
+            query += " AND skill_id = ?"
+            params.append(skill_id)
+
+        if verdict is not None:
+            query += " AND verdict = ?"
+            params.append(verdict)
+
+        query += " ORDER BY created_at DESC, id DESC LIMIT ?"
+        params.append(limit)
+
+        cursor = self._conn.execute(query, tuple(params))
+        return [dict(row) for row in cursor.fetchall()]
+
+    def get_pilot_kpi(
+        self,
+        skill_id: str | None = None,
+        days: int | None = None,
+    ) -> dict:
+        """파일럿 KPI를 집계한다.
+
+        Args:
+            skill_id: 특정 스킬 필터 (None이면 전체)
+            days: 최근 N일 필터 (None이면 전체)
+
+        Returns:
+            total, approved, edited, rejected, redo + 5개 rate
+        """
+        query = """
+            SELECT
+                COUNT(*) as total,
+                SUM(CASE WHEN verdict = 'approved' THEN 1 ELSE 0 END) as approved,
+                SUM(CASE WHEN verdict = 'edited' THEN 1 ELSE 0 END) as edited,
+                SUM(CASE WHEN verdict = 'rejected' THEN 1 ELSE 0 END) as rejected,
+                SUM(CASE WHEN verdict = 'redo' THEN 1 ELSE 0 END) as redo
+            FROM outcomes WHERE 1=1
+        """
+        params: list[object] = []
+
+        if skill_id is not None:
+            query += " AND skill_id = ?"
+            params.append(skill_id)
+
+        if days is not None:
+            cutoff = (
+                datetime.now(timezone.utc) - timedelta(days=days)
+            ).isoformat()
+            query += " AND created_at >= ?"
+            params.append(cutoff)
+
+        cursor = self._conn.execute(query, tuple(params))
+        row = cursor.fetchone()
+
+        total = int(row["total"]) if row and row["total"] else 0
+        approved = int(row["approved"]) if row and row["approved"] else 0
+        edited = int(row["edited"]) if row and row["edited"] else 0
+        rejected = int(row["rejected"]) if row and row["rejected"] else 0
+        redo = int(row["redo"]) if row and row["redo"] else 0
+
+        return {
+            "total": total,
+            "approved": approved,
+            "edited": edited,
+            "rejected": rejected,
+            "redo": redo,
+            "acceptance_rate": round(approved / total, 3) if total > 0 else 0.0,
+            "edit_rate": round(edited / total, 3) if total > 0 else 0.0,
+            "reject_rate": round(rejected / total, 3) if total > 0 else 0.0,
+            "redo_rate": round(redo / total, 3) if total > 0 else 0.0,
+            "net_useful_rate": (
+                round((approved + edited) / total, 3) if total > 0 else 0.0
+            ),
+        }
+
+    def get_pilot_kpi_by_skill(
+        self,
+        days: int | None = None,
+        limit: int = 10,
+    ) -> list[dict]:
+        """스킬별 파일럿 KPI를 집계한다.
+
+        Args:
+            days: 최근 N일 필터 (None이면 전체)
+            limit: 최대 스킬 수
+
+        Returns:
+            스킬별 KPI 목록 (total 내림차순)
+        """
+        query = """
+            SELECT
+                skill_id,
+                COUNT(*) as total,
+                SUM(CASE WHEN verdict = 'approved' THEN 1 ELSE 0 END) as approved,
+                SUM(CASE WHEN verdict = 'edited' THEN 1 ELSE 0 END) as edited,
+                SUM(CASE WHEN verdict = 'rejected' THEN 1 ELSE 0 END) as rejected,
+                SUM(CASE WHEN verdict = 'redo' THEN 1 ELSE 0 END) as redo
+            FROM outcomes WHERE 1=1
+        """
+        params: list[object] = []
+
+        if days is not None:
+            cutoff = (
+                datetime.now(timezone.utc) - timedelta(days=days)
+            ).isoformat()
+            query += " AND created_at >= ?"
+            params.append(cutoff)
+
+        query += " GROUP BY skill_id ORDER BY total DESC LIMIT ?"
+        params.append(limit)
+
+        cursor = self._conn.execute(query, tuple(params))
+        results: list[dict] = []
+        for row in cursor.fetchall():
+            total = int(row["total"])
+            approved = int(row["approved"]) if row["approved"] else 0
+            edited = int(row["edited"]) if row["edited"] else 0
+            rejected = int(row["rejected"]) if row["rejected"] else 0
+            redo = int(row["redo"]) if row["redo"] else 0
+            results.append({
+                "skill_id": row["skill_id"],
+                "total": total,
+                "approved": approved,
+                "edited": edited,
+                "rejected": rejected,
+                "redo": redo,
+                "net_useful_rate": (
+                    round((approved + edited) / total, 3) if total > 0 else 0.0
+                ),
+            })
+        return results
 
     def close(self) -> None:
         """DB 연결을 닫는다."""

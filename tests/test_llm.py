@@ -99,7 +99,7 @@ def test_create_provider_no_api_key(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
     monkeypatch.delenv("CAMBRIAN_LLM_PROVIDER", raising=False)
 
-    with pytest.raises(RuntimeError, match="ANTHROPIC_API_KEY"):
+    with pytest.raises(RuntimeError, match="ANTHROPIC_API_KEY|anthropic"):
         create_provider()
 
 

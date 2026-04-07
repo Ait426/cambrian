@@ -44,6 +44,7 @@ class CambrianEngine:
         db_path: str | Path = ":memory:",
         external_skill_dirs: list[str | Path] | None = None,
         provider: LLMProvider | None = None,
+        policy_path: str | Path | None = None,
     ):
         """Cambrian 엔진을 초기화한다.
 
@@ -54,7 +55,16 @@ class CambrianEngine:
             db_path: SQLite DB 경로
             external_skill_dirs: 외부 스킬 검색 경로 리스트
             provider: LLM 프로바이더. None이면 필요 시 자동 생성.
+            policy_path: 정책 JSON 파일 경로. None이면 자동 탐색 또는 기본값.
         """
+        from engine.policy import CambrianPolicy
+        self._policy = CambrianPolicy(policy_path)
+
+        # policy 값으로 클래스 상수 덮어쓰기
+        self.MAX_CANDIDATES_PER_RUN = self._policy.max_candidates_per_run
+        self.MAX_MODE_A_PER_RUN = self._policy.max_mode_a_per_run
+        self.MAX_EVAL_CASES = self._policy.max_eval_cases
+
         self._provider = provider
         self._loader = SkillLoader(schemas_dir)
         self._executor = SkillExecutor(provider=self._provider)
@@ -168,6 +178,15 @@ class CambrianEngine:
         )[:self.MAX_MODE_A_PER_RUN]
 
         run_targets = mode_b + mode_a
+
+        # release_state 기반 정렬: production > candidate > experimental
+        _state_priority = {"production": 0, "candidate": 1, "experimental": 2}
+        run_targets.sort(
+            key=lambda c: _state_priority.get(
+                c.get("release_state", "experimental"), 99
+            )
+        )
+
         original_candidate_count = len(run_targets)
         truncated = False
 
@@ -175,8 +194,12 @@ class CambrianEngine:
             truncated = True
             run_targets = sorted(
                 run_targets,
-                key=lambda c: c["fitness_score"],
-                reverse=True,
+                key=lambda c: (
+                    _state_priority.get(
+                        c.get("release_state", "experimental"), 99
+                    ),
+                    -c["fitness_score"],
+                ),
             )[:self.MAX_CANDIDATES_PER_RUN]
             logger.warning(
                 "Budget cap: %d candidates truncated to %d",
@@ -237,6 +260,8 @@ class CambrianEngine:
                     except Exception as exc:
                         logger.warning("Failed to save auto-feedback: %s", exc)
 
+                # fitness 하락 시 자동 강등 체크
+                self._check_auto_demote(skill.id)
                 # 진화 채택 후 성능 악화 시 자동 롤백 체크
                 self._check_auto_rollback(skill.id)
 
@@ -328,12 +353,73 @@ class CambrianEngine:
         except Exception:
             pass
 
+        self._check_auto_promote(best_result.skill_id)
         return best_result
+
+    def _check_auto_promote(self, skill_id: str) -> None:
+        """experimental 스킬이 candidate 조건을 충족하면 자동 승격한다.
+
+        조건: policy의 promote_min_executions/promote_min_fitness 기준.
+
+        Args:
+            skill_id: 체크할 스킬 ID
+        """
+        try:
+            skill_data = self._registry.get(skill_id)
+            if skill_data.get("release_state") != "experimental":
+                return
+
+            if (
+                skill_data["total_executions"] >= self._policy.promote_min_executions
+                and skill_data["fitness_score"] >= self._policy.promote_min_fitness
+            ):
+                q_count = self._registry.get_quarantine_count(skill_id)
+                if q_count >= self._policy.quarantine_block_count:
+                    logger.info(
+                        "승격 차단: '%s' quarantine %d회 이력",
+                        skill_id, q_count,
+                    )
+                    return
+
+                self._registry.update_release_state(
+                    skill_id,
+                    new_state="candidate",
+                    reason=(
+                        f"auto: executions={skill_data['total_executions']}, "
+                        f"fitness={skill_data['fitness_score']:.4f}"
+                    ),
+                    triggered_by="auto",
+                )
+                logger.info("자동 승격: '%s' → candidate", skill_id)
+        except Exception:
+            pass  # 승격 실패가 실행을 중단하지 않음
+
+    def _check_auto_demote(self, skill_id: str) -> None:
+        """fitness가 크게 떨어진 candidate/production 스킬을 experimental로 강등한다.
+
+        조건: release_state가 candidate/production이고 fitness < policy.demote_fitness_threshold.
+
+        Args:
+            skill_id: 체크할 스킬 ID
+        """
+        try:
+            skill_data = self._registry.get(skill_id)
+            state = skill_data.get("release_state", "experimental")
+            if state in ("candidate", "production") and skill_data["fitness_score"] < self._policy.demote_fitness_threshold:
+                self._registry.update_release_state(
+                    skill_id,
+                    new_state="experimental",
+                    reason=f"auto: fitness dropped to {skill_data['fitness_score']:.4f}",
+                    triggered_by="auto",
+                )
+                logger.warning("자동 강등: '%s' → experimental", skill_id)
+        except Exception:
+            pass
 
     def _check_auto_rollback(self, skill_id: str) -> None:
         """진화 채택 후 성능이 악화되면 자동으로 이전 버전으로 복원한다.
 
-        조건: fitness < 0.2 + 총 실행 5회 이상 + 최근 adopted 이력 존재.
+        조건: fitness < policy.rollback_fitness_threshold + 총 실행 5회 이상 + 최근 adopted 이력 존재.
         복원 시 해당 record에 auto_rolled_back=1을 마킹한다.
 
         Args:
@@ -341,7 +427,7 @@ class CambrianEngine:
         """
         try:
             skill_data = self._registry.get(skill_id)
-            if skill_data["fitness_score"] >= 0.2:
+            if skill_data["fitness_score"] >= self._policy.rollback_fitness_threshold:
                 return
             if skill_data["total_executions"] < 5:
                 return
@@ -372,6 +458,14 @@ class CambrianEngine:
                 "Auto-rollback executed for skill '%s' (record #%d)",
                 skill_id,
                 record["id"],
+            )
+
+            # 롤백된 스킬을 quarantine 상태로 격리
+            self._registry.update_release_state(
+                skill_id,
+                new_state="quarantined",
+                reason=f"auto_rollback: fitness={skill_data['fitness_score']:.4f}",
+                triggered_by="auto",
             )
         except Exception:
             pass  # 롤백 실패는 조용히 무시
@@ -557,9 +651,71 @@ class CambrianEngine:
         """Registry 인스턴스를 반환한다. 테스트·디버깅용."""
         return self._registry
 
+    def get_policy(self) -> "CambrianPolicy":
+        """현재 적용된 정책을 반환한다."""
+        return self._policy
+
     def get_loader(self) -> SkillLoader:
         """Loader 인스턴스를 반환한다."""
         return self._loader
+
+    def record_outcome(
+        self,
+        skill_id: str,
+        verdict: str,
+        run_trace_id: int | None = None,
+        human_note: str = "",
+    ) -> int:
+        """run 결과에 대한 사람의 사용 판정을 기록한다.
+
+        Args:
+            skill_id: 대상 스킬 ID
+            verdict: 사용 결과 (approved/edited/rejected/redo)
+            run_trace_id: 연결할 run_trace ID (선택)
+            human_note: 사람 메모
+
+        Returns:
+            생성된 outcome ID
+
+        Raises:
+            SkillNotFoundError: 스킬이 존재하지 않을 때
+        """
+        skill_data = self._registry.get(skill_id)
+        return self._registry.add_outcome(
+            skill_id=skill_id,
+            verdict=verdict,
+            run_trace_id=run_trace_id,
+            domain=skill_data.get("domain", ""),
+            human_note=human_note,
+        )
+
+    def get_pilot_report(
+        self,
+        skill_id: str | None = None,
+        days: int | None = None,
+    ) -> dict:
+        """파일럿 KPI 리포트를 반환한다.
+
+        Args:
+            skill_id: 특정 스킬 필터 (None이면 전체)
+            days: 최근 N일 기준 (None이면 전체)
+
+        Returns:
+            global KPI + 스킬별 breakdown + 메타 정보
+        """
+        global_kpi = self._registry.get_pilot_kpi(
+            skill_id=skill_id, days=days,
+        )
+        skill_breakdown = (
+            self._registry.get_pilot_kpi_by_skill(days=days)
+            if skill_id is None else []
+        )
+        return {
+            "global": global_kpi,
+            "by_skill": skill_breakdown,
+            "period_days": days,
+            "skill_filter": skill_id,
+        }
 
     def get_run_traces(
         self,
@@ -1020,6 +1176,10 @@ class CambrianEngine:
             self._loader, self._executor, self._registry,
             provider=self._provider,
         )
+        # policy 값 주입
+        evolver.ADOPTION_MARGIN = self._policy.adoption_margin
+        evolver.TRIAL_COUNT = self._policy.trial_count
+        evolver.MAX_EVAL_INPUTS = self._policy.max_eval_inputs_evolve
         return evolver.evolve(skill_id, test_input, feedback_list)
 
     def benchmark(

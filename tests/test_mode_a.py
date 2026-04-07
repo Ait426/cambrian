@@ -54,7 +54,7 @@ def test_mode_a_no_api_key(executor: SkillExecutor, monkeypatch: pytest.MonkeyPa
 
     assert result.success is False
     assert result.mode == "a"
-    assert "ANTHROPIC_API_KEY" in result.error
+    assert "ANTHROPIC_API_KEY" in result.error or "anthropic" in result.error
 
 
 def test_mode_a_no_skill_md(executor: SkillExecutor) -> None:

@@ -54,6 +54,12 @@ def main() -> None:
         help="외부 스킬 검색 디렉토리 (여러 개 가능)",
     )
     common_parser.add_argument(
+        "--policy",
+        type=str,
+        default=None,
+        help="정책 JSON 파일 경로 (기본: cambrian_policy.json 또는 내장 기본값)",
+    )
+    common_parser.add_argument(
         "--verbose",
         "-v",
         action="store_true",
@@ -498,6 +504,267 @@ def main() -> None:
         help="평가 최대 케이스 수 (기본: 20)",
     )
 
+    # === scenario: 시나리오 배치 실행 ===
+    scenario_parser = subparsers.add_parser(
+        "scenario",
+        help="시나리오 배치 실행",
+        parents=[common_parser],
+    )
+    scenario_sub = scenario_parser.add_subparsers(
+        dest="scenario_command", help="서브 명령어",
+    )
+    run_sc_parser = scenario_sub.add_parser("run", help="시나리오 실행")
+    run_sc_parser.add_argument("spec_file", help="scenario JSON spec 파일 경로")
+    run_sc_parser.add_argument(
+        "--output", "-o", default=None,
+        help="report 저장 경로 (미지정 시 ./reports/<name>_<timestamp>.json)",
+    )
+    run_sc_parser.add_argument(
+        "--notes", default="",
+        help="실험 메모 (snapshot에 기록)",
+    )
+
+    matrix_parser = scenario_sub.add_parser("matrix", help="다중 policy 배치 실행")
+    matrix_parser.add_argument("spec_file", help="scenario JSON spec 파일")
+    matrix_parser.add_argument(
+        "--policies", nargs="+", required=True,
+        help="policy 파일 경로 목록 (첫 번째가 baseline)",
+    )
+    matrix_parser.add_argument(
+        "--baseline", default=None,
+        help="baseline policy 경로 (미지정 시 첫 번째 policy)",
+    )
+    matrix_parser.add_argument(
+        "--out-dir", "-o", default=None, dest="out_dir",
+        help="결과 저장 디렉토리",
+    )
+    matrix_parser.add_argument(
+        "--notes", default="", help="실험 메모",
+    )
+
+    decide_parser = scenario_sub.add_parser(
+        "decide", help="matrix 결과에서 champion/promotion 판정",
+    )
+    decide_parser.add_argument(
+        "summary_file", help="_matrix_summary.json 경로",
+    )
+    decide_parser.add_argument(
+        "--output", "-o", default=None, help="decision report 저장 경로",
+    )
+    decide_parser.add_argument(
+        "--json", action="store_true", dest="json_output", help="JSON 출력",
+    )
+
+    # === snapshot: 실험 스냅샷 비교 ===
+    snapshot_parser = subparsers.add_parser(
+        "snapshot",
+        help="실험 스냅샷 관리",
+        parents=[common_parser],
+    )
+    snapshot_sub = snapshot_parser.add_subparsers(
+        dest="snapshot_command", help="서브 명령어",
+    )
+    compare_parser = snapshot_sub.add_parser("compare", help="두 스냅샷 비교")
+    compare_parser.add_argument("file_a", help="스냅샷 A JSON 파일")
+    compare_parser.add_argument("file_b", help="스냅샷 B JSON 파일")
+    compare_parser.add_argument(
+        "--json", action="store_true", dest="json_output",
+        help="JSON 출력",
+    )
+
+    # === outcome: 실행 결과 사용 판정 ===
+    outcome_parser = subparsers.add_parser(
+        "outcome",
+        help="실행 결과에 대한 사용 결과 기록",
+        parents=[common_parser],
+    )
+    outcome_parser.add_argument("skill_id", help="대상 스킬 ID")
+    outcome_parser.add_argument(
+        "verdict",
+        choices=["approved", "edited", "rejected", "redo"],
+        help="사용 결과",
+    )
+    outcome_parser.add_argument(
+        "--trace", type=int, default=None,
+        help="연결할 run_trace ID (선택)",
+    )
+    outcome_parser.add_argument(
+        "--note", default="",
+        help="사람 메모 (선택)",
+    )
+
+    # === pilot: 파일럿 KPI 리포트 ===
+    pilot_parser = subparsers.add_parser(
+        "pilot",
+        help="파일럿 KPI 리포트",
+        parents=[common_parser],
+    )
+    pilot_parser.add_argument(
+        "--skill", "-s", default=None,
+        help="특정 스킬 필터",
+    )
+    pilot_parser.add_argument(
+        "--days", "-d", type=int, default=None,
+        help="최근 N일 기준 (미지정 시 전체)",
+    )
+    pilot_parser.add_argument(
+        "--json", action="store_true", dest="json_output",
+        help="JSON 출력",
+    )
+
+    # === promote: 스킬 release 상태 승격 ===
+    promote_parser = subparsers.add_parser(
+        "promote",
+        help="스킬을 production으로 승격",
+        parents=[common_parser],
+    )
+    promote_parser.add_argument("skill_id", help="승격할 스킬 ID")
+    promote_parser.add_argument(
+        "--to", default="production",
+        choices=["candidate", "production"],
+        help="목표 상태 (기본: production)",
+    )
+    promote_parser.add_argument(
+        "--reason", default="manual promotion",
+        help="승격 사유",
+    )
+    promote_parser.add_argument(
+        "--decision", default=None,
+        help="decision.json 경로 (champion/gate 검증 적용)",
+    )
+    promote_parser.add_argument(
+        "--out-dir", default="adoptions", dest="adopt_out_dir",
+        help="adoption record 저장 디렉토리 (기본: adoptions/)",
+    )
+
+    # === unquarantine: 격리 해제 ===
+    unq_parser = subparsers.add_parser(
+        "unquarantine",
+        help="격리된 스킬 해제 (experimental로 복귀)",
+        parents=[common_parser],
+    )
+    unq_parser.add_argument("skill_id", help="해제할 스킬 ID")
+    unq_parser.add_argument(
+        "--reason", default="manual unquarantine", help="해제 사유",
+    )
+
+    # === governance: release governance 이력 조회 ===
+    gov_parser = subparsers.add_parser(
+        "governance",
+        help="release governance 이력 조회",
+        parents=[common_parser],
+    )
+    gov_parser.add_argument(
+        "--skill", default=None, help="특정 스킬 필터",
+    )
+    gov_parser.add_argument(
+        "--limit", type=int, default=20, help="최대 결과 수",
+    )
+
+    # === adoption: 채택 관리 ===
+    adoption_parser = subparsers.add_parser(
+        "adoption",
+        help="채택 이력 관리",
+        parents=[common_parser],
+    )
+    adoption_sub = adoption_parser.add_subparsers(
+        dest="adoption_cmd", help="서브 명령어",
+    )
+
+    # adoption rollback
+    rb_parser = adoption_sub.add_parser("rollback", help="이전 adoption으로 롤백")
+    rb_parser.add_argument(
+        "target_path", nargs="?", default=None,
+        help="target adoption record 경로",
+    )
+    rb_parser.add_argument(
+        "--previous", action="store_true",
+        help="직전 adoption으로 롤백",
+    )
+    rb_parser.add_argument(
+        "--to", default=None, dest="to_run_id",
+        help="특정 run_id로 롤백",
+    )
+    rb_parser.add_argument(
+        "--reason", default=None, help="롤백 사유",
+    )
+    rb_parser.add_argument(
+        "--adoptions-dir", default="adoptions", dest="adoptions_dir",
+        help="adoption record 디렉토리 (기본: adoptions/)",
+    )
+
+    # adoption latest
+    adoption_sub.add_parser("latest", help="현재 latest adoption 확인")
+
+    # adoption validate
+    val_parser = adoption_sub.add_parser("validate", help="현재 adoption 재검증")
+    val_parser.add_argument(
+        "--adoption", default=None, dest="adoption_path",
+        help="명시 adoption record 경로 (미지정 시 latest)",
+    )
+    val_parser.add_argument(
+        "--spec", default=None, dest="spec_override",
+        help="scenario spec override 경로",
+    )
+    val_parser.add_argument(
+        "--out-dir", default="adoptions/validations", dest="val_out_dir",
+        help="validation record 저장 디렉토리",
+    )
+    val_parser.add_argument(
+        "--regression-threshold", type=float, default=0.15,
+        dest="regression_threshold",
+        help="regression 판정 임계값 (기본: 0.15)",
+    )
+
+    # adoption rebuild-index
+    adoption_sub.add_parser("rebuild-index", help="file → derived index 재구성")
+
+    # adoption list
+    list_parser = adoption_sub.add_parser("list", help="채택 기록 목록")
+    list_parser.add_argument(
+        "--type", default=None,
+        choices=["adoption", "rollback", "validation"],
+        help="action_type 필터",
+    )
+    list_parser.add_argument("--skill", default=None, help="스킬 이름 필터")
+
+    # adoption show
+    show_parser = adoption_sub.add_parser("show", help="단일 record 조회")
+    show_parser.add_argument("target", help="run_id 또는 파일 경로")
+
+    # === lineage: 채택 계보 트리 ===
+    lineage_parser = subparsers.add_parser(
+        "lineage",
+        help="특정 스킬의 채택 계보 트리 출력",
+        parents=[common_parser],
+    )
+    lineage_parser.add_argument("skill_name", help="조회할 스킬 이름")
+    lineage_parser.add_argument(
+        "--run-id", default=None, dest="run_id",
+        help="특정 run_id 기준 (생략 시 가장 최근 채택)",
+    )
+    lineage_parser.add_argument(
+        "--direction", choices=["ancestors", "descendants", "both"],
+        default="both", help="조회 방향 (기본: both)",
+    )
+
+    # === audit: 감사 로그 ===
+    audit_parser = subparsers.add_parser(
+        "audit",
+        help="채택 이력 감사 로그 조회",
+        parents=[common_parser],
+    )
+    audit_sub = audit_parser.add_subparsers(dest="audit_cmd")
+    adopt_audit = audit_sub.add_parser("adoptions", help="채택 이력 테이블 출력")
+    adopt_audit.add_argument("--skill", default=None, help="스킬 이름 필터")
+    adopt_audit.add_argument("--since", default=None, help="시작일 (ISO)")
+    adopt_audit.add_argument("--until", default=None, help="종료일 (ISO)")
+    adopt_audit.add_argument("--scenario", default=None, help="시나리오 ID 필터")
+    adopt_audit.add_argument("--limit", type=int, default=50, help="최대 출력 건수")
+    adopt_audit.add_argument(
+        "--json", action="store_true", dest="json_output", help="JSON 출력",
+    )
+
     args = parser.parse_args()
 
     log_level = logging.DEBUG if args.verbose else logging.WARNING
@@ -558,6 +825,26 @@ def main() -> None:
             _handle_trace(args)
         elif args.command == "eval":
             _handle_eval(args)
+        elif args.command == "scenario":
+            _handle_scenario(args)
+        elif args.command == "snapshot":
+            _handle_snapshot(args)
+        elif args.command == "outcome":
+            _handle_outcome(args)
+        elif args.command == "pilot":
+            _handle_pilot(args)
+        elif args.command == "promote":
+            _handle_promote(args)
+        elif args.command == "unquarantine":
+            _handle_unquarantine(args)
+        elif args.command == "governance":
+            _handle_governance(args)
+        elif args.command == "adoption":
+            _handle_adoption(args)
+        elif args.command == "lineage":
+            _handle_lineage(args)
+        elif args.command == "audit":
+            _handle_audit(args)
     except KeyboardInterrupt:
         print("\nInterrupted.")
         sys.exit(1)
@@ -590,6 +877,7 @@ def _create_engine(args: argparse.Namespace) -> CambrianEngine:
         db_path=args.db,
         external_skill_dirs=args.external if args.external else None,
         provider=provider,
+        policy_path=getattr(args, "policy", None),
     )
 
 
@@ -1074,12 +1362,56 @@ def _handle_global_stats(engine: "CambrianEngine") -> None:
     except Exception:
         print("  Avg feedback:        (not tracked)")
 
+    # Release States 요약
+    release_counts: dict[str, int] = {
+        "production": 0, "candidate": 0, "experimental": 0, "quarantined": 0,
+    }
+    for skill in skills:
+        rs = skill.get("release_state", "experimental")
+        if rs in release_counts:
+            release_counts[rs] += 1
     print(
-        f"\nBudget Limits:"
-        f"\n  Max candidates/run: {engine.MAX_CANDIDATES_PER_RUN} | "
-        f"Max Mode A/run: {engine.MAX_MODE_A_PER_RUN} | "
-        f"Max eval cases: {engine.MAX_EVAL_CASES}"
+        f"\nRelease States:"
+        f"\n  Production: {release_counts['production']} | "
+        f"Candidate: {release_counts['candidate']} | "
+        f"Experimental: {release_counts['experimental']} | "
+        f"Quarantined: {release_counts['quarantined']}"
     )
+
+    # Policy 표시
+    policy = engine.get_policy()
+    print(f"\nPolicy:")
+    print(f"  Source: {policy.policy_source}")
+    print(
+        f"  Budget: candidates={policy.max_candidates_per_run}, "
+        f"mode_a={policy.max_mode_a_per_run}, "
+        f"eval_cases={policy.max_eval_cases}"
+    )
+    print(
+        f"  Governance: promote≥{policy.promote_min_executions}exec/"
+        f"{policy.promote_min_fitness:.2f}fit, "
+        f"demote<{policy.demote_fitness_threshold:.2f}, "
+        f"rollback<{policy.rollback_fitness_threshold:.2f}"
+    )
+    print(
+        f"  Evolution: margin={policy.adoption_margin:.2f}, "
+        f"trials={policy.trial_count}"
+    )
+
+    # Pilot 요약
+    try:
+        pilot = registry.get_pilot_kpi()
+        if pilot["total"] > 0:
+            print(
+                f"\nPilot: {pilot['total']} outcomes, "
+                f"{pilot['net_useful_rate'] * 100:.1f}% net useful "
+                f"({pilot['approved']} approved, {pilot['edited']} edited, "
+                f"{pilot['rejected']} rejected, {pilot['redo']} redo)"
+            )
+        else:
+            print("\nPilot: no outcomes recorded")
+    except Exception:
+        print("\nPilot: no outcomes recorded")
 
 
 def _handle_skill_stats(engine: "CambrianEngine", skill_id: str) -> None:
@@ -1110,6 +1442,7 @@ def _handle_skill_stats(engine: "CambrianEngine", skill_id: str) -> None:
     print(f"  Tags:        {', '.join(tags) if tags else '(none)'}")
     print(f"  Mode:        {s['mode']}")
     print(f"  Status:      {s['status']}")
+    print(f"  Release:     {s.get('release_state', 'experimental')}")
     print(f"  Version:     {s['version']}")
 
     # Performance
@@ -1167,6 +1500,1318 @@ def _handle_skill_stats(engine: "CambrianEngine", skill_id: str) -> None:
         )
     else:
         print("  Feedback:   (no feedback)")
+
+
+def _handle_scenario(args: argparse.Namespace) -> None:
+    """cambrian scenario 처리.
+
+    Args:
+        args: argparse가 파싱한 네임스페이스
+    """
+    from datetime import datetime as _dt
+    from engine.scenario import ScenarioRunner
+
+    cmd = getattr(args, "scenario_command", None)
+    if cmd == "matrix":
+        _handle_scenario_matrix(args)
+        return
+    if cmd == "decide":
+        _handle_scenario_decide(args)
+        return
+    if cmd != "run":
+        print("Usage: cambrian scenario run <spec.json>")
+        sys.exit(1)
+
+    spec_path = Path(args.spec_file)
+    if not spec_path.exists():
+        print(f"Spec file not found: {spec_path}", file=sys.stderr)
+        sys.exit(1)
+
+    try:
+        spec = json.loads(spec_path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as exc:
+        print(f"Invalid JSON: {exc}", file=sys.stderr)
+        sys.exit(1)
+
+    engine = _create_engine(args)
+    runner = ScenarioRunner(engine)
+    report = runner.run_scenario(
+        spec,
+        scenario_path=str(spec_path.resolve()),
+        notes=getattr(args, "notes", ""),
+    )
+
+    # stdout 요약
+    _print_scenario_summary(report)
+
+    # report 파일 저장
+    output_path = getattr(args, "output", None)
+    if output_path is None:
+        reports_dir = Path("reports")
+        reports_dir.mkdir(exist_ok=True)
+        timestamp = _dt.now().strftime("%Y%m%d_%H%M%S")
+        output_path = str(
+            reports_dir / f"{spec.get('name', 'scenario')}_{timestamp}.json"
+        )
+
+    out = Path(output_path)
+    out.parent.mkdir(parents=True, exist_ok=True)
+    out.write_text(
+        json.dumps(report, indent=2, ensure_ascii=False),
+        encoding="utf-8",
+    )
+    print(f"\nReport saved: {out}")
+
+
+def _print_scenario_summary(report: dict) -> None:
+    """scenario 실행 결과 요약을 출력한다.
+
+    Args:
+        report: ScenarioRunner.run_scenario() 반환값
+    """
+    name = report.get("scenario_name", "scenario")
+
+    if not report.get("success"):
+        print(f"Scenario: {name}")
+        print("═" * 50)
+        print("\n[FAIL] Spec validation error:")
+        for err in report.get("errors", []):
+            print(f"  - {err}")
+        return
+
+    total = report["total_inputs"]
+    succ = report["successful_inputs"]
+    fail = report["failed_inputs"]
+    rate = report["success_rate"] * 100
+    avg_ms = report["avg_execution_ms"]
+    winner = report.get("winner_skill")
+
+    print(f"Scenario: {name}")
+    print("═" * 50)
+    print(f"\nInputs:   {total} total, {succ} success, {fail} fail → {rate:.1f}%")
+    print(f"Avg time: {avg_ms}ms")
+    if winner:
+        win_count = sum(
+            1 for r in report["run_results"]
+            if r["success"] and r["skill_id"] == winner
+        )
+        print(f"Winner:   {winner} (selected {win_count}/{succ} times)")
+    else:
+        print("Winner:   (none)")
+
+    # Run Results 테이블
+    print(f"\nRun Results:")
+    print(f"  {'#':<4} {'OK':<6} {'SKILL':<20} {'TIME':<8} ERROR")
+    for r in report["run_results"]:
+        ok_str = "[OK]" if r["success"] else "[FAIL]"
+        skill_str = r["skill_id"] or "-"
+        time_str = f"{r['execution_time_ms']}ms"
+        err_str = r.get("error", "")[:50]
+        print(f"  {r['index']:<4} {ok_str:<6} {skill_str:<20} {time_str:<8} {err_str}")
+
+    # Eval
+    eval_r = report.get("eval_result")
+    if eval_r:
+        if "error" in eval_r:
+            print(f"\nEval: error — {eval_r['error'][:80]}")
+        elif "pass_rate" in eval_r:
+            verdict = eval_r.get("verdict", "")
+            print(f"\nEval: pass_rate {eval_r['pass_rate'] * 100:.1f}%, verdict: {verdict}")
+        else:
+            print(f"\nEval: {eval_r}")
+
+    # Evolve
+    evolve_r = report.get("evolve_result")
+    if evolve_r:
+        if "skipped" in evolve_r:
+            print(f"Evolve: skipped ({evolve_r['skipped']})")
+        elif "error" in evolve_r:
+            print(f"Evolve: error — {evolve_r['error'][:80]}")
+        elif "adopted" in evolve_r:
+            adopted_str = "adopted" if evolve_r["adopted"] else "discarded"
+            print(
+                f"Evolve: {adopted_str} "
+                f"(fitness {evolve_r['parent_fitness']:.4f} → {evolve_r['child_fitness']:.4f})"
+            )
+
+    # Re-eval
+    re_eval_r = report.get("re_eval_result")
+    if re_eval_r and "pass_rate" in re_eval_r:
+        print(f"Re-eval: pass_rate {re_eval_r['pass_rate'] * 100:.1f}%, verdict: {re_eval_r.get('verdict', '')}")
+
+    # Promote recommendation
+    rec = report.get("promote_recommendation")
+    if rec:
+        print(f"\nPromote Recommendation:")
+        print(
+            f"  {rec['skill_id']}: {rec.get('release_state', '?')} → "
+            f"{rec['recommendation']}"
+        )
+        if rec.get("eligible"):
+            print(
+                f"  fitness={rec.get('fitness', 0):.4f}, "
+                f"executions={rec.get('executions', 0)}, "
+                f"success_rate={rec.get('success_rate', 0) * 100:.1f}%"
+            )
+            print(f"  → Run: cambrian promote {rec['skill_id']}")
+
+
+def _handle_scenario_matrix(args: argparse.Namespace) -> None:
+    """cambrian scenario matrix 처리.
+
+    Args:
+        args: argparse가 파싱한 네임스페이스
+    """
+    from engine.scenario import ScenarioRunner
+
+    spec_path = Path(args.spec_file)
+    if not spec_path.exists():
+        print(f"Spec file not found: {spec_path}", file=sys.stderr)
+        sys.exit(1)
+
+    try:
+        spec = json.loads(spec_path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as exc:
+        print(f"Invalid JSON: {exc}", file=sys.stderr)
+        sys.exit(1)
+
+    policy_paths = args.policies
+
+    # 실행 전 전체 policy 파일 존재 검증
+    for pp in policy_paths:
+        if not Path(pp).exists():
+            print(f"Policy file not found: {pp}", file=sys.stderr)
+            sys.exit(1)
+
+    baseline = getattr(args, "baseline", None)
+    if baseline and baseline not in policy_paths:
+        print(
+            f"Baseline '{baseline}' is not in policies list.",
+            file=sys.stderr,
+        )
+        sys.exit(1)
+
+    if len(policy_paths) == 1:
+        print("[WARN] Only 1 policy — no comparison possible.")
+
+    engine = _create_engine(args)
+    runner = ScenarioRunner(engine)
+
+    out_dir = getattr(args, "out_dir", None)
+    summary = runner.run_matrix(
+        spec=spec,
+        policy_paths=policy_paths,
+        baseline_path=baseline,
+        scenario_path=str(spec_path.resolve()),
+        notes=getattr(args, "notes", ""),
+        out_dir=Path(out_dir) if out_dir else None,
+    )
+
+    if not summary.get("success", True):
+        print("[FAIL] Matrix run failed:")
+        for err in summary.get("errors", []):
+            print(f"  - {err}")
+        sys.exit(1)
+
+    # stdout 요약
+    _print_matrix_summary(summary)
+    print(f"\nResults saved: {summary.get('scenario_path', '')}")
+
+
+def _print_matrix_summary(summary: dict) -> None:
+    """matrix 실행 결과 요약을 출력한다.
+
+    Args:
+        summary: run_matrix() 반환값
+    """
+    name = summary.get("scenario_name", "matrix")
+    profiles = summary.get("profiles", [])
+    baseline = summary.get("baseline_policy", "")
+
+    print(f"Matrix Run: {name} ({len(profiles)} policies)")
+    print("═" * 55)
+    print(f"\nBaseline: {Path(baseline).name}")
+    print(
+        f"\n{'PROFILE':<22} {'SUCCESS':>7} {'EVAL':>7} {'AVG_MS':>7} "
+        f"{'PROMOTE':<18} VERDICT"
+    )
+    for p in profiles:
+        pname = Path(p["policy_path"]).stem
+        if p["is_baseline"]:
+            pname += " (base)"
+
+        if p.get("verdict_vs_baseline") == "error":
+            print(f"  {pname:<20} {'[ERROR]':>7} {'-':>7} {'-':>7} {'-':<18} error")
+            continue
+
+        sr = f"{p['success_rate'] * 100:.1f}%" if p["success_rate"] else "0.0%"
+        ep = f"{p['eval_pass_rate'] * 100:.1f}%" if p.get("eval_pass_rate") is not None else "-"
+        ms = f"{p['avg_execution_ms']}ms"
+        prom = p.get("promote_recommendation") or "-"
+        verdict = p.get("verdict_vs_baseline") or "-"
+
+        # verdict 아이콘
+        icon = {"improved": "↑", "regressed": "↓", "mixed": "↔", "equivalent": "="}.get(verdict, "")
+        verdict_str = f"{verdict} {icon}" if icon else verdict
+
+        print(
+            f"  {pname:<20} {sr:>7} {ep:>7} {ms:>7} {prom:<18} {verdict_str}"
+        )
+
+    print(f"\nOverall: {summary.get('overall_verdict', '')}")
+
+
+def _handle_scenario_decide(args: argparse.Namespace) -> None:
+    """cambrian scenario decide 처리.
+
+    Args:
+        args: argparse가 파싱한 네임스페이스
+    """
+    from engine.decision import MatrixDecider
+
+    summary_path = Path(args.summary_file)
+    if not summary_path.exists():
+        print(f"File not found: {summary_path}", file=sys.stderr)
+        sys.exit(1)
+
+    try:
+        matrix_summary = json.loads(summary_path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as exc:
+        print(f"Invalid JSON: {exc}", file=sys.stderr)
+        sys.exit(1)
+
+    try:
+        decider = MatrixDecider()
+        decision = decider.decide(matrix_summary)
+        decision["matrix_summary_path"] = str(summary_path.resolve())
+    except ValueError as exc:
+        print(f"[FAIL] {exc}", file=sys.stderr)
+        sys.exit(1)
+
+    if getattr(args, "json_output", False):
+        print(json.dumps(decision, indent=2, ensure_ascii=False))
+    else:
+        _print_decision_report(decision)
+
+    # output 저장
+    output_path = getattr(args, "output", None)
+    if output_path:
+        out = Path(output_path)
+        out.parent.mkdir(parents=True, exist_ok=True)
+        out.write_text(
+            json.dumps(decision, indent=2, ensure_ascii=False),
+            encoding="utf-8",
+        )
+        print(f"\nDecision saved: {out}")
+
+
+def _print_decision_report(decision: dict) -> None:
+    """decision report를 사람이 읽기 좋게 출력한다.
+
+    Args:
+        decision: MatrixDecider.decide() 반환값
+    """
+    name = decision.get("scenario_name", "")
+    baseline = decision.get("baseline_policy", "")
+    profiles = decision.get("profiles", [])
+    champion = decision.get("champion")
+    promotion = decision.get("promotion", {})
+
+    print(f"Matrix Decision: {name}")
+    print("═" * 55)
+    print(f"\nBaseline: {Path(baseline).name if baseline else '-'}")
+
+    print(
+        f"\n{'PROFILE':<22} {'ROLE':<13} {'SUCCESS':>7} {'EVAL':>7} "
+        f"{'AVG_MS':>7} VERDICT"
+    )
+    for p in profiles:
+        pname = Path(p.get("policy_path", "")).stem or "?"
+        role = p.get("role", "?")
+        if role == "champion":
+            role = "★ champion"
+
+        sr = f"{p['success_rate'] * 100:.1f}%" if p.get("success_rate") else "-"
+        ep = (
+            f"{p['eval_pass_rate'] * 100:.1f}%"
+            if p.get("eval_pass_rate") is not None else "-"
+        )
+        ms = f"{p['avg_execution_ms']}ms" if p.get("avg_execution_ms") else "-"
+        verdict = p.get("verdict_vs_baseline") or "-"
+        print(
+            f"  {pname:<20} {role:<13} {sr:>7} {ep:>7} {ms:>7} {verdict}"
+        )
+
+    # Champion
+    if champion:
+        print(f"\nChampion: {Path(champion['policy_path']).name}")
+        print(f"  {champion['selection_reason']}")
+    else:
+        print("\nChampion: (none)")
+
+    # Baseline Decision
+    bd = decision.get("baseline_decision", "")
+    print(f"\nBaseline Decision: {bd}")
+
+    # Promotion
+    if promotion.get("recommend_promote"):
+        print(f"\nPromotion: ✓ RECOMMEND")
+        print(f"  {promotion['reason']}")
+        print(
+            f"  → To promote: cambrian promote <skill_id> "
+            f"--reason \"champion: {Path(promotion.get('recommended_policy', '')).stem}\""
+        )
+    else:
+        print(f"\nPromotion: ✗ NOT RECOMMENDED")
+        print(f"  {promotion.get('reason', '')}")
+
+
+def _handle_snapshot(args: argparse.Namespace) -> None:
+    """cambrian snapshot 처리.
+
+    Args:
+        args: argparse가 파싱한 네임스페이스
+    """
+    from engine.snapshot import SnapshotComparer
+
+    if getattr(args, "snapshot_command", None) != "compare":
+        print("Usage: cambrian snapshot compare <file_a> <file_b>")
+        sys.exit(1)
+
+    path_a = Path(args.file_a)
+    path_b = Path(args.file_b)
+
+    if not path_a.exists():
+        print(f"File not found: {path_a}", file=sys.stderr)
+        sys.exit(1)
+    if not path_b.exists():
+        print(f"File not found: {path_b}", file=sys.stderr)
+        sys.exit(1)
+
+    try:
+        snap_a = json.loads(path_a.read_text(encoding="utf-8"))
+        snap_b = json.loads(path_b.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as exc:
+        print(f"Invalid JSON: {exc}", file=sys.stderr)
+        sys.exit(1)
+
+    comparer = SnapshotComparer()
+    result = comparer.compare(snap_a, snap_b)
+
+    if getattr(args, "json_output", False):
+        print(json.dumps(result, indent=2, ensure_ascii=False))
+    else:
+        print(comparer.format_comparison(result))
+
+
+def _handle_outcome(args: argparse.Namespace) -> None:
+    """cambrian outcome 처리.
+
+    Args:
+        args: argparse가 파싱한 네임스페이스
+    """
+    engine = _create_engine(args)
+    try:
+        oid = engine.record_outcome(
+            skill_id=args.skill_id,
+            verdict=args.verdict,
+            run_trace_id=getattr(args, "trace", None),
+            human_note=getattr(args, "note", ""),
+        )
+        print(f"[OK] Outcome #{oid} recorded: {args.skill_id} → {args.verdict}")
+    except SkillNotFoundError:
+        print(f"Skill '{args.skill_id}' not found.", file=sys.stderr)
+        sys.exit(1)
+
+
+def _handle_pilot(args: argparse.Namespace) -> None:
+    """cambrian pilot 처리.
+
+    Args:
+        args: argparse가 파싱한 네임스페이스
+    """
+    engine = _create_engine(args)
+    report = engine.get_pilot_report(
+        skill_id=getattr(args, "skill", None),
+        days=getattr(args, "days", None),
+    )
+
+    if getattr(args, "json_output", False):
+        print(json.dumps(report, indent=2, ensure_ascii=False))
+        return
+
+    _print_pilot_report(report)
+
+
+def _print_pilot_report(report: dict) -> None:
+    """파일럿 리포트를 사람이 읽기 좋은 형태로 출력한다.
+
+    Args:
+        report: get_pilot_report() 반환값
+    """
+    g = report["global"]
+    period = report.get("period_days")
+    skill_filter = report.get("skill_filter")
+
+    if g["total"] == 0:
+        print("No pilot outcomes recorded yet.")
+        print(
+            "Record outcomes with: "
+            "cambrian outcome <skill_id> approved|edited|rejected|redo"
+        )
+        return
+
+    # 헤더
+    period_str = f"last {period} days" if period else "all time"
+    if skill_filter:
+        print(f"Pilot Report: {skill_filter} ({period_str})")
+    else:
+        print(f"Pilot Report ({period_str})")
+    print("═" * 50)
+
+    # Overall KPI
+    print(f"\nOverall KPI:")
+    print(f"  Total outcomes:   {g['total']}")
+    print(
+        f"  Approved:         {g['approved']}"
+        f"  ({g['acceptance_rate'] * 100:.1f}%)"
+    )
+    print(
+        f"  Edited:           {g['edited']}"
+        f"  ({g['edit_rate'] * 100:.1f}%)"
+    )
+    print(
+        f"  Rejected:         {g['rejected']}"
+        f"  ({g['reject_rate'] * 100:.1f}%)"
+    )
+    print(
+        f"  Redo:             {g['redo']}"
+        f"  ({g['redo_rate'] * 100:.1f}%)"
+    )
+    net = g["approved"] + g["edited"]
+    print(f"  ─────────────────────────────")
+    print(
+        f"  Net useful:       {net}"
+        f"  ({g['net_useful_rate'] * 100:.1f}%)"
+    )
+
+    # By Skill (글로벌 리포트일 때만)
+    by_skill = report.get("by_skill", [])
+    if by_skill:
+        print(
+            f"\n{'SKILL':<22} {'TOTAL':>5}  {'APPROVED':>8}  "
+            f"{'EDITED':>6}  {'REJECTED':>8}  {'REDO':>4}  {'NET_USEFUL':>10}"
+        )
+        for s in by_skill:
+            t = s["total"]
+            print(
+                f"  {s['skill_id']:<20} {t:>5}  "
+                f"{s['approved']:>3} ({s['approved']*100//t:>2}%)  "
+                f"{s['edited']:>3} ({s['edited']*100//t:>2}%)  "
+                f"{s['rejected']:>3} ({s['rejected']*100//t:>2}%)  "
+                f"{s['redo']:>4}  "
+                f"{s['net_useful_rate']*100:>6.1f}%"
+            )
+
+
+def _handle_promote(args: argparse.Namespace) -> None:
+    """cambrian promote 처리.
+
+    --decision 지정 시 decision guardrail 적용 후 기존 governance 검증.
+    promote 성공 시 adoption record 저장.
+
+    Args:
+        args: argparse가 파싱한 네임스페이스
+    """
+    import hashlib as _hashlib
+    from datetime import datetime as _dt
+    from datetime import timezone as _tz
+
+    engine = _create_engine(args)
+    registry = engine.get_registry()
+
+    # ── decision-backed guardrail ──
+    decision_data = None
+    decision_path = getattr(args, "decision", None)
+
+    if decision_path:
+        from engine.decision import MatrixDecider
+
+        dp = Path(decision_path)
+        if not dp.exists():
+            print(f"Decision file not found: {dp}", file=sys.stderr)
+            sys.exit(1)
+        try:
+            decision_data = json.loads(dp.read_text(encoding="utf-8"))
+        except json.JSONDecodeError as exc:
+            print(f"Invalid decision JSON: {exc}", file=sys.stderr)
+            sys.exit(1)
+
+        passed, reason = MatrixDecider.validate_for_promote(decision_data)
+        if not passed:
+            print(f"[BLOCKED] {reason}", file=sys.stderr)
+            sys.exit(1)
+
+    # ── 기존 governance 검증 ──
+    try:
+        skill_data = registry.get(args.skill_id)
+    except SkillNotFoundError:
+        print(f"Skill '{args.skill_id}' not found.", file=sys.stderr)
+        sys.exit(1)
+
+    current = skill_data.get("release_state", "experimental")
+    target = getattr(args, "to", "production")
+
+    if current == "quarantined":
+        print(
+            "[FAIL] Cannot promote quarantined skill. "
+            "Use 'cambrian unquarantine' first.",
+            file=sys.stderr,
+        )
+        sys.exit(1)
+
+    policy = engine.get_policy()
+    q_count = 0
+    if target == "production":
+        min_exec = policy.promote_min_executions
+        min_fit = policy.promote_min_fitness
+        q_block = policy.quarantine_block_count
+        if skill_data["total_executions"] < min_exec:
+            print(
+                f"[FAIL] Cannot promote: total_executions="
+                f"{skill_data['total_executions']} < {min_exec}",
+                file=sys.stderr,
+            )
+            sys.exit(1)
+        if skill_data["fitness_score"] < min_fit:
+            print(
+                f"[FAIL] Cannot promote: fitness="
+                f"{skill_data['fitness_score']:.4f} < {min_fit}",
+                file=sys.stderr,
+            )
+            sys.exit(1)
+        q_count = registry.get_quarantine_count(args.skill_id)
+        if q_count >= q_block:
+            print(
+                f"[FAIL] Cannot promote: quarantined {q_count} times "
+                f"(max {q_block - 1})",
+                file=sys.stderr,
+            )
+            sys.exit(1)
+
+    # ── promote 실행 ──
+    registry.update_release_state(
+        args.skill_id,
+        new_state=target,
+        reason=args.reason,
+        triggered_by="manual",
+    )
+
+    # ── adoption record 생성 ──
+    out_dir = Path(getattr(args, "adopt_out_dir", "adoptions"))
+    out_dir.mkdir(parents=True, exist_ok=True)
+
+    timestamp = _dt.now(_tz.utc)
+    ts_str = timestamp.strftime("%Y%m%d_%H%M%S")
+
+    decision_prov = None
+    if decision_data and decision_path:
+        raw = Path(decision_path).read_text(encoding="utf-8")
+        d_hash = "sha256:" + _hashlib.sha256(raw.encode()).hexdigest()[:16]
+        decision_prov = {
+            "decision_file": str(Path(decision_path).resolve()),
+            "decision_hash": d_hash,
+            "matrix_summary_path": decision_data.get(
+                "matrix_summary_path", ""
+            ),
+            "champion_policy": (
+                decision_data.get("champion") or {}
+            ).get("policy_path", ""),
+            "baseline_decision": decision_data.get("baseline_decision", ""),
+            "recommend_promote": (
+                decision_data.get("promotion", {}).get("recommend_promote", False)
+            ),
+            "gate_reason": decision_data.get("promotion", {}).get("reason", ""),
+        }
+
+    record = {
+        "_adoption_version": "1.0.0",
+        "timestamp": timestamp.isoformat(),
+        "skill_id": args.skill_id,
+        "promoted_to": target,
+        "previous_release_state": current,
+        "decision_provenance": decision_prov,
+        "human_provenance": {
+            "reason": args.reason,
+            "operator": "",
+        },
+        "governance_check": {
+            "fitness_score": skill_data.get("fitness_score", 0),
+            "total_executions": skill_data.get("total_executions", 0),
+            "quarantine_count": q_count,
+            "governance_passed": True,
+        },
+    }
+
+    filename = f"adoption_{ts_str}_{args.skill_id}.json"
+    filepath = out_dir / filename
+    try:
+        filepath.write_text(
+            json.dumps(record, indent=2, ensure_ascii=False),
+            encoding="utf-8",
+        )
+        # _latest.json 갱신
+        latest = {
+            "latest_adoption": filename,
+            "skill_id": args.skill_id,
+            "promoted_to": target,
+            "timestamp": timestamp.isoformat(),
+        }
+        (out_dir / "_latest.json").write_text(
+            json.dumps(latest, indent=2, ensure_ascii=False),
+            encoding="utf-8",
+        )
+    except Exception as exc:
+        print(f"  [WARN] Adoption record 저장 실패: {exc}", file=sys.stderr)
+
+    # ── lineage 기록 ──
+    try:
+        import uuid as _uuid
+        run_id = str(_uuid.uuid4())[:8]
+
+        # 직전 채택 정보에서 parent 추출
+        latest_path = out_dir / "_latest.json"
+        parent_skill: str | None = None
+        parent_run: str | None = None
+        if latest_path.exists():
+            prev = json.loads(latest_path.read_text(encoding="utf-8"))
+            if prev.get("skill_id") == args.skill_id:
+                parent_skill = prev.get("skill_id")
+                parent_run = prev.get("run_id")
+
+        # _latest.json에 run_id 추가 갱신
+        latest_data = json.loads(latest_path.read_text(encoding="utf-8")) if latest_path.exists() else {}
+        latest_data["run_id"] = run_id
+        latest_path.write_text(
+            json.dumps(latest_data, indent=2, ensure_ascii=False),
+            encoding="utf-8",
+        )
+
+        registry.add_lineage(
+            child_skill_name=args.skill_id,
+            child_run_id=run_id,
+            parent_skill_name=parent_skill,
+            parent_run_id=parent_run,
+            scenario_id=None,
+            policy_hash=None,
+            notes=args.reason,
+        )
+    except Exception:
+        pass  # lineage 실패가 promote를 중단하지 않음
+
+    # ── stdout ──
+    print(f"[OK] '{args.skill_id}' promoted: {current} → {target}")
+    if decision_data:
+        champion = decision_data.get("champion") or {}
+        print(f"  Decision: champion={champion.get('policy_path', '?')}")
+    print(f"  Reason: {args.reason}")
+    print(f"  Adoption record: {filepath}")
+
+
+def _handle_unquarantine(args: argparse.Namespace) -> None:
+    """cambrian unquarantine 처리.
+
+    Args:
+        args: argparse가 파싱한 네임스페이스
+    """
+    engine = _create_engine(args)
+    registry = engine.get_registry()
+
+    try:
+        skill_data = registry.get(args.skill_id)
+    except SkillNotFoundError:
+        print(f"Skill '{args.skill_id}' not found.", file=sys.stderr)
+        sys.exit(1)
+
+    current = skill_data.get("release_state", "experimental")
+    if current != "quarantined":
+        print(
+            f"Skill '{args.skill_id}' is not quarantined (current: {current}).",
+            file=sys.stderr,
+        )
+        sys.exit(1)
+
+    registry.update_release_state(
+        args.skill_id,
+        new_state="experimental",
+        reason=args.reason,
+        triggered_by="manual",
+    )
+    print(f"[OK] '{args.skill_id}' unquarantined → experimental")
+
+
+def _handle_governance(args: argparse.Namespace) -> None:
+    """cambrian governance 처리.
+
+    Args:
+        args: argparse가 파싱한 네임스페이스
+    """
+    engine = _create_engine(args)
+    registry = engine.get_registry()
+    logs = registry.get_governance_log(
+        skill_id=getattr(args, "skill", None),
+        limit=args.limit,
+    )
+
+    if not logs:
+        print("No governance history.")
+        return
+
+    print(
+        f"{'ID':<5} {'SKILL':<20} {'FROM':<14} {'TO':<14} "
+        f"{'BY':<8} {'REASON':<30} {'DATE'}"
+    )
+    print("─" * 105)
+    for log in logs:
+        print(
+            f"{log['id']:<5} {log['skill_id']:<20} "
+            f"{log['from_state']:<14} {log['to_state']:<14} "
+            f"{log['triggered_by']:<8} "
+            f"{log['reason'][:28]:<30} {log['created_at'][:16]}"
+        )
+
+
+def _handle_adoption(args: argparse.Namespace) -> None:
+    """cambrian adoption 처리.
+
+    Args:
+        args: argparse가 파싱한 네임스페이스
+    """
+    cmd = getattr(args, "adoption_cmd", None)
+    if cmd == "rollback":
+        _handle_adoption_rollback(args)
+    elif cmd == "latest":
+        _handle_adoption_latest(args)
+    elif cmd == "validate":
+        _handle_adoption_validate(args)
+    elif cmd == "rebuild-index":
+        _handle_adoption_rebuild_index(args)
+    elif cmd == "list":
+        _handle_adoption_list(args)
+    elif cmd == "show":
+        _handle_adoption_show(args)
+    else:
+        print("Usage: cambrian adoption rollback|latest|validate|rebuild-index|list|show")
+        sys.exit(1)
+
+
+def _handle_adoption_rollback(args: argparse.Namespace) -> None:
+    """cambrian adoption rollback 처리.
+
+    Args:
+        args: argparse가 파싱한 네임스페이스
+    """
+    from engine.rollback import RollbackError, execute_rollback, resolve_previous_adoption
+
+    adoptions_dir = getattr(args, "adoptions_dir", "adoptions")
+    latest_path = Path(adoptions_dir) / "_latest.json"
+
+    if not latest_path.exists():
+        print("[rollback] ✗ 실패 — _latest.json 없음 (채택 기록 없음)", file=sys.stderr)
+        sys.exit(1)
+
+    target_path = getattr(args, "target_path", None)
+    use_previous = getattr(args, "previous", False)
+    to_run_id = getattr(args, "to_run_id", None)
+
+    # --previous: lineage에서 직전 찾기
+    if use_previous and not target_path:
+        current_latest = json.loads(latest_path.read_text(encoding="utf-8"))
+        current_run_id = current_latest.get("run_id")
+        skill_name = current_latest.get("skill_id") or current_latest.get("skill_name")
+
+        if not current_run_id or not skill_name:
+            print("[rollback] ✗ 실패 — latest에 run_id/skill 정보 없음", file=sys.stderr)
+            sys.exit(1)
+
+        engine = _create_engine(args)
+        registry = engine.get_registry()
+        resolved = resolve_previous_adoption(
+            skill_name, current_run_id, registry._conn, adoptions_dir,
+        )
+        if not resolved:
+            print("[rollback] ✗ 실패 — 직전 adoption 기록을 찾을 수 없음", file=sys.stderr)
+            sys.exit(1)
+        target_path = resolved
+
+    # --to <run_id>: adoptions 디렉토리에서 검색
+    if to_run_id and not target_path:
+        adopt_dir = Path(adoptions_dir)
+        found = None
+        if adopt_dir.exists():
+            for f in adopt_dir.glob("adoption_*.json"):
+                try:
+                    data = json.loads(f.read_text(encoding="utf-8"))
+                    if data.get("run_id") == to_run_id:
+                        found = str(f)
+                        break
+                except Exception:
+                    continue
+        if not found:
+            print(f"[rollback] ✗ 실패 — run_id '{to_run_id}' 에 해당하는 record 없음", file=sys.stderr)
+            sys.exit(1)
+        target_path = found
+
+    if not target_path:
+        print("Usage: cambrian adoption rollback <path> | --previous | --to <run_id>", file=sys.stderr)
+        sys.exit(1)
+
+    # DB 연결 (lineage 기록용)
+    db_conn = None
+    try:
+        engine = _create_engine(args)
+        db_conn = engine.get_registry()._conn
+    except Exception:
+        pass
+
+    try:
+        record = execute_rollback(
+            target_path=target_path,
+            current_latest_path=str(latest_path),
+            human_reason=getattr(args, "reason", None),
+            adoptions_dir=adoptions_dir,
+            db_conn=db_conn,
+        )
+
+        prev = record["previous_latest"]
+        tgt = record["target_adoption"]
+        print("[rollback] ✓ 성공")
+        print(f"  skill      : {record['skill_name']}")
+        print(f"  이전 latest : {prev['run_id'][:8]} ({prev['adopted_at'][:16]})")
+        print(f"  복원 target : {tgt['run_id'][:8]} ({tgt['adopted_at'][:16]})")
+        print(f"  record 저장 : {record.get('_record_path', '')}")
+        print(f"  이유        : {record['human_reason'] or '미지정'}")
+
+    except RollbackError as exc:
+        print(f"[rollback] ✗ 실패 — {exc}", file=sys.stderr)
+        print("현재 상태는 변경되지 않았습니다.", file=sys.stderr)
+        sys.exit(1)
+
+
+def _handle_adoption_latest(args: argparse.Namespace) -> None:
+    """cambrian adoption latest 처리.
+
+    Args:
+        args: argparse가 파싱한 네임스페이스
+    """
+    adoptions_dir = getattr(args, "adoptions_dir", "adoptions")
+    latest_path = Path(adoptions_dir) / "_latest.json"
+
+    if not latest_path.exists():
+        print("[adoption] latest 없음 (채택 기록 없음)")
+        return
+
+    data = json.loads(latest_path.read_text(encoding="utf-8"))
+    print(f"Latest Adoption:")
+    print(f"  skill    : {data.get('skill_id') or data.get('skill_name', '?')}")
+    print(f"  run_id   : {data.get('run_id', '?')}")
+    print(f"  promoted : {data.get('promoted_to', '?')}")
+    print(f"  timestamp: {data.get('timestamp', '?')}")
+    action = data.get("action")
+    if action:
+        print(f"  action   : {action}")
+
+
+def _handle_adoption_validate(args: argparse.Namespace) -> None:
+    """cambrian adoption validate 처리.
+
+    Args:
+        args: argparse가 파싱한 네임스페이스
+    """
+    from engine.validation import (
+        ValidationError,
+        compute_verdict,
+        load_comparison_basis,
+        run_fresh_validation,
+        save_validation_record,
+    )
+
+    adoptions_dir = getattr(args, "adoptions_dir", "adoptions")
+    val_out_dir = getattr(args, "val_out_dir", "adoptions/validations")
+
+    # 1. adoption 로드
+    adoption_path = getattr(args, "adoption_path", None)
+    if adoption_path:
+        p = Path(adoption_path)
+        if not p.exists():
+            print(f"[validate] ✗ error — adoption 파일 없음: {p}", file=sys.stderr)
+            sys.exit(1)
+        try:
+            adoption = json.loads(p.read_text(encoding="utf-8"))
+        except Exception as exc:
+            print(f"[validate] ✗ error — {exc}", file=sys.stderr)
+            sys.exit(1)
+    else:
+        latest_path = Path(adoptions_dir) / "_latest.json"
+        if not latest_path.exists():
+            print("[validate] ✗ error — _latest.json 없음 (채택 기록 없음)", file=sys.stderr)
+            sys.exit(1)
+        adoption = json.loads(latest_path.read_text(encoding="utf-8"))
+
+    skill_name = adoption.get("skill_id") or adoption.get("skill_name") or "unknown"
+    run_id = adoption.get("run_id", "?")
+    adopted_at = adoption.get("timestamp") or adoption.get("adopted_at") or ""
+
+    # 2. comparison basis
+    basis = load_comparison_basis(adoption, adoptions_dir)
+
+    # 3. fresh run
+    scenario_ref = adoption.get("scenario_ref") or adoption.get("scenario_id")
+    spec_override = getattr(args, "spec_override", None)
+
+    fresh_run = None
+    try:
+        engine = _create_engine(args)
+        fresh_run = run_fresh_validation(
+            scenario_ref=scenario_ref,
+            spec_override=spec_override,
+            skill_name=skill_name,
+            engine=engine,
+        )
+    except ValidationError as exc:
+        # fresh run 실패 → basis만으로 inconclusive 또는 error
+        if basis["basis_metrics"] and not spec_override and not scenario_ref:
+            # spec 없으면 inconclusive
+            fresh_run = {"run_id": "", "report_path": None, "fresh_metrics": {}}
+        else:
+            # error verdict
+            record = {
+                "schema_version": "1.0",
+                "action_type": "validation",
+                "skill_name": skill_name,
+                "timestamp": "",
+                "target_adoption": {"run_id": run_id, "adopted_at": adopted_at, "record_path": ""},
+                "scenario_ref": scenario_ref,
+                "spec_override": spec_override,
+                "comparison_basis": basis,
+                "fresh_run": None,
+                "metric_deltas": {},
+                "verdict": "error",
+                "verdict_reason": str(exc),
+                "recommended_action": "investigate",
+                "notes": None,
+                "operator": "cli",
+            }
+            try:
+                rp = save_validation_record(record, val_out_dir)
+                print(f"  record 저장   : {rp}")
+            except Exception:
+                pass
+            print(f"[validate] ✗ error — {exc}", file=sys.stderr)
+            print("현재 adoption 상태는 변경되지 않았습니다.", file=sys.stderr)
+            sys.exit(1)
+    except Exception as exc:
+        print(f"[validate] ✗ error — {exc}", file=sys.stderr)
+        print("현재 adoption 상태는 변경되지 않았습니다.", file=sys.stderr)
+        sys.exit(1)
+
+    # 4. verdict
+    reg_threshold = getattr(args, "regression_threshold", 0.15)
+    verdict_result = compute_verdict(
+        basis["basis_metrics"],
+        fresh_run["fresh_metrics"],
+        regression_threshold=reg_threshold,
+    )
+
+    # 5. validation record 저장
+    from datetime import datetime as _dt, timezone as _tz
+    record = {
+        "schema_version": "1.0",
+        "action_type": "validation",
+        "skill_name": skill_name,
+        "timestamp": _dt.now(_tz.utc).isoformat(),
+        "target_adoption": {
+            "run_id": run_id,
+            "adopted_at": adopted_at,
+            "record_path": str(adoption_path or ""),
+        },
+        "scenario_ref": scenario_ref,
+        "spec_override": spec_override,
+        "comparison_basis": basis,
+        "fresh_run": fresh_run,
+        "metric_deltas": verdict_result["metric_deltas"],
+        "verdict": verdict_result["verdict"],
+        "verdict_reason": verdict_result["verdict_reason"],
+        "recommended_action": verdict_result["recommended_action"],
+        "notes": None,
+        "operator": "cli",
+    }
+
+    record_path = ""
+    try:
+        record_path = save_validation_record(record, val_out_dir)
+    except Exception as exc:
+        print(f"  [WARN] record 저장 실패: {exc}", file=sys.stderr)
+
+    # 6. CLI 출력
+    verdict = verdict_result["verdict"]
+
+    if verdict == "inconclusive":
+        print(f"[validate] ⚠ inconclusive")
+        print(f"  reason: {verdict_result['verdict_reason']}")
+        print("  채택 기록을 확인하거나 --spec으로 직접 비교 기준을 제공하라.")
+        if record_path:
+            print(f"  record 저장   : {record_path}")
+        return
+
+    icon_map = {"worse": "⚠", "better": "✓", "neutral": "─", "unknown": "?"}
+
+    print(f"[validate] ✓ 재검증 완료")
+    print(f"  skill         : {skill_name}")
+    print(f"  adoption      : {run_id[:8]} ({adopted_at[:16]})")
+    print(f"  비교 기준     : {basis['source']} ({basis.get('ref_path') or 'inline'})")
+    print(f"  fresh run     : {fresh_run['run_id']}")
+    print()
+    print(f"  metric 비교:")
+    for name, delta in verdict_result["metric_deltas"].items():
+        icon = icon_map.get(delta["direction"], "?")
+        basis_v = delta.get("basis")
+        fresh_v = delta.get("fresh")
+        pct = delta.get("delta_pct", 0) * 100
+        basis_s = f"{basis_v:.4f}" if basis_v is not None else "?"
+        fresh_s = f"{fresh_v:.4f}" if fresh_v is not None else "?"
+        print(f"    {name:<16}: {basis_s} → {fresh_s}  ({pct:+.1f}%)  {icon}")
+    print()
+    print(f"  verdict       : {verdict}")
+    print(f"  추천 행동     : {verdict_result['recommended_action']} ({verdict_result['verdict_reason']})")
+    if record_path:
+        print(f"  record 저장   : {record_path}")
+
+
+def _handle_adoption_rebuild_index(args: argparse.Namespace) -> None:
+    """cambrian adoption rebuild-index 처리.
+
+    Args:
+        args: argparse가 파싱한 네임스페이스
+    """
+    from engine.provenance import check_mismatch, rebuild_derived_index
+
+    adoptions_dir = getattr(args, "adoptions_dir", "adoptions")
+    engine = _create_engine(args)
+    conn = engine.get_registry()._conn
+
+    print("[rebuild-index] adoption files → derived index 재구성 중...")
+    result = rebuild_derived_index(adoptions_dir, conn)
+    print(
+        f"  삽입: {result['inserted']}건  "
+        f"스킵: {result['skipped']}건  "
+        f"오류: {result['errors']}건"
+    )
+
+    mismatches = check_mismatch(adoptions_dir, conn)
+    if mismatches:
+        print(f"  [경고] 여전히 {len(mismatches)}건 불일치")
+    else:
+        print("  [OK] file ↔ index 일치 확인")
+
+
+def _handle_adoption_list(args: argparse.Namespace) -> None:
+    """cambrian adoption list 처리.
+
+    Args:
+        args: argparse가 파싱한 네임스페이스
+    """
+    from engine.provenance import scan_adoption_files
+
+    adoptions_dir = getattr(args, "adoptions_dir", "adoptions")
+    records = scan_adoption_files(adoptions_dir)
+
+    # 필터
+    type_filter = getattr(args, "type", None)
+    skill_filter = getattr(args, "skill", None)
+
+    filtered = []
+    for r in records:
+        if r.get("_error"):
+            continue
+        if type_filter and r.get("action_type") != type_filter:
+            continue
+        skill = r.get("skill_name") or r.get("skill_id") or ""
+        if skill_filter and skill != skill_filter:
+            continue
+        filtered.append(r)
+
+    if not filtered:
+        print("[adoption list] 조건에 맞는 기록 없음")
+        return
+
+    print(
+        f"\n{'adopted_at':20} {'action_type':12} {'skill_name':20} {'run_id':10}"
+    )
+    print("─" * 64)
+    for r in filtered:
+        at = (r.get("adopted_at") or r.get("timestamp") or "")[:19]
+        action = r.get("action_type") or "adoption"
+        skill = r.get("skill_name") or r.get("skill_id") or "?"
+        rid = (r.get("run_id") or "?")[:8]
+        print(f"{at:20} {action:12} {skill:20} {rid:10}")
+    print(f"\n총 {len(filtered)}건")
+
+    # 에러 파일 경고
+    err_count = sum(1 for r in records if r.get("_error"))
+    if err_count:
+        print(f"  [경고] 파싱 실패 파일 {err_count}건")
+
+
+def _handle_adoption_show(args: argparse.Namespace) -> None:
+    """cambrian adoption show 처리.
+
+    Args:
+        args: argparse가 파싱한 네임스페이스
+    """
+    from engine.provenance import load_adoption_record, scan_adoption_files
+
+    target = args.target
+    adoptions_dir = getattr(args, "adoptions_dir", "adoptions")
+
+    # 파일 경로인지 run_id인지 판별
+    if Path(target).exists():
+        try:
+            data = load_adoption_record(target)
+            print(json.dumps(data, indent=2, ensure_ascii=False))
+        except ValueError as exc:
+            print(f"[show] 오류: {exc}", file=sys.stderr)
+            sys.exit(1)
+    else:
+        # run_id로 검색
+        records = scan_adoption_files(adoptions_dir)
+        found = None
+        for r in records:
+            if not r.get("_error") and r.get("run_id", "").startswith(target):
+                found = r
+                break
+        if found:
+            print(json.dumps(found, indent=2, ensure_ascii=False))
+        else:
+            print(f"[show] run_id '{target}'에 해당하는 record 없음", file=sys.stderr)
+            sys.exit(1)
+
+
+def _handle_lineage(args: argparse.Namespace) -> None:
+    """cambrian lineage 처리.
+
+    Args:
+        args: argparse가 파싱한 네임스페이스
+    """
+    engine = _create_engine(args)
+    registry = engine.get_registry()
+
+    skill_name = args.skill_name
+    run_id = getattr(args, "run_id", None)
+
+    # run_id 미지정 시 가장 최근 채택 조회
+    if not run_id:
+        history = registry.get_adoption_history(skill_name=skill_name, limit=1)
+        if not history:
+            print(f"[lineage] 채택 기록 없음: {skill_name}")
+            return
+        run_id = history[0]["child_run_id"]
+
+    print(f"\n=== Lineage: {skill_name} (run_id={run_id[:8]}...) ===\n")
+
+    direction = getattr(args, "direction", "both")
+
+    if direction in ("ancestors", "both"):
+        ancestors = registry.get_ancestors(skill_name, run_id)
+        if ancestors:
+            print("◀ ANCESTORS (최신→최초)")
+            for i, a in enumerate(ancestors):
+                indent = "  " * i
+                parent_label = (
+                    f"← {a['parent_skill_name']}"
+                    if a["parent_skill_name"] else "← [origin]"
+                )
+                print(
+                    f"{indent}[{a['adopted_at'][:16]}] "
+                    f"{a['skill_name']} ({a['run_id'][:8]}) {parent_label}"
+                )
+        else:
+            print("◀ ANCESTORS: 없음 (최초 채택)")
+
+    if direction in ("descendants", "both"):
+        descendants = registry.get_descendants(run_id)
+        if descendants:
+            print("\n▶ DESCENDANTS")
+            _print_lineage_tree(descendants, indent=0)
+        else:
+            print("\n▶ DESCENDANTS: 없음 (말단 노드)")
+
+    print()
+
+
+def _print_lineage_tree(nodes: list[dict], indent: int) -> None:
+    """lineage 트리를 ASCII로 출력한다.
+
+    Args:
+        nodes: 자손 노드 리스트
+        indent: 들여쓰기 수준
+    """
+    for node in nodes:
+        prefix = "  " * indent + ("└─ " if indent > 0 else "")
+        print(
+            f"{prefix}[{node['adopted_at'][:16]}] "
+            f"{node['skill_name']} ({node['run_id'][:8]})"
+        )
+        if node.get("children"):
+            _print_lineage_tree(node["children"], indent + 1)
+
+
+def _handle_audit(args: argparse.Namespace) -> None:
+    """cambrian audit 처리.
+
+    Args:
+        args: argparse가 파싱한 네임스페이스
+    """
+    audit_cmd = getattr(args, "audit_cmd", None)
+    if audit_cmd != "adoptions":
+        print("Usage: cambrian audit adoptions [--skill X] [--since Y] [--limit N]")
+        sys.exit(1)
+
+    engine = _create_engine(args)
+    registry = engine.get_registry()
+
+    records = registry.get_adoption_history(
+        skill_name=getattr(args, "skill", None),
+        since=getattr(args, "since", None),
+        until=getattr(args, "until", None),
+        scenario_id=getattr(args, "scenario", None),
+        limit=getattr(args, "limit", 50),
+    )
+
+    if not records:
+        print("[audit] 조건에 맞는 채택 기록 없음")
+        return
+
+    if getattr(args, "json_output", False):
+        print(json.dumps(records, ensure_ascii=False, indent=2))
+        return
+
+    header = (
+        f"{'adopted_at':20} {'skill_name':20} {'parent':20} "
+        f"{'scenario':15} {'policy':8}"
+    )
+    print(f"\n{header}")
+    print("─" * len(header))
+    for r in records:
+        parent = r.get("parent_skill_name") or "—"
+        scenario = (r.get("scenario_id") or "—")[:14]
+        policy = (r.get("policy_hash") or "—")[:7]
+        print(
+            f"{r['adopted_at'][:19]:20} "
+            f"{r['child_skill_name']:20} {parent:20} "
+            f"{scenario:15} {policy:8}"
+        )
+    print(f"\n총 {len(records)}건\n")
 
 
 def _handle_export(args: argparse.Namespace) -> None:

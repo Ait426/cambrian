@@ -483,10 +483,11 @@ def test_cli_max_cases_override() -> None:
 
 
 def test_budget_stats_display() -> None:
-    """stats 출력에 'Budget Limits:' 포함."""
+    """stats 출력에 Policy 섹션(budget 정보) 포함."""
     result = _run_cli("stats", "--db", ":memory:")
     assert result.returncode == 0
-    assert "Budget Limits:" in result.stdout
+    assert "Policy:" in result.stdout
+    assert "Budget:" in result.stdout
 
 
 def test_candidate_cap_zero_forced_to_one(

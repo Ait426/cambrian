@@ -1,0 +1,31 @@
+{
+  "budget": {
+    "max_candidates_per_run": 5,
+    "max_mode_a_per_run": 2,
+    "max_eval_cases": 20,
+    "max_eval_inputs_evolve": 10
+  },
+  "governance": {
+    "promote_min_executions": 10,
+    "promote_min_fitness": 0.5,
+    "demote_fitness_threshold": 0.3,
+    "rollback_fitness_threshold": 0.2,
+    "quarantine_block_count": 2
+  },
+  "evolution": {
+    "adoption_margin": 0.5,
+    "trial_count": 3
+  },
+  "decision": {
+    "fitness_tolerance_pct": 0.05,
+    "latency_tolerance_pct": 0.10
+  },
+  "promotion": {
+    "min_success_rate": 0.70,
+    "min_eval_pass_rate": 0.60
+  },
+  "validation": {
+    "watch_degradation_pct": 0.05,
+    "regressed_degradation_pct": 0.15
+  }
+}
