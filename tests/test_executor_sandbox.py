@@ -35,6 +35,14 @@ def test_executor_hello_world_unaffected(schemas_dir: Path) -> None:
     assert result.output["greeting"] == "Hello, Cambrian!"
 
 
+def test_executor_blocks_pathlib_read_text(schemas_dir: Path) -> None:
+    """needs_filesystem=false 스킬의 pathlib.Path.read_text 우회도 sandbox에 의해 차단된다."""
+    skill = SkillLoader(schemas_dir).load(PROJECT_ROOT / "test_skills" / "pathlib_escaper")
+    result = SkillExecutor().execute(skill, {})
+    assert result.success is False
+    assert "Blocked" in (result.error or "") + (result.stderr or "")
+
+
 def test_executor_sandbox_missing_bootstrap(schemas_dir: Path) -> None:
     """sandbox bootstrap 파일이 없으면 SandboxEnforcementError가 발생한다."""
     skill = SkillLoader(schemas_dir).load(PROJECT_ROOT / "test_skills" / "network_escaper")
