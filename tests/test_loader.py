@@ -84,7 +84,7 @@ def test_load_without_lifecycle(tmp_path: Path, schemas_dir: Path) -> None:
 
 
 def test_load_mode_a_without_skill_md(tmp_path: Path, schemas_dir: Path) -> None:
-    """mode 'a' 스킬에서 SKILL.md가 없으면 skill_md_content=None."""
+    """mode 'a' 스킬에서 SKILL.md가 없으면 load 단계에서 SkillValidationError."""
     skill_dir = create_valid_skill(tmp_path)
     meta_path = skill_dir / "meta.yaml"
     meta = yaml.safe_load(meta_path.read_text(encoding="utf-8"))
@@ -93,10 +93,8 @@ def test_load_mode_a_without_skill_md(tmp_path: Path, schemas_dir: Path) -> None
     (skill_dir / "SKILL.md").unlink()
 
     loader = SkillLoader(schemas_dir)
-    skill = loader.load(skill_dir)
-
-    assert skill.mode == "a"
-    assert skill.skill_md_content is None
+    with pytest.raises(SkillValidationError):
+        loader.load(skill_dir)
 
 
 def test_load_directory(tmp_path: Path, schemas_dir: Path) -> None:

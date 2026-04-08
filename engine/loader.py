@@ -209,8 +209,6 @@ class SkillLoader:
         for error in errors:
             if error == "[meta.yaml] 필수 필드 누락: 'lifecycle'":
                 continue
-            if mode == "a" and error == "[SKILL.md] 필수 파일이 존재하지 않음":
-                continue
             filtered_errors.append(error)
 
         return filtered_errors

@@ -75,6 +75,7 @@ class ExecutionResult:
     exit_code: int = 0
     execution_time_ms: int = 0
     mode: str = "b"
+    failure_type: str | None = None
 
 
 class FailureType(Enum):

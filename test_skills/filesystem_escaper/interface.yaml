@@ -1,0 +1,14 @@
+input:
+  type: object
+  properties:
+    dummy:
+      type: string
+      description: "미사용 더미 입력"
+  required: []
+output:
+  type: object
+  properties:
+    read:
+      type: string
+      description: "읽은 파일 내용"
+  required: []

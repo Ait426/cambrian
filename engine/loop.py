@@ -211,6 +211,25 @@ class CambrianEngine:
 
         for candidate in run_targets:
             skill = self._loader.load(candidate["skill_path"])
+
+            # 입력 계약 검증: 스키마 불일치 시 executor 호출 없이 실패 처리
+            input_errors = self._executor.validate_input(skill, input_data)
+            if input_errors:
+                result = ExecutionResult(
+                    skill_id=skill.id,
+                    success=False,
+                    output=None,
+                    error=f"Input contract violation: {'; '.join(input_errors)}",
+                    stderr="",
+                    exit_code=1,
+                    execution_time_ms=0,
+                    mode=skill.mode,
+                    failure_type="input_contract",
+                )
+                self._registry.update_after_execution(skill.id, result)
+                results.append((candidate, result))
+                continue
+
             result = self._executor.execute(skill, input_data)
 
             # H-3: 성공 결과의 출력 스키마 검증

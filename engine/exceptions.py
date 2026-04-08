@@ -1,5 +1,12 @@
 """Cambrian 엔진 커스텀 예외."""
 
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from pathlib import Path
+
 
 class CambrianError(Exception):
     """모든 Cambrian 예외의 베이스."""
@@ -51,4 +58,37 @@ class SecurityViolationError(CambrianError):
         self.violations = violations
         super().__init__(
             f"Security violations in '{skill_path}': {'; '.join(violations)}"
+        )
+
+
+class SymlinkSecurityError(CambrianError):
+    """symlink가 소스 루트 바깥을 가리킬 때."""
+
+    def __init__(self, path: Path, target: Path):
+        self.path = path
+        self.target = target
+        super().__init__(
+            f"Symlink security violation: '{path}' resolves to '{target}' outside source root"
+        )
+
+
+class InputContractError(CambrianError):
+    """입력 데이터가 스킬의 interface_input 스키마를 위반할 때."""
+
+    def __init__(self, skill_id: str, errors: list[str]):
+        self.skill_id = skill_id
+        self.errors = errors
+        super().__init__(
+            f"Input contract violation for '{skill_id}': {'; '.join(errors)}"
+        )
+
+
+class SandboxEnforcementError(CambrianError):
+    """sandbox bootstrap 파일 누락 등 sandbox 적용 실패."""
+
+    def __init__(self, skill_id: str, reason: str):
+        self.skill_id = skill_id
+        self.reason = reason
+        super().__init__(
+            f"Sandbox enforcement failed for '{skill_id}': {reason}"
         )

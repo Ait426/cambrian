@@ -361,14 +361,15 @@ def test_fuse_no_skill_md(tmp_path: Path, schemas_dir: Path) -> None:
     skill_a = loader.load(skill_a_dir)
     registry.register(skill_a)
 
-    # Mode A 스킬 (SKILL.md 삭제 — 로드 시 skill_md_content=None)
+    # Mode A 스킬 (SKILL.md 삭제 → loader에서 SkillValidationError)
     skill_b_dir = create_mode_a_skill(
         skills_dir, "skill_no_md", schemas_dir,
     )
-    (skill_b_dir / "SKILL.md").unlink()
-    # 로드 시 SKILL.md가 없으면 skill_md_content=None이 됨
+    # SKILL.md 있는 상태로 로드·등록 후 파일 삭제하여
+    # fuser가 re-load 시 SkillValidationError 발생하게 함
     skill_b = loader.load(skill_b_dir)
     registry.register(skill_b)
+    (skill_b_dir / "SKILL.md").unlink()
 
     fuser = SkillFuser(
         loader, validator, scanner, registry, pool_dir, MockFuseProvider(),
@@ -378,10 +379,11 @@ def test_fuse_no_skill_md(tmp_path: Path, schemas_dir: Path) -> None:
         skill_id_b="skill_no_md",
         goal="SKILL.md 없는 스킬 융합",
     )
-    result = fuser.fuse(request)
 
-    assert result.success is False
-    assert any("SKILL.md" in w for w in result.warnings)
+    # loader.load()에서 SkillValidationError 발생
+    from engine.exceptions import SkillValidationError
+    with pytest.raises(SkillValidationError):
+        fuser.fuse(request)
 
 
 def test_fuse_auto_output_id(tmp_path: Path, schemas_dir: Path) -> None:

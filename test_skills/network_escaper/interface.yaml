@@ -1,0 +1,14 @@
+input:
+  type: object
+  properties:
+    dummy:
+      type: string
+      description: "미사용 더미 입력"
+  required: []
+output:
+  type: object
+  properties:
+    connected:
+      type: boolean
+      description: "연결 성공 여부"
+  required: []

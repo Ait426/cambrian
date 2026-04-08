@@ -12,7 +12,7 @@ from pathlib import Path
 
 from jsonschema import Draft7Validator
 
-from engine.exceptions import SkillExecutionError
+from engine.exceptions import SandboxEnforcementError, SkillExecutionError
 from engine.llm import LLMProvider, create_provider
 from engine.models import ExecutionResult, Skill
 
@@ -74,6 +74,7 @@ class SkillExecutor:
         try:
             # 보안: 부모 프로세스의 API 키 등이 자식에 전달되지 않도록 최소 환경변수만 허용
             safe_env = self._build_safe_env()
+            self._apply_sandbox_env(skill, safe_env)
             completed = subprocess.run(
                 [sys.executable, str(main_py)],
                 input=json_input.encode("utf-8"),
@@ -181,6 +182,41 @@ class SkillExecutor:
         safe_env.setdefault("LANG", "en_US.UTF-8")
         safe_env.setdefault("PYTHONIOENCODING", "utf-8")
         return safe_env
+
+    def _apply_sandbox_env(self, skill: Skill, safe_env: dict[str, str]) -> None:
+        """sandbox 환경변수를 주입한다. bootstrap 파일이 없으면 SandboxEnforcementError.
+
+        Args:
+            skill: 실행할 Skill 객체
+            safe_env: _build_safe_env()가 반환한 환경변수 딕셔너리 (in-place 수정)
+
+        Raises:
+            SandboxEnforcementError: sandbox bootstrap 파일이 누락되었을 때
+        """
+        needs_sandbox = (
+            not skill.runtime.needs_network or not skill.runtime.needs_filesystem
+        )
+        if not needs_sandbox:
+            return
+
+        sandbox_dir = Path(__file__).parent / "sandbox"
+        bootstrap = sandbox_dir / "sitecustomize.py"
+        if not bootstrap.exists():
+            raise SandboxEnforcementError(
+                skill.id, f"sandbox bootstrap missing: {bootstrap}"
+            )
+
+        existing = safe_env.get("PYTHONPATH", "")
+        safe_env["PYTHONPATH"] = (
+            f"{sandbox_dir}{os.pathsep}{existing}" if existing else str(sandbox_dir)
+        )
+
+        if not skill.runtime.needs_network:
+            safe_env["CAMBRIAN_BLOCK_NETWORK"] = "1"
+
+        if not skill.runtime.needs_filesystem:
+            safe_env["CAMBRIAN_BLOCK_FILESYSTEM"] = "1"
+            safe_env["CAMBRIAN_WORK_DIR"] = str(skill.skill_path)
 
     def _execute_mode_a(self, skill: Skill, input_data: dict) -> ExecutionResult:
         """Mode A: LLM이 SKILL.md를 읽고 결과물을 생성한다.

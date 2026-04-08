@@ -9,6 +9,7 @@ from engine.exceptions import (
     SkillLoadError,
     SkillNotFoundError,
     SkillValidationError,
+    SymlinkSecurityError,
 )
 from engine.loader import SkillLoader
 from engine.models import Skill
@@ -72,6 +73,8 @@ class SkillAbsorber:
         if violations:
             raise SecurityViolationError(str(source), violations)
 
+        self._verify_no_symlinks(source)
+
         destination = self._pool_dir / loaded_skill.id
         if destination.exists():
             shutil.rmtree(destination)
@@ -94,6 +97,25 @@ class SkillAbsorber:
             True면 이미 흡수됨
         """
         return (self._pool_dir / skill_id).exists()
+
+    @staticmethod
+    def _verify_no_symlinks(source_root: Path) -> None:
+        """소스 디렉토리 내 symlink를 전수 검사한다.
+
+        Args:
+            source_root: 검사할 스킬 디렉토리 루트
+
+        Raises:
+            SymlinkSecurityError: symlink가 소스 루트 바깥을 가리킬 때
+        """
+        resolved_root = source_root.resolve()
+        for p in source_root.rglob("*"):
+            if p.is_symlink():
+                raise SymlinkSecurityError(p, p.resolve())
+            try:
+                p.resolve().relative_to(resolved_root)
+            except ValueError:
+                raise SymlinkSecurityError(p, p.resolve())
 
     def remove(self, skill_id: str) -> None:
         """흡수된 스킬을 삭제하고 Registry에서도 제거한다.
