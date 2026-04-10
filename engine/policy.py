@@ -46,6 +46,17 @@ class CambrianPolicy:
             "watch_degradation_pct": 0.05,
             "regressed_degradation_pct": 0.15,
         },
+        "sandbox": {
+            "enabled": False,
+            "provider": "docker",
+            "image": "python:3.11-slim",
+            "network_enabled": False,
+            "memory_limit_mb": 256,
+            "cpu_limit": 1.0,
+            "timeout_sec": 30,
+            "read_only_root": True,
+            "pids_limit": 64,
+        },
     }
 
     # 각 필드의 기대 타입과 양수 여부
@@ -78,6 +89,17 @@ class CambrianPolicy:
         "validation": {
             "watch_degradation_pct": (float, False),
             "regressed_degradation_pct": (float, False),
+        },
+        "sandbox": {
+            "enabled": (bool, False),
+            "provider": (str, False),
+            "image": (str, False),
+            "network_enabled": (bool, False),
+            "memory_limit_mb": (int, True),
+            "cpu_limit": (float, False),
+            "timeout_sec": (int, True),
+            "read_only_root": (bool, False),
+            "pids_limit": (int, True),
         },
     }
 
@@ -144,6 +166,21 @@ class CambrianPolicy:
         self.watch_degradation_pct: float = merged["validation"]["watch_degradation_pct"]
         self.regressed_degradation_pct: float = merged["validation"]["regressed_degradation_pct"]
 
+        # sandbox
+        from engine.models import SandboxConfig
+        sandbox_data = merged.get("sandbox", {})
+        self.sandbox: SandboxConfig = SandboxConfig(
+            enabled=sandbox_data.get("enabled", False),
+            provider=sandbox_data.get("provider", "docker"),
+            image=sandbox_data.get("image", "python:3.11-slim"),
+            network_enabled=sandbox_data.get("network_enabled", False),
+            memory_limit_mb=sandbox_data.get("memory_limit_mb", 256),
+            cpu_limit=sandbox_data.get("cpu_limit", 1.0),
+            timeout_sec=sandbox_data.get("timeout_sec", 30),
+            read_only_root=sandbox_data.get("read_only_root", True),
+            pids_limit=sandbox_data.get("pids_limit", 64),
+        )
+
     def _load(self, path: Path) -> dict:
         """JSON 파일을 읽어 dict로 반환한다.
 
@@ -171,7 +208,8 @@ class CambrianPolicy:
             경고 메시지 리스트
         """
         warnings: list[str] = []
-        known_sections = {"budget", "governance", "evolution"}
+        # _FIELD_SPEC을 단일 진실 원천으로 사용 — 섹션 추가 시 자동 인식.
+        known_sections = set(self._FIELD_SPEC.keys())
 
         for key in list(data.keys()):
             if key not in known_sections:
@@ -270,6 +308,17 @@ class CambrianPolicy:
             "validation": {
                 "watch_degradation_pct": self.watch_degradation_pct,
                 "regressed_degradation_pct": self.regressed_degradation_pct,
+            },
+            "sandbox": {
+                "enabled": self.sandbox.enabled,
+                "provider": self.sandbox.provider,
+                "image": self.sandbox.image,
+                "network_enabled": self.sandbox.network_enabled,
+                "memory_limit_mb": self.sandbox.memory_limit_mb,
+                "cpu_limit": self.sandbox.cpu_limit,
+                "timeout_sec": self.sandbox.timeout_sec,
+                "read_only_root": self.sandbox.read_only_root,
+                "pids_limit": self.sandbox.pids_limit,
             },
             "source": self.policy_source,
         }

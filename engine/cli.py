@@ -870,9 +870,21 @@ def _create_engine(args: argparse.Namespace) -> CambrianEngine:
     if provider_name or llm_model:
         provider = create_provider(provider=provider_name, model=llm_model)
 
+    # schemas: CLI 인자가 없거나 경로가 존재하지 않으면 번들 데이터로 fallback
+    schemas_dir = Path(args.schemas)
+    if not schemas_dir.exists():
+        from engine._data_path import get_bundled_schemas_dir
+        schemas_dir = get_bundled_schemas_dir()
+
+    # skills: CLI 인자가 없거나 경로가 존재하지 않으면 번들 데이터로 fallback
+    skills_dir = Path(args.skills)
+    if not skills_dir.exists():
+        from engine._data_path import get_bundled_skills_dir
+        skills_dir = get_bundled_skills_dir()
+
     return CambrianEngine(
-        schemas_dir=args.schemas,
-        skills_dir=args.skills,
+        schemas_dir=str(schemas_dir),
+        skills_dir=str(skills_dir),
         skill_pool_dir=args.pool,
         db_path=args.db,
         external_skill_dirs=args.external if args.external else None,
@@ -2907,11 +2919,27 @@ def _handle_init(args: argparse.Namespace) -> None:
     """
     import shutil
 
+    from engine._data_path import (
+        get_bundled_policy_path,
+        get_bundled_schemas_dir,
+        get_bundled_skills_dir,
+    )
+
     target = Path(args.dir)
     target.mkdir(parents=True, exist_ok=True)
 
-    # 시드 스킬 복사
+    # 시드 스킬 복사: CLI 인자 > 번들 데이터 > 에러
     src_skills = Path(args.skills)
+    if not src_skills.exists():
+        src_skills = get_bundled_skills_dir()
+    if not src_skills.exists():
+        print(
+            "Error: 시드 스킬 디렉토리를 찾을 수 없습니다.\n"
+            "  --skills 로 경로를 지정하거나 패키지를 재설치하세요.",
+            file=sys.stderr,
+        )
+        sys.exit(1)
+
     dst_skills = target / "skills"
     if dst_skills.exists():
         print(f"skills/ already exists in {target}, skipping copy.")
@@ -2919,11 +2947,19 @@ def _handle_init(args: argparse.Namespace) -> None:
         shutil.copytree(src_skills, dst_skills)
         print(f"Copied {len(list(dst_skills.iterdir()))} skills to {dst_skills}")
 
-    # schemas 복사
+    # schemas 복사: CLI 인자 > 번들 데이터
     src_schemas = Path(args.schemas)
+    if not src_schemas.exists():
+        src_schemas = get_bundled_schemas_dir()
     dst_schemas = target / "schemas"
     if not dst_schemas.exists():
-        shutil.copytree(src_schemas, dst_schemas)
+        if src_schemas.exists():
+            shutil.copytree(src_schemas, dst_schemas)
+        else:
+            print(
+                "Warning: schemas 디렉토리를 찾을 수 없습니다.",
+                file=sys.stderr,
+            )
 
     # skill_pool 생성
     (target / "skill_pool").mkdir(exist_ok=True)
@@ -2943,6 +2979,13 @@ def _handle_init(args: argparse.Namespace) -> None:
         }
         with open(config_path, "w", encoding="utf-8") as f:
             yaml.safe_dump(config, f, allow_unicode=True, sort_keys=False)
+
+    # 정책 파일 복사 (번들에서)
+    policy_dst = target / "cambrian_policy.json"
+    if not policy_dst.exists():
+        bundled_policy = get_bundled_policy_path()
+        if bundled_policy.exists():
+            shutil.copy2(bundled_policy, policy_dst)
 
     print(f"\n[OK] Initialized Cambrian project at {target}")
     print(f"Ready! Run: cd {target} && cambrian skills")

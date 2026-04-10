@@ -75,6 +75,7 @@ class ExecutionResult:
     exit_code: int = 0
     execution_time_ms: int = 0
     mode: str = "b"
+    failure_type: str | None = None    # sandbox/실행 실패 분류. 성공 시 None.
 
 
 class FailureType(Enum):
@@ -86,6 +87,29 @@ class FailureType(Enum):
     INPUT_MISMATCH = "input_mismatch"
     OUTPUT_INVALID = "output_invalid"
     UNKNOWN = "unknown"
+    # sandbox 전용
+    SANDBOX_UNAVAILABLE = "sandbox_unavailable"
+    SANDBOX_TIMEOUT = "sandbox_timeout"
+    SANDBOX_VIOLATION = "sandbox_violation"
+
+
+@dataclass
+class SandboxConfig:
+    """컨테이너 격리 실행 설정.
+
+    policy JSON의 sandbox 섹션에서 로드된다.
+    enabled=False(기본값)이면 기존 subprocess 경로를 사용한다.
+    """
+
+    enabled: bool = False
+    provider: str = "docker"
+    image: str = "python:3.11-slim"
+    network_enabled: bool = False
+    memory_limit_mb: int = 256
+    cpu_limit: float = 1.0
+    timeout_sec: int = 30
+    read_only_root: bool = True
+    pids_limit: int = 64
 
 
 @dataclass

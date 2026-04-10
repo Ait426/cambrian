@@ -1,0 +1,14 @@
+input:
+  type: "object"
+  properties:
+    seconds:
+      type: "integer"
+      description: "대기할 초 수"
+  required: ["seconds"]
+output:
+  type: "object"
+  properties:
+    waited:
+      type: "integer"
+      description: "실제 대기한 초 수"
+  required: ["waited"]

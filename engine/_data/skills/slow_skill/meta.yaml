@@ -1,0 +1,19 @@
+id: "slow_skill"
+version: "1.0.0"
+name: "Slow Skill"
+description: "타임아웃 테스트용 스킬 — 의도적으로 느리게 실행"
+domain: "testing"
+tags: ["test", "timeout"]
+mode: "b"
+runtime:
+  language: "python"
+  needs_network: false
+  needs_filesystem: false
+  timeout_seconds: 2
+lifecycle:
+  status: "active"
+  fitness_score: 0.0
+  total_executions: 0
+  successful_executions: 0
+  last_used: null
+  crystallized_at: null

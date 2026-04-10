@@ -1174,3 +1174,36 @@ def test_replay_set_multiple_inputs(
     assert "trial1" in record.judge_reasoning
     assert "trial2" in record.judge_reasoning
     assert "trial3" in record.judge_reasoning
+
+
+def test_ensure_output_format_index_based_replacement():
+    """M-3: output format 교체가 정확한 섹션 위치에서만 발생하는지 검증."""
+    from engine.evolution import SkillEvolver
+
+    evolver = SkillEvolver.__new__(SkillEvolver)
+
+    original = (
+        "# Skill\n\n"
+        "## Instructions\nDo stuff.\n\n"
+        "## Output Format\n```json\n{\"key\": \"original\"}\n```\n\n"
+        "## Notes\nSee Output Format section above for details."
+    )
+
+    mutated = (
+        "# Skill\n\n"
+        "## Instructions\nDo better stuff.\n\n"
+        "## Output Format\n```json\n{\"key\": \"CHANGED\"}\n```\n\n"
+        "## Notes\nSee Output Format section above for details."
+    )
+
+    result = evolver._ensure_output_format(mutated, original)
+
+    # Output Format 섹션이 원본으로 복원됨
+    original_section = SkillEvolver._extract_section(original, "## Output Format")
+    restored_section = SkillEvolver._extract_section(result, "## Output Format")
+    assert restored_section == original_section, "Output Format 섹션 미복원"
+
+    # Notes 섹션의 "Output Format" 텍스트는 변경되지 않아야 함
+    assert "See Output Format section above for details." in result, (
+        "Notes 섹션의 Output Format 참조 텍스트가 손상됨"
+    )

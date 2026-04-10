@@ -1105,9 +1105,10 @@ def test_auto_rollback_triggered(
             max_retries=0,
         )
 
-    # fitness 확인
+    # rollback 후 fitness는 parent_fitness(0.5)로 리셋되고 quarantine 격리됨
     skill_data = engine.get_registry().get(skill_id)
-    assert skill_data["fitness_score"] < 0.2
+    assert abs(skill_data["fitness_score"] - 0.5) < 1e-9
+    assert skill_data["release_state"] == "quarantined"
 
     # SKILL.md가 원본으로 복원됨
     restored = (skill_dir / "SKILL.md").read_text(encoding="utf-8")
@@ -1223,6 +1224,150 @@ def test_auto_rollback_marks_record(
     history = engine.get_registry().get_evolution_history(skill_id, limit=1)
     assert len(history) == 1
     assert history[0]["auto_rolled_back"] is True
+
+
+def test_auto_rollback_uses_registry_api() -> None:
+    """C-1: _conn 직접 접근 없이 Registry public method로만 처리되는지 검증."""
+    import ast
+    import inspect
+    from engine.loop import CambrianEngine
+
+    source = inspect.getsource(CambrianEngine)
+    tree = ast.parse(source)
+
+    violations = []
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Attribute):
+            if node.attr == "_conn":
+                # _registry._conn 패턴 탐지
+                if isinstance(node.value, ast.Attribute) and node.value.attr == "_registry":
+                    violations.append(f"line {node.lineno}: _registry._conn 접근")
+
+    assert violations == [], (
+        f"loop.py에서 _registry._conn 직접 접근 발견: {violations}"
+    )
+
+
+def test_auto_rollback_restores_parent_state(
+    tmp_path: Path, schemas_dir: Path,
+) -> None:
+    """C-2: auto rollback이 SKILL.md + fitness + flag + quarantine을 모두 복원하는지 검증."""
+    # Mode A 스킬 생성 (evolve 대상)
+    skill_id = "evolve_target"
+    skill_dir = tmp_path / "skills" / skill_id
+    skill_dir.mkdir(parents=True)
+
+    import yaml
+    meta = {
+        "id": skill_id,
+        "version": "1.0.0",
+        "name": "Evolve Target",
+        "description": "A skill for evolution test",
+        "domain": "testing",
+        "tags": ["test"],
+        "mode": "a",
+        "created_at": "2026-04-01",
+        "updated_at": "2026-04-01",
+        "runtime": {
+            "language": "python",
+            "needs_network": False,
+            "needs_filesystem": False,
+            "timeout_seconds": 10,
+        },
+        "lifecycle": {
+            "status": "active",
+            "fitness_score": 0.0,
+            "total_executions": 0,
+            "successful_executions": 0,
+            "last_used": None,
+            "crystallized_at": None,
+        },
+    }
+    with open(skill_dir / "meta.yaml", "w") as f:
+        yaml.dump(meta, f)
+
+    interface = {
+        "input": {
+            "type": "object",
+            "properties": {"x": {"type": "string", "description": "x"}},
+            "required": [],
+        },
+        "output": {
+            "type": "object",
+            "properties": {"result": {"type": "string", "description": "r"}},
+            "required": ["result"],
+        },
+    }
+    with open(skill_dir / "interface.yaml", "w") as f:
+        yaml.dump(interface, f)
+
+    parent_md = "# Parent SKILL.md\nOriginal content."
+    (skill_dir / "SKILL.md").write_text(parent_md, encoding="utf-8")
+
+    # 엔진 생성
+    engine = CambrianEngine(
+        schemas_dir=schemas_dir,
+        skills_dir=tmp_path / "skills",
+        skill_pool_dir=tmp_path / "pool",
+        db_path=":memory:",
+    )
+
+    registry = engine.get_registry()
+
+    # fitness를 낮게 설정 + 실행 횟수 >= 5
+    for _ in range(6):
+        fail_result = ExecutionResult(
+            skill_id=skill_id, success=False, error="test fail",
+            execution_time_ms=100, mode="a",
+        )
+        registry.update_after_execution(skill_id, fail_result)
+
+    # evolution_history에 adopted record 삽입
+    from engine.models import EvolutionRecord
+    child_md = "# Child SKILL.md\nMutated content."
+    (skill_dir / "SKILL.md").write_text(child_md, encoding="utf-8")
+
+    parent_fitness = 0.8
+    record = EvolutionRecord(
+        id=0,
+        skill_id=skill_id,
+        parent_skill_md=parent_md,
+        child_skill_md=child_md,
+        parent_fitness=parent_fitness,
+        child_fitness=0.1,
+        adopted=True,
+        mutation_summary="test mutation",
+        feedback_ids="[]",
+        created_at="2026-04-01T00:00:00",
+    )
+    record_id = registry.add_evolution_record(record)
+
+    # rollback 트리거: fitness가 rollback threshold 미만이어야 함
+    # 기본 rollback_fitness_threshold = 0.2, 현재 fitness는 6회 실패로 0.0
+    engine._check_auto_rollback(skill_id)
+
+    # === 검증 ===
+
+    # 1. SKILL.md가 parent 버전으로 복원됨
+    restored_md = (skill_dir / "SKILL.md").read_text(encoding="utf-8")
+    assert restored_md == parent_md, "SKILL.md가 parent로 복원되지 않음"
+
+    # 2. evolution_history에 auto_rolled_back=1
+    history = registry.get_evolution_history(skill_id, limit=1)
+    assert history[0]["auto_rolled_back"] == 1, "auto_rolled_back 플래그 미설정"
+
+    # 3. fitness가 parent_fitness로 리셋됨
+    skill_data = registry.get(skill_id)
+    assert skill_data["fitness_score"] == parent_fitness, (
+        f"fitness 미복원: expected {parent_fitness}, got {skill_data['fitness_score']}"
+    )
+
+    # 4. release_state가 quarantined
+    assert skill_data["release_state"] == "quarantined", (
+        f"quarantine 미전이: {skill_data['release_state']}"
+    )
+
+    engine.close()
 
 
 # === run_traces 경쟁 실행 trace 테스트 ===
@@ -1372,3 +1517,339 @@ def test_get_traces_limit(schemas_dir: Path, tmp_path: Path) -> None:
     assert len(registry.get_run_traces(limit=10)) == 5
 
     registry.close()
+
+
+def test_run_task_does_not_absorb_same_skill_twice(tmp_path, schemas_dir):
+    """M-2: 동일 external skill이 같은 task 재시도 중 중복 흡수되지 않는지 검증."""
+    import yaml
+
+    # 항상 실패하는 skill을 external에 배치
+    ext_dir = tmp_path / "external"
+    fail_skill = ext_dir / "fail_skill"
+    fail_skill.mkdir(parents=True)
+    (fail_skill / "execute").mkdir()
+
+    meta = {
+        "id": "fail_skill",
+        "version": "1.0.0",
+        "name": "Fail",
+        "description": "always fails",
+        "domain": "testing",
+        "tags": ["test"],
+        "mode": "b",
+        "created_at": "2026-04-01",
+        "updated_at": "2026-04-01",
+        "runtime": {
+            "language": "python",
+            "needs_network": False,
+            "needs_filesystem": False,
+            "timeout_seconds": 5,
+        },
+        "lifecycle": {"status": "active", "fitness_score": 0.0},
+    }
+    with open(fail_skill / "meta.yaml", "w") as f:
+        yaml.dump(meta, f)
+
+    interface = {
+        "input": {
+            "type": "object",
+            "properties": {"x": {"type": "string", "description": "x"}},
+            "required": [],
+        },
+        "output": {
+            "type": "object",
+            "properties": {"r": {"type": "string", "description": "r"}},
+            "required": ["r"],
+        },
+    }
+    with open(fail_skill / "interface.yaml", "w") as f:
+        yaml.dump(interface, f)
+
+    (fail_skill / "SKILL.md").write_text("# Fail\nAlways fails.")
+    (fail_skill / "execute" / "main.py").write_text(
+        'import sys; sys.exit(1)\n'
+    )
+
+    engine = CambrianEngine(
+        schemas_dir=schemas_dir,
+        skills_dir=tmp_path / "empty_skills",
+        skill_pool_dir=tmp_path / "pool",
+        db_path=":memory:",
+        external_skill_dirs=[str(ext_dir)],
+    )
+
+    # empty_skills 디렉토리 생성
+    (tmp_path / "empty_skills").mkdir(exist_ok=True)
+
+    # 흡수 호출 횟수 추적
+    original_absorb = engine._absorber.absorb
+    absorb_count = [0]
+
+    def counting_absorb(path):
+        absorb_count[0] += 1
+        return original_absorb(path)
+
+    engine._absorber.absorb = counting_absorb
+
+    result = engine.run_task("testing", ["test"], {"x": "hello"}, max_retries=3)
+
+    # 최대 1번만 흡수되어야 함
+    assert absorb_count[0] <= 1, (
+        f"동일 skill이 {absorb_count[0]}번 흡수됨 (기대: ≤1)"
+    )
+
+    engine.close()
+
+
+def test_auto_rollback_db_failure_is_observable(tmp_path, schemas_dir):
+    """DB update 실패 시 result에 db_applied=False와 에러 메시지가 기록된다."""
+    from unittest.mock import patch
+    import yaml
+
+    # Mode A 스킬 생성
+    skill_id = "rollback_db_fail"
+    skill_dir = tmp_path / "skills" / skill_id
+    skill_dir.mkdir(parents=True)
+
+    meta = {
+        "id": skill_id, "version": "1.0.0", "name": "Test",
+        "description": "test", "domain": "testing", "tags": ["test"],
+        "mode": "a", "created_at": "2026-04-01", "updated_at": "2026-04-01",
+        "runtime": {"language": "python", "needs_network": False,
+                     "needs_filesystem": False, "timeout_seconds": 10},
+        "lifecycle": {"status": "active", "fitness_score": 0.0,
+                       "total_executions": 0, "successful_executions": 0,
+                       "last_used": None, "crystallized_at": None},
+    }
+    interface = {
+        "input": {"type": "object", "properties": {"x": {"type": "string", "description": "x"}}, "required": []},
+        "output": {"type": "object", "properties": {"r": {"type": "string", "description": "r"}}, "required": ["r"]},
+    }
+    with open(skill_dir / "meta.yaml", "w") as f:
+        yaml.dump(meta, f)
+    with open(skill_dir / "interface.yaml", "w") as f:
+        yaml.dump(interface, f)
+    (skill_dir / "SKILL.md").write_text("# Child\nMutated.", encoding="utf-8")
+
+    engine = CambrianEngine(
+        schemas_dir=schemas_dir,
+        skills_dir=tmp_path / "skills",
+        skill_pool_dir=tmp_path / "pool",
+        db_path=":memory:",
+    )
+    registry = engine.get_registry()
+
+    # evolution record 삽입
+    from engine.models import EvolutionRecord
+    record = EvolutionRecord(
+        id=0, skill_id=skill_id,
+        parent_skill_md="# Parent\nOriginal.",
+        child_skill_md="# Child\nMutated.",
+        parent_fitness=0.8, child_fitness=0.1,
+        adopted=True, mutation_summary="test",
+        feedback_ids="[]", created_at="2026-04-01T00:00:00",
+    )
+    record_id = registry.add_evolution_record(record)
+
+    skill_data = registry.get(skill_id)
+    record_data = registry.get_evolution_history(skill_id, limit=1)[0]
+
+    # DB apply_auto_rollback를 강제 실패시킴
+    with patch.object(
+        registry, "apply_auto_rollback",
+        side_effect=RuntimeError("DB write failed"),
+    ):
+        result = engine._execute_auto_rollback(
+            skill_id, skill_data, record_data,
+        )
+
+    # 파일은 복원됨
+    assert result["file_restored"] is True
+    # DB는 실패
+    assert result["db_applied"] is False
+    # 에러 메시지에 실패 내용 포함
+    assert any("db_update_failed" in e for e in result["errors"])
+
+    engine.close()
+
+
+def test_auto_rollback_file_failure_is_observable(tmp_path, schemas_dir):
+    """파일 복원 실패 시 result에 file_restored=False가 기록되고,
+    DB quarantine은 여전히 시도된다."""
+    import yaml
+
+    skill_id = "rollback_file_fail"
+    skill_dir = tmp_path / "skills" / skill_id
+    skill_dir.mkdir(parents=True)
+
+    meta = {
+        "id": skill_id, "version": "1.0.0", "name": "Test",
+        "description": "test", "domain": "testing", "tags": ["test"],
+        "mode": "a", "created_at": "2026-04-01", "updated_at": "2026-04-01",
+        "runtime": {"language": "python", "needs_network": False,
+                     "needs_filesystem": False, "timeout_seconds": 10},
+        "lifecycle": {"status": "active", "fitness_score": 0.0,
+                       "total_executions": 0, "successful_executions": 0,
+                       "last_used": None, "crystallized_at": None},
+    }
+    interface = {
+        "input": {"type": "object", "properties": {"x": {"type": "string", "description": "x"}}, "required": []},
+        "output": {"type": "object", "properties": {"r": {"type": "string", "description": "r"}}, "required": ["r"]},
+    }
+    with open(skill_dir / "meta.yaml", "w") as f:
+        yaml.dump(meta, f)
+    with open(skill_dir / "interface.yaml", "w") as f:
+        yaml.dump(interface, f)
+    (skill_dir / "SKILL.md").write_text("# Child\nMutated.", encoding="utf-8")
+
+    engine = CambrianEngine(
+        schemas_dir=schemas_dir,
+        skills_dir=tmp_path / "skills",
+        skill_pool_dir=tmp_path / "pool",
+        db_path=":memory:",
+    )
+    registry = engine.get_registry()
+
+    from engine.models import EvolutionRecord
+    record = EvolutionRecord(
+        id=0, skill_id=skill_id,
+        parent_skill_md="# Parent\nOriginal.",
+        child_skill_md="# Child\nMutated.",
+        parent_fitness=0.8, child_fitness=0.1,
+        adopted=True, mutation_summary="test",
+        feedback_ids="[]", created_at="2026-04-01T00:00:00",
+    )
+    registry.add_evolution_record(record)
+
+    skill_data = registry.get(skill_id)
+    record_data = registry.get_evolution_history(skill_id, limit=1)[0]
+
+    # skill_path를 존재하지 않는 경로로 변조 → 파일 쓰기 실패
+    bad_skill_data = dict(skill_data)
+    bad_skill_data["skill_path"] = "/nonexistent/path/that/does/not/exist"
+
+    result = engine._execute_auto_rollback(
+        skill_id, bad_skill_data, record_data,
+    )
+
+    # 파일 복원 실패
+    assert result["file_restored"] is False
+    assert any("file_restore_failed" in e for e in result["errors"])
+
+    # DB quarantine은 성공 (파일 실패와 무관하게 시도)
+    assert result["db_applied"] is True
+
+    # DB 상태 확인: quarantined
+    refreshed = registry.get(skill_id)
+    assert refreshed["release_state"] == "quarantined"
+
+    engine.close()
+
+
+def test_auto_rollback_db_updates_are_transactional(tmp_path, schemas_dir):
+    """DB 트랜잭션 중 일부 실패 시 전체가 롤백되어 부분 적용이 없다."""
+    from unittest.mock import patch, MagicMock
+    import yaml
+    import sqlite3
+
+    skill_id = "rollback_txn_test"
+    skill_dir = tmp_path / "skills" / skill_id
+    skill_dir.mkdir(parents=True)
+
+    meta = {
+        "id": skill_id, "version": "1.0.0", "name": "Test",
+        "description": "test", "domain": "testing", "tags": ["test"],
+        "mode": "a", "created_at": "2026-04-01", "updated_at": "2026-04-01",
+        "runtime": {"language": "python", "needs_network": False,
+                     "needs_filesystem": False, "timeout_seconds": 10},
+        "lifecycle": {"status": "active", "fitness_score": 0.0,
+                       "total_executions": 0, "successful_executions": 0,
+                       "last_used": None, "crystallized_at": None},
+    }
+    interface = {
+        "input": {"type": "object", "properties": {"x": {"type": "string", "description": "x"}}, "required": []},
+        "output": {"type": "object", "properties": {"r": {"type": "string", "description": "r"}}, "required": ["r"]},
+    }
+    with open(skill_dir / "meta.yaml", "w") as f:
+        yaml.dump(meta, f)
+    with open(skill_dir / "interface.yaml", "w") as f:
+        yaml.dump(interface, f)
+    (skill_dir / "SKILL.md").write_text("# Child", encoding="utf-8")
+
+    engine = CambrianEngine(
+        schemas_dir=schemas_dir,
+        skills_dir=tmp_path / "skills",
+        skill_pool_dir=tmp_path / "pool",
+        db_path=":memory:",
+    )
+    registry = engine.get_registry()
+
+    from engine.models import EvolutionRecord
+    record = EvolutionRecord(
+        id=0, skill_id=skill_id,
+        parent_skill_md="# Parent",
+        child_skill_md="# Child",
+        parent_fitness=0.8, child_fitness=0.1,
+        adopted=True, mutation_summary="test",
+        feedback_ids="[]", created_at="2026-04-01T00:00:00",
+    )
+    registry.add_evolution_record(record)
+
+    # 원본 상태 스냅샷
+    original_state = registry.get(skill_id)
+    original_fitness = original_state["fitness_score"]
+    original_release = original_state["release_state"]
+
+    record_data = registry.get_evolution_history(skill_id, limit=1)[0]
+
+    # apply_auto_rollback 내부에서 3번째 SQL(release_state UPDATE) 시점에 실패 주입.
+    # sqlite3.Connection.execute는 read-only attribute이므로 patch.object로 교체
+    # 할 수 없음 → _conn 자체를 wrapper로 일시 교체하는 방식으로 주입.
+    real_conn = registry._conn
+
+    class _FailingConn:
+        def __init__(self, inner):
+            self._inner = inner
+
+        def execute(self, sql, params=()):
+            if "release_state" in str(sql) and "quarantined" in str(params):
+                raise sqlite3.OperationalError("injected failure")
+            return self._inner.execute(sql, params)
+
+        def commit(self):
+            return self._inner.commit()
+
+        def rollback(self):
+            return self._inner.rollback()
+
+        def __getattr__(self, name):
+            return getattr(self._inner, name)
+
+    registry._conn = _FailingConn(real_conn)
+    try:
+        try:
+            registry.apply_auto_rollback(
+                skill_id=skill_id,
+                record_id=record_data["id"],
+                parent_fitness=0.8,
+                reason="test",
+            )
+        except sqlite3.OperationalError:
+            pass  # 예상된 실패
+    finally:
+        registry._conn = real_conn
+
+    # 트랜잭션 롤백 확인: 모든 DB 상태가 원본 그대로
+    after_state = registry.get(skill_id)
+    assert after_state["fitness_score"] == original_fitness, (
+        f"fitness 부분 적용됨: {original_fitness} → {after_state['fitness_score']}"
+    )
+    assert after_state["release_state"] == original_release, (
+        f"release_state 부분 적용됨: {original_release} → {after_state['release_state']}"
+    )
+
+    # auto_rolled_back도 미적용
+    history = registry.get_evolution_history(skill_id, limit=1)
+    assert history[0]["auto_rolled_back"] == 0, "auto_rolled_back 부분 적용됨"
+
+    engine.close()

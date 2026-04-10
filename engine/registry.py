@@ -92,15 +92,16 @@ class SkillRegistry:
             );
             """
         )
-        # 기존 DB 마이그레이션: auto_rolled_back 컬럼이 없으면 추가
         try:
             self._conn.execute(
                 "ALTER TABLE evolution_history "
                 "ADD COLUMN auto_rolled_back INTEGER NOT NULL DEFAULT 0"
             )
             self._conn.commit()
-        except Exception:
-            pass  # 이미 존재하면 무시
+        except sqlite3.OperationalError:
+            logger.debug(
+                "migration skip: auto_rolled_back column already exists"
+            )
         self._conn.execute(
             """
             CREATE TABLE IF NOT EXISTS evaluation_inputs (
@@ -143,15 +144,16 @@ class SkillRegistry:
             );
             """
         )
-        # 기존 DB 마이그레이션: release_state 컬럼이 없으면 추가
         try:
             self._conn.execute(
                 "ALTER TABLE skills "
                 "ADD COLUMN release_state TEXT NOT NULL DEFAULT 'experimental'"
             )
             self._conn.commit()
-        except Exception:
-            pass  # 이미 존재하면 무시
+        except sqlite3.OperationalError:
+            logger.debug(
+                "migration skip: release_state column already exists"
+            )
         self._conn.execute(
             """
             CREATE TABLE IF NOT EXISTS evaluation_snapshots (
@@ -442,6 +444,118 @@ class SkillRegistry:
                 new_avg_judge,
                 skill_id,
             ),
+        )
+        self._conn.commit()
+        if cursor.rowcount == 0:
+            raise SkillNotFoundError(skill_id)
+
+    def mark_auto_rolled_back(self, record_id: int) -> None:
+        """진화 기록에 auto_rolled_back=1 플래그를 설정한다.
+
+        Args:
+            record_id: evolution_history 테이블의 id
+
+        Raises:
+            SkillNotFoundError: 해당 record가 존재하지 않을 때
+        """
+        cursor = self._conn.execute(
+            "UPDATE evolution_history SET auto_rolled_back = 1 WHERE id = ?",
+            (record_id,),
+        )
+        self._conn.commit()
+        if cursor.rowcount == 0:
+            raise SkillNotFoundError(f"evolution record #{record_id}")
+
+    def apply_auto_rollback(
+        self,
+        skill_id: str,
+        record_id: int,
+        parent_fitness: float,
+        reason: str,
+    ) -> None:
+        """단일 트랜잭션으로 auto rollback DB 변경을 처리한다.
+
+        1. evolution_history auto_rolled_back 마킹
+        2. skills fitness_score 리셋
+        3. skills release_state → quarantined
+        4. governance_log 기록
+
+        실패 시 전체 롤백. 부분 적용 방지.
+
+        Args:
+            skill_id: 대상 스킬 ID
+            record_id: evolution_history.id
+            parent_fitness: 복원할 fitness 값
+            reason: governance_log 사유
+
+        Raises:
+            SkillNotFoundError: skill_id가 DB에 없을 때
+            sqlite3.Error: DB 오류 시 (롤백 후 재raise)
+        """
+        import sqlite3 as _sqlite3
+
+        # 현재 상태 조회 (governance_log의 from_state용)
+        current = self.get(skill_id)
+        from_state = current.get("release_state", "experimental")
+        created_at = datetime.now(timezone.utc).isoformat()
+
+        try:
+            # 1. auto_rolled_back 마킹
+            c1 = self._conn.execute(
+                "UPDATE evolution_history SET auto_rolled_back = 1 WHERE id = ?",
+                (record_id,),
+            )
+            if c1.rowcount == 0:
+                raise SkillNotFoundError(f"evolution record #{record_id}")
+
+            # 2. fitness 리셋
+            c2 = self._conn.execute(
+                "UPDATE skills SET fitness_score = ? WHERE id = ?",
+                (round(parent_fitness, 4), skill_id),
+            )
+            if c2.rowcount == 0:
+                raise SkillNotFoundError(skill_id)
+
+            # 3. release_state → quarantined
+            self._conn.execute(
+                "UPDATE skills SET release_state = ? WHERE id = ?",
+                ("quarantined", skill_id),
+            )
+
+            # 4. governance_log
+            self._conn.execute(
+                """
+                INSERT INTO governance_log
+                    (skill_id, from_state, to_state, reason, triggered_by, created_at)
+                VALUES (?, ?, ?, ?, ?, ?)
+                """,
+                (skill_id, from_state, "quarantined", reason, "auto", created_at),
+            )
+
+            self._conn.commit()
+
+        except _sqlite3.Error:
+            self._conn.rollback()
+            raise
+        except SkillNotFoundError:
+            self._conn.rollback()
+            raise
+
+    def reset_fitness(self, skill_id: str, fitness: float) -> None:
+        """스킬의 fitness_score를 지정 값으로 강제 리셋한다.
+
+        auto rollback 등 특수 상황에서만 사용한다.
+
+        Args:
+            skill_id: 대상 스킬 ID
+            fitness: 리셋할 fitness 값 (0.0~1.0)
+
+        Raises:
+            SkillNotFoundError: 해당 ID가 DB에 없을 때
+        """
+        cursor = self._conn.execute(
+            "UPDATE skills SET fitness_score = ? WHERE id = ?",
+            (round(fitness, 4), skill_id),
         )
         self._conn.commit()
         if cursor.rowcount == 0:
@@ -1642,10 +1756,23 @@ class SkillRegistry:
     ) -> float:
         """적응도를 계산한다.
 
+        공식:
+            raw = successful / total
+            confidence = min(total / 10, 1.0)
+            execution_fitness = raw * confidence
+
+        confidence factor는 cold-start 보호 목적이다.
+        10회 미만 실행된 스킬은 fitness가 실제 성공률보다 낮게 산출된다.
+        예시:
+            - 5회 전부 성공 → fitness = 1.0 × 0.5 = 0.5
+            - 10회 전부 성공 → fitness = 1.0 × 1.0 = 1.0
+
+        avg_judge_score가 제공되면 execution_fitness(50%) + judge(50%) 가중평균.
+
         Args:
             successful: 성공 횟수
             total: 전체 실행 횟수
-            avg_judge_score: 평균 Judge 점수 (0.0~10.0). None이면 기존 공식.
+            avg_judge_score: 평균 Judge 점수 (0.0~10.0). None이면 execution만.
 
         Returns:
             계산된 적응도 (0.0~1.0)

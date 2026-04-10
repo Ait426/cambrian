@@ -1003,3 +1003,69 @@ def test_run_trace_candidates_json() -> None:
     assert parsed[1]["success"] is False
 
     registry.close()
+
+
+def test_migration_logs_non_ignorable_errors():
+    """M-4: migration이 sqlite3.OperationalError만 무시하고,
+    다른 예외는 전파되는지 검증."""
+    import sqlite3
+    from unittest.mock import patch, MagicMock
+    from engine.registry import SkillRegistry
+
+    # 정상 케이스: OperationalError는 무시되고 DB가 생성됨
+    registry = SkillRegistry(":memory:")
+    registry.close()
+
+    # 비정상 케이스: OperationalError가 아닌 예외는 통과하지 않아야 함
+    # _create_table 내부에서 ALTER TABLE이 OperationalError 이외를
+    # raise하면 그대로 전파되는지 확인
+    #
+    # 실제 sqlite3는 duplicate column에 OperationalError를 raise하므로
+    # 정상 경로에서는 항상 catch됨.
+    # 여기서는 blanket except가 제거되었는지 코드 수준 검증으로 대체.
+    import ast
+    import inspect
+    import textwrap
+    # inspect.getsource는 들여쓰기를 보존하므로 dedent 필요
+    source = textwrap.dedent(inspect.getsource(SkillRegistry._create_table))
+    tree = ast.parse(source)
+
+    for node in ast.walk(tree):
+        if isinstance(node, ast.ExceptHandler):
+            # except Exception: 패턴이 없어야 함
+            if node.type is not None:
+                if isinstance(node.type, ast.Name) and node.type.id == "Exception":
+                    # migration 관련 ALTER TABLE 근처의 blanket catch 탐지
+                    # body에 pass만 있으면 위반
+                    if (
+                        len(node.body) == 1
+                        and isinstance(node.body[0], ast.Pass)
+                    ):
+                        pytest.fail(
+                            f"line {node.lineno}: 'except Exception: pass' "
+                            f"패턴이 migration 코드에 남아있음"
+                        )
+
+
+def test_fitness_cold_start_bias():
+    """H-4: cold-start confidence factor가 newborn 스킬에 편향을 주는지 검증."""
+    from engine.registry import SkillRegistry
+
+    registry = SkillRegistry(":memory:")
+
+    # 5회 전부 성공 → fitness = 1.0 * 0.5 = 0.5
+    fitness_5 = registry._calculate_fitness(5, 5)
+    assert fitness_5 == 0.5, f"5/5 성공 시 fitness 기대 0.5, 실제 {fitness_5}"
+
+    # 10회 전부 성공 → fitness = 1.0 * 1.0 = 1.0
+    fitness_10 = registry._calculate_fitness(10, 10)
+    assert fitness_10 == 1.0, f"10/10 성공 시 fitness 기대 1.0, 실제 {fitness_10}"
+
+    # 3회 전부 성공 → fitness = 1.0 * 0.3 = 0.3
+    fitness_3 = registry._calculate_fitness(3, 3)
+    assert fitness_3 == 0.3, f"3/3 성공 시 fitness 기대 0.3, 실제 {fitness_3}"
+
+    # confidence factor의 구조적 불리함 확인
+    assert fitness_5 < fitness_10, "cold-start 편향: 5회 < 10회여야 함"
+
+    registry.close()

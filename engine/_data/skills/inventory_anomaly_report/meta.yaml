@@ -1,0 +1,12 @@
+id: "inventory_anomaly_report"
+version: "1.0.0"
+name: "Inventory Anomaly Report"
+description: "OTA 재고 불일치 데이터를 분석하여 원인별 분류, 심각도 판정, 조치 권고가 포함된 HTML 리포트를 생성"
+domain: "hotel_analytics"
+tags: ["inventory", "anomaly", "report", "hotel", "ota", "cross-check"]
+mode: "a"
+runtime:
+  language: "python"
+  needs_network: false
+  needs_filesystem: false
+  timeout_seconds: 60

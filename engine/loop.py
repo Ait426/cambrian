@@ -67,7 +67,10 @@ class CambrianEngine:
 
         self._provider = provider
         self._loader = SkillLoader(schemas_dir)
-        self._executor = SkillExecutor(provider=self._provider)
+        self._executor = SkillExecutor(
+            provider=self._provider,
+            sandbox_config=self._policy.sandbox,
+        )
         self._registry = SkillRegistry(db_path)
         self._autopsy = Autopsy()
         self._absorber = SkillAbsorber(schemas_dir, skill_pool_dir, self._registry)
@@ -416,6 +419,97 @@ class CambrianEngine:
         except Exception:
             pass
 
+    def _execute_auto_rollback(
+        self,
+        skill_id: str,
+        skill_data: dict,
+        record: dict,
+    ) -> dict:
+        """auto rollback의 모든 상태 변경을 처리하고 결과를 반환한다.
+
+        파일 복원과 DB 갱신을 분리하여, 각 단계의 성공/실패를
+        개별적으로 기록한다. DB 변경은 단일 트랜잭션으로 처리된다.
+
+        파일 복원이 실패해도 DB quarantine은 시도한다.
+        (손상된 스킬이 경쟁 실행에 재선택되는 것을 방지)
+
+        Args:
+            skill_id: 대상 스킬 ID
+            skill_data: registry.get() 결과 dict
+            record: evolution_history 레코드 dict
+
+        Returns:
+            결과 dict:
+            - skill_id: str
+            - record_id: int
+            - file_restored: bool
+            - db_applied: bool
+            - errors: list[str] (비어있으면 완전 성공)
+        """
+        record_id = record["id"]
+        parent_fitness = record.get("parent_fitness", 0.0)
+        current_fitness = skill_data.get("fitness_score", 0.0)
+
+        result: dict = {
+            "skill_id": skill_id,
+            "record_id": record_id,
+            "file_restored": False,
+            "db_applied": False,
+            "errors": [],
+        }
+
+        # 1. 파일 복원 (DB와 독립)
+        try:
+            skill_path = Path(skill_data["skill_path"])
+            skill_md_path = skill_path / "SKILL.md"
+            skill_md_path.write_text(
+                record["parent_skill_md"], encoding="utf-8"
+            )
+            result["file_restored"] = True
+        except Exception as exc:
+            msg = f"file_restore_failed: {exc}"
+            result["errors"].append(msg)
+            logger.error(
+                "Auto-rollback file restore failed for '%s': %s",
+                skill_id, exc,
+            )
+
+        # 2. DB 변경 (단일 트랜잭션)
+        try:
+            reason = (
+                f"auto_rollback: fitness={current_fitness:.4f}"
+                f"→{parent_fitness:.4f}"
+            )
+            self._registry.apply_auto_rollback(
+                skill_id=skill_id,
+                record_id=record_id,
+                parent_fitness=parent_fitness,
+                reason=reason,
+            )
+            result["db_applied"] = True
+        except Exception as exc:
+            msg = f"db_update_failed: {exc}"
+            result["errors"].append(msg)
+            logger.error(
+                "Auto-rollback DB update failed for '%s': %s",
+                skill_id, exc,
+            )
+
+        # 결과 로깅
+        if result["file_restored"] and result["db_applied"]:
+            logger.warning(
+                "Auto-rollback completed for '%s' (record #%d, "
+                "fitness %.4f→%.4f, quarantined)",
+                skill_id, record_id, current_fitness, parent_fitness,
+            )
+        elif result["errors"]:
+            logger.error(
+                "Auto-rollback partially failed for '%s': %s",
+                skill_id, result["errors"],
+            )
+
+        return result
+
     def _check_auto_rollback(self, skill_id: str) -> None:
         """진화 채택 후 성능이 악화되면 자동으로 이전 버전으로 복원한다.
 
@@ -441,34 +535,12 @@ class CambrianEngine:
             if record.get("auto_rolled_back"):
                 return
 
-            # 자동 롤백 실행: parent_skill_md로 SKILL.md 복원
-            skill_path = Path(skill_data["skill_path"])
-            skill_md_path = skill_path / "SKILL.md"
-            skill_md_path.write_text(
-                record["parent_skill_md"], encoding="utf-8"
+            self._execute_auto_rollback(skill_id, skill_data, record)
+        except Exception as exc:
+            logger.error(
+                "Auto-rollback check failed for skill '%s': %s",
+                skill_id, exc,
             )
-
-            # auto_rolled_back 마킹
-            self._registry._conn.execute(
-                "UPDATE evolution_history SET auto_rolled_back = 1 WHERE id = ?",
-                (record["id"],),
-            )
-            self._registry._conn.commit()
-            logger.warning(
-                "Auto-rollback executed for skill '%s' (record #%d)",
-                skill_id,
-                record["id"],
-            )
-
-            # 롤백된 스킬을 quarantine 상태로 격리
-            self._registry.update_release_state(
-                skill_id,
-                new_state="quarantined",
-                reason=f"auto_rollback: fitness={skill_data['fitness_score']:.4f}",
-                triggered_by="auto",
-            )
-        except Exception:
-            pass  # 롤백 실패는 조용히 무시
 
     def run_task(
         self,
@@ -490,6 +562,7 @@ class CambrianEngine:
         """
         attempt = 0
         last_result: ExecutionResult | None = None
+        _absorbed_ids: set[str] = set()
 
         while attempt <= max_retries:
             candidates = self._registry.search(
@@ -503,7 +576,9 @@ class CambrianEngine:
             )
 
             if not candidates:
-                absorbed = self._try_absorb_from_external(domain, tags)
+                absorbed = self._try_absorb_from_external(
+                    domain, tags, exclude_ids=_absorbed_ids,
+                )
                 if absorbed:
                     attempt += 1
                     continue
@@ -557,12 +632,18 @@ class CambrianEngine:
         logger.error("Task failed after %s attempts", max_retries + 1)
         return last_result
 
-    def _try_absorb_from_external(self, domain: str, tags: list[str]) -> bool:
+    def _try_absorb_from_external(
+        self,
+        domain: str,
+        tags: list[str],
+        exclude_ids: set[str] | None = None,
+    ) -> bool:
         """외부 디렉토리에서 매칭되는 스킬을 흡수 시도한다.
 
         Args:
             domain: 필요한 도메인
             tags: 필요한 태그
+            exclude_ids: 이미 흡수 시도한 스킬 ID set. 여기 포함된 ID는 건너뛴다.
 
         Returns:
             True면 흡수 성공, False면 실패
@@ -601,8 +682,15 @@ class CambrianEngine:
                 if not any(tag in meta_tags for tag in tags):
                     continue
 
+                # 이미 흡수 시도한 스킬은 건너뛴다
+                meta_id = meta.get("id", "")
+                if exclude_ids is not None and meta_id in exclude_ids:
+                    continue
+
                 try:
                     self._absorber.absorb(sub_dir)
+                    if exclude_ids is not None and meta_id:
+                        exclude_ids.add(meta_id)
                     return True
                 except Exception as exc:
                     logger.warning("Failed to absorb external skill from '%s': %s", sub_dir, exc)

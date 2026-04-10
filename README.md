@@ -230,3 +230,58 @@ pytest tests/ -v --tb=short -k "not Api"
 - anthropic / openai / google-generativeai (선택, LLM 프로바이더)
 - SQLite (ORM 없이 직접)
 - pytest
+
+## Security Model
+
+Cambrian applies a layered security model for Mode B skill execution:
+
+**Layer 1 — AST Static Scanner** (`engine/security.py`)
+Blocks known dangerous patterns (eval, exec, subprocess, os imports) at
+skill load time. This is a basic defense line and cannot detect all evasion.
+
+**Layer 2 — Environment Isolation** (`engine/executor.py`)
+Subprocess execution uses a minimal environment variable whitelist.
+Parent process secrets are not forwarded to child processes.
+
+**Layer 3 — Container Isolation** (`engine/sandbox.py`, opt-in)
+When `sandbox.enabled = true` in policy, Mode B skills run inside a
+Docker container with:
+- Network disabled by default (`--network none`)
+- Read-only root filesystem (`--read-only`)
+- Memory, CPU, and PID limits
+- Skill directory mounted read-only
+- Writable tmpfs for /tmp only
+
+**Current limitations:**
+- Container isolation is Mode B only. Mode A (LLM) is not sandboxed.
+- Docker-based isolation is not a complete security guarantee.
+- Linux + Docker is the primary supported environment.
+- Sandbox is opt-in; default is subprocess execution.
+- nsjail, rootless hardening, and cross-platform support are future work.
+
+**Recommendation:** Enable sandbox for any skill from untrusted sources.
+
+## Fitness Scoring
+
+Skill fitness is calculated as:
+
+```
+raw = successful_executions / total_executions
+confidence = min(total_executions / 10, 1.0)
+fitness = raw * confidence
+```
+
+This means skills with fewer than 10 executions are penalized by a confidence
+factor. A skill with 100% success rate and 5 executions will have
+fitness = 1.0 × 0.5 = 0.5. This is intentional cold-start protection but
+creates a structural disadvantage for newborn skills in competitive execution.
+
+When LLM Judge scores are available, fitness combines execution success (50%)
+and judge score (50%).
+
+## Mode A vs Mode B in Competitive Execution
+
+Mode A (LLM-based) skills report actual execution time but are sorted with
+a fixed latency of 999999ms in competitive runs. This means Mode B (code-based)
+skills are always preferred when both succeed. This is a deliberate design
+choice favoring deterministic execution.

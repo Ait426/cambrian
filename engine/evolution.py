@@ -137,6 +137,35 @@ class SkillEvolver:
             return rest[:next_section].rstrip()
         return rest.rstrip()
 
+    @staticmethod
+    def _extract_section_span(md: str, header: str) -> tuple[int, int] | None:
+        """마크다운에서 특정 ## 섹션의 (start, end) 인덱스를 반환한다.
+
+        Args:
+            md: 마크다운 전문
+            header: 섹션 헤더 (예: "## Output Format")
+
+        Returns:
+            (start_idx, end_idx) 튜플 또는 None.
+            end_idx는 섹션 끝의 인덱스 (exclusive, rstrip 후).
+        """
+        idx = md.find(header)
+        if idx == -1:
+            return None
+        rest = md[idx:]
+        next_section = rest.find("\n## ", len(header))
+        if next_section != -1:
+            end = idx + next_section
+            # rstrip과 동일한 효과: 끝 공백 제거
+            while end > idx and md[end - 1] in (" ", "\t", "\r", "\n"):
+                end -= 1
+            return (idx, end)
+        # 마지막 섹션: 문서 끝까지
+        end = len(md)
+        while end > idx and md[end - 1] in (" ", "\t", "\r", "\n"):
+            end -= 1
+        return (idx, end)
+
     def _ensure_output_format(self, mutated: str, original: str) -> str:
         """변이된 SKILL.md의 Output Format 섹션을 원본과 동일하게 보장한다.
 
@@ -161,8 +190,14 @@ class SkillEvolver:
         logger.warning("Output Format section modified by LLM — restoring original.")
 
         if mutated_section is not None:
-            # 변경된 섹션을 원본으로 교체
-            mutated = mutated.replace(mutated_section, original_section)
+            # 인덱스 기반으로 정확한 위치의 섹션만 교체
+            span = self._extract_section_span(mutated, "## Output Format")
+            if span is not None:
+                start, end = span
+                mutated = mutated[:start] + original_section + mutated[end:]
+            else:
+                # span을 못 찾으면 끝에 추가 (방어)
+                mutated = mutated.rstrip() + "\n\n" + original_section
         else:
             # 누락됨 → 끝에 추가
             mutated = mutated.rstrip() + "\n\n" + original_section

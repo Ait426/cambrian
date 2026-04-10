@@ -660,6 +660,12 @@ class ProjectScanner:
             ))
 
         # ci_cd gap
+        # 정책: ci_cd는 운영 성숙도 항목이다.
+        # minimal project(파일 수 적거나 테스트 미보유)에는 강제하지 않는다.
+        # 현재 임계값은 total_files > 5이며, has_tests 여부에 따라
+        # priority를 medium/low로 분기한다. 이 조건을 변경하면
+        # test_scan_full_project_minimal_gaps 및
+        # test_ci_cd_gap_not_forced_on_minimal_project 확인 필요.
         if "ci_cd" not in caps and fingerprint.total_files > 5:
             priority = "medium" if fingerprint.has_tests else "low"
             gaps.append(CapabilityGap(
@@ -856,9 +862,13 @@ class ProjectScanner:
             하나라도 있으면 True
         """
         for d in dirs:
-            # 정확한 이름 또는 경로 끝 부분 매칭
-            parts = d.replace("\\", "/").split("/")
-            if parts[-1] in targets or d in targets:
+            # Windows 백슬래시 경로를 슬래시로 정규화한 뒤 매칭.
+            # targets는 항상 슬래시 표기("/") 를 사용하므로, 원본 `d`를
+            # 그대로 비교하면 Windows에서 '.github\\workflows' 같은 값이
+            # '.github/workflows' target과 매칭되지 않는다.
+            normalized = d.replace("\\", "/")
+            parts = normalized.split("/")
+            if parts[-1] in targets or normalized in targets:
                 return True
         return False
 

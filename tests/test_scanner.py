@@ -403,3 +403,53 @@ def test_scan_report_structure(tmp_path: Path) -> None:
     assert report.uncovered_gaps == report.total_gaps - report.covered_gaps
     assert report.fingerprint.project_name == "my_python_project"
     assert report.fingerprint.project_path is not None
+
+
+def test_ci_cd_detected_when_github_workflows_exists(tmp_path: Path) -> None:
+    """회귀 방지: .github/workflows/ 존재 시 ci_cd capability가 감지된다.
+
+    Windows에서 디렉토리 상대경로가 백슬래시로 수집되더라도
+    `_has_signal_dir`의 정규화 로직이 올바르게 매칭해야 한다.
+    """
+    proj = tmp_path / "ci_project"
+    proj.mkdir()
+    (proj / "main.py").write_text("pass\n", encoding="utf-8")
+    (proj / ".github").mkdir()
+    (proj / ".github" / "workflows").mkdir()
+    (proj / ".github" / "workflows" / "ci.yml").write_text(
+        "on: push\n", encoding="utf-8",
+    )
+
+    scanner = ProjectScanner()
+    report = scanner.scan(proj, run_search=False)
+
+    assert "ci_cd" in report.fingerprint.detected_capabilities, (
+        f"ci_cd 미감지. capabilities: {report.fingerprint.detected_capabilities}"
+    )
+    # ci_cd capability가 있으므로 gap이 생기면 안 됨
+    gap_cats = [g.category for g in report.gaps]
+    assert "ci_cd" not in gap_cats, (
+        f"ci_cd capability 감지됐는데 gap 발생: {gap_cats}"
+    )
+
+
+def test_ci_cd_gap_not_forced_on_minimal_project(tmp_path: Path) -> None:
+    """정책: minimal project에 ci_cd gap을 강제하지 않는다.
+
+    현재 임계값은 total_files > 5. 파일 2개짜리 프로젝트는
+    gap 판정 대상에서 제외되어야 한다.
+    """
+    proj = tmp_path / "tiny_project"
+    proj.mkdir()
+    (proj / "main.py").write_text("pass\n", encoding="utf-8")
+    (proj / "util.py").write_text("pass\n", encoding="utf-8")
+
+    scanner = ProjectScanner()
+    report = scanner.scan(proj, run_search=False)
+
+    gap_cats = [g.category for g in report.gaps]
+    # 파일 2개짜리 프로젝트에 ci_cd gap은 과탐지
+    assert "ci_cd" not in gap_cats, (
+        f"minimal project에 ci_cd gap 강제됨: "
+        f"total_files={report.fingerprint.total_files}"
+    )

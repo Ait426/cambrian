@@ -1,0 +1,23 @@
+id: "hello_world"
+version: "1.0.0"
+name: "Hello World"
+description: "입력 텍스트에 인사말을 붙여 반환하는 테스트용 스킬"
+domain: "utility"
+tags: ["test", "greeting", "utility"]
+author: "cambrian"
+license: "MIT"
+created_at: "2026-04-01"
+updated_at: "2026-04-01"
+mode: "b"
+runtime:
+  language: "python"
+  needs_network: false
+  needs_filesystem: false
+  timeout_seconds: 10
+lifecycle:
+  status: "active"
+  fitness_score: 0.0
+  total_executions: 0
+  successful_executions: 0
+  last_used: null
+  crystallized_at: null

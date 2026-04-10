@@ -168,3 +168,40 @@ def test_google_provider_not_installed(monkeypatch: pytest.MonkeyPatch) -> None:
     from engine.llm import GoogleProvider
     with pytest.raises(RuntimeError, match="google-generativeai package not installed"):
         GoogleProvider(api_key="fake")
+
+
+def test_llm_dependent_tests_use_mock():
+    """L-4: LLM 의존 테스트 파일들이 실제 API를 호출하지 않는지 확인.
+
+    각 테스트 파일에 provider= 또는 mock/patch 패턴이 있는지 검증.
+    """
+    import ast
+    from pathlib import Path
+
+    test_dir = Path(__file__).parent
+    llm_test_files = [
+        "test_evolution.py",
+        "test_critic.py",
+        "test_fuser.py",
+        "test_generator.py",
+    ]
+
+    for filename in llm_test_files:
+        filepath = test_dir / filename
+        if not filepath.exists():
+            continue
+
+        source = filepath.read_text(encoding="utf-8")
+
+        # mock/patch 또는 provider= 패턴이 있어야 함
+        has_mock = (
+            "mock" in source.lower()
+            or "patch" in source.lower()
+            or "provider=" in source
+            or "FakeLLM" in source
+            or "DummyProvider" in source
+        )
+        assert has_mock, (
+            f"{filename}: LLM 의존 테스트에 mock/patch/provider 주입이 없음. "
+            f"실제 API 호출 위험."
+        )

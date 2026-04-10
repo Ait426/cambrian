@@ -1,0 +1,25 @@
+input:
+  type: "object"
+  properties:
+    situation:
+      type: "string"
+      description: "이메일을 작성해야 하는 상황 설명"
+    recipient:
+      type: "string"
+      description: "수신자 이름 또는 직함"
+    tone:
+      type: "string"
+      description: "이메일 톤 (formal 또는 casual)"
+      enum: ["formal", "casual"]
+  required: ["situation", "recipient", "tone"]
+
+output:
+  type: "object"
+  properties:
+    html:
+      type: "string"
+      description: "이메일 본문 HTML"
+    subject:
+      type: "string"
+      description: "이메일 제목"
+  required: ["html", "subject"]

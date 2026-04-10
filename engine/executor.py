@@ -22,13 +22,24 @@ logger = logging.getLogger(__name__)
 class SkillExecutor:
     """스킬을 실행하고 결과를 반환한다."""
 
-    def __init__(self, provider: LLMProvider | None = None) -> None:
+    def __init__(
+        self,
+        provider: LLMProvider | None = None,
+        sandbox_config: "SandboxConfig | None" = None,
+    ) -> None:
         """초기화.
 
         Args:
             provider: LLM 프로바이더. None이면 Mode A 실행 시 자동 생성.
+            sandbox_config: 컨테이너 격리 설정. None이면 sandbox 비활성.
         """
         self._provider = provider
+        self._sandbox_config = sandbox_config
+        self._container_runner = None
+
+        if sandbox_config is not None and sandbox_config.enabled:
+            from engine.sandbox import ContainerRunner
+            self._container_runner = ContainerRunner(sandbox_config)
 
     def execute(self, skill: Skill, input_data: dict) -> ExecutionResult:
         """스킬을 실행한다.
@@ -67,6 +78,10 @@ class SkillExecutor:
         main_py = skill.skill_path / "execute" / "main.py"
         if not main_py.exists():
             raise SkillExecutionError(skill.id, "execute/main.py not found")
+
+        # sandbox 분기: container runner가 구성돼 있으면 격리 실행 경로로 위임
+        if self._container_runner is not None:
+            return self._container_runner.execute(skill, input_data)
 
         json_input = json.dumps(input_data, ensure_ascii=False)
         started_at = time.perf_counter()
@@ -171,8 +186,11 @@ class SkillExecutor:
             안전한 환경변수 딕셔너리
         """
         safe_env: dict[str, str] = {}
-        # 실행에 필수적인 환경변수만 화이트리스트로 허용
-        allowed_keys = ("PATH", "HOME", "LANG", "LC_ALL", "PYTHONPATH", "PYTHONIOENCODING")
+        # 실행에 필수적인 환경변수만 화이트리스트로 허용.
+        # PYTHONPATH는 자식 프로세스의 모듈 검색 경로를 오염시킬 수 있으므로
+        # 의도적으로 전파하지 않는다 (부모 환경이 오염됐을 경우 자식 스킬이
+        # 의도치 않은 모듈을 import할 위험을 차단).
+        allowed_keys = ("PATH", "HOME", "LANG", "LC_ALL", "PYTHONIOENCODING")
         for key in allowed_keys:
             value = os.environ.get(key)
             if value is not None:

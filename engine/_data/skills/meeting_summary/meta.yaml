@@ -1,0 +1,23 @@
+id: "meeting_summary"
+version: "1.0.0"
+name: "Meeting Summary Generator"
+description: "회의 녹취록을 요약하고 액션 아이템을 추출하여 HTML 리포트 생성"
+domain: "writing"
+tags: ["meeting", "summary", "writing"]
+author: "cambrian"
+license: "MIT"
+created_at: "2026-04-03"
+updated_at: "2026-04-03"
+mode: "a"
+runtime:
+  language: "python"
+  needs_network: false
+  needs_filesystem: false
+  timeout_seconds: 60
+lifecycle:
+  status: "active"
+  fitness_score: 0.0
+  total_executions: 0
+  successful_executions: 0
+  last_used: null
+  crystallized_at: null

@@ -1,0 +1,56 @@
+input:
+  type: object
+  required:
+    - title
+    - metrics
+  properties:
+    title:
+      type: string
+      description: 대시보드 제목
+    metrics:
+      type: array
+      description: 메트릭 카드 목록
+      items:
+        type: object
+        required:
+          - label
+          - value
+        properties:
+          label:
+            type: string
+          value:
+            type: string
+          change:
+            type: string
+            description: "변화량 표시 (예: +12.3%)"
+    chart:
+      type: object
+      description: 차트 데이터 (선택)
+      properties:
+        type:
+          type: string
+          enum: [bar, line]
+          default: bar
+        labels:
+          type: array
+          items:
+            type: string
+        datasets:
+          type: array
+    theme:
+      type: string
+      enum: [blue, green, purple, dark]
+      default: blue
+      description: 대시보드 색상 테마
+
+output:
+  type: object
+  required:
+    - html
+  properties:
+    html:
+      type: string
+      description: 완성된 대시보드 HTML
+    metric_count:
+      type: integer
+      description: 메트릭 카드 수

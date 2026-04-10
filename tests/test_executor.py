@@ -125,3 +125,45 @@ def test_execute_mode_a_no_api_key(
     assert result.success is False
     assert result.mode == "a"
     assert "ANTHROPIC_API_KEY" in result.error or "anthropic" in result.error
+
+
+def test_build_safe_env_does_not_forward_pythonpath():
+    """H-1: 부모 환경의 PYTHONPATH가 child env에 전달되지 않는지 검증."""
+    import os
+    from engine.executor import SkillExecutor
+
+    original = os.environ.get("PYTHONPATH")
+    try:
+        os.environ["PYTHONPATH"] = "/tmp/evil"
+        env = SkillExecutor._build_safe_env()
+        assert "PYTHONPATH" not in env, (
+            f"PYTHONPATH가 child env에 포함됨: {env.get('PYTHONPATH')}"
+        )
+    finally:
+        if original is not None:
+            os.environ["PYTHONPATH"] = original
+        elif "PYTHONPATH" in os.environ:
+            del os.environ["PYTHONPATH"]
+
+
+def test_extract_json_fallback_robustness():
+    """L-2: greedy JSON 추출 fallback이 의미 있는 결과만 반환하는지 검증."""
+    from engine.executor import SkillExecutor
+
+    executor = SkillExecutor()
+
+    # 정상 JSON
+    assert executor._extract_json('{"key": "value"}') == {"key": "value"}
+
+    # code block 내 JSON
+    assert executor._extract_json('```json\n{"a": 1}\n```') == {"a": 1}
+
+    # 텍스트 + JSON
+    result = executor._extract_json('Here is the result: {"x": 42} end')
+    assert result == {"x": 42}
+
+    # JSON이 아닌 텍스트
+    assert executor._extract_json("no json here") is None
+
+    # 빈 문자열
+    assert executor._extract_json("") is None

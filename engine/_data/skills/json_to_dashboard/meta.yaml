@@ -1,0 +1,12 @@
+id: "json_to_dashboard"
+version: "1.0.0"
+name: "JSON to Dashboard"
+description: "JSON 메트릭 데이터를 카드+차트 대시보드 HTML로 변환"
+domain: "data_visualization"
+tags: ["dashboard", "metrics", "visualization", "html", "data"]
+mode: "a"
+runtime:
+  language: "python"
+  needs_network: false
+  needs_filesystem: false
+  timeout_seconds: 60

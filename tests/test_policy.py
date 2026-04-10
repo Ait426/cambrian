@@ -113,6 +113,56 @@ def test_unknown_key_ignored(tmp_path: Path) -> None:
     assert policy.max_candidates_per_run == 7  # 정상 로드
 
 
+def test_policy_validate_accepts_all_defined_sections(tmp_path):
+    """H-3: decision/promotion/validation 섹션이 경고 없이 로드되는지 검증."""
+    import json
+    import logging
+    import logging.handlers
+    from engine.policy import CambrianPolicy
+
+    policy_data = {
+        "budget": {"max_candidates_per_run": 3},
+        "governance": {"promote_min_executions": 5},
+        "evolution": {"trial_count": 2},
+        "decision": {"fitness_tolerance_pct": 0.1},
+        "promotion": {"min_success_rate": 0.8},
+        "validation": {"watch_degradation_pct": 0.03},
+    }
+    policy_path = tmp_path / "test_policy.json"
+    policy_path.write_text(
+        json.dumps(policy_data), encoding="utf-8"
+    )
+
+    # 경고 로그를 캡처 (captureWarnings는 컨텍스트 매니저가 아니므로
+    # 단순 토글로 사용)
+    logging.captureWarnings(True)
+    try:
+        logger = logging.getLogger("engine.policy")
+        handler = logging.handlers.MemoryHandler(capacity=100)
+        logger.addHandler(handler)
+
+        try:
+            policy = CambrianPolicy(str(policy_path))
+        finally:
+            logger.removeHandler(handler)
+    finally:
+        logging.captureWarnings(False)
+
+    # "알 수 없는 섹션" 경고가 없어야 함
+    # 직접 검증: 모든 섹션이 정상 파싱됨
+    assert policy.max_candidates_per_run == 3
+    assert policy.fitness_tolerance_pct == 0.1
+    assert policy.promotion_min_success_rate == 0.8
+    assert policy.watch_degradation_pct == 0.03
+
+    # 추가: _validate를 직접 호출하여 unknown 경고 없음 확인
+    warnings = policy._validate(policy_data)
+    unknown_warnings = [w for w in warnings if "알 수 없는 섹션" in w]
+    assert unknown_warnings == [], (
+        f"알 수 없는 섹션 경고 발생: {unknown_warnings}"
+    )
+
+
 # === 7. 파일 미존재 → FileNotFoundError ===
 
 def test_file_not_found() -> None:

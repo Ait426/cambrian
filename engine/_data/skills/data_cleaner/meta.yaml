@@ -1,0 +1,23 @@
+id: "data_cleaner"
+version: "1.0.0"
+name: "CSV Data Cleaner"
+description: "지저분한 CSV 데이터를 규칙에 따라 정리하고 정규화"
+domain: "data"
+tags: ["clean", "csv", "data"]
+author: "cambrian"
+license: "MIT"
+created_at: "2026-04-03"
+updated_at: "2026-04-03"
+mode: "a"
+runtime:
+  language: "python"
+  needs_network: false
+  needs_filesystem: false
+  timeout_seconds: 60
+lifecycle:
+  status: "active"
+  fitness_score: 0.0
+  total_executions: 0
+  successful_executions: 0
+  last_used: null
+  crystallized_at: null
