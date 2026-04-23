@@ -1,0 +1,71 @@
+name: Cold Install Verification
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  cold-install:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.11", "3.12"]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Build wheel
+        run: |
+          pip install build
+          python -m build --wheel --outdir dist/
+
+      - name: Create clean venv and install wheel
+        run: |
+          python -m venv /tmp/cold_venv
+          source /tmp/cold_venv/bin/activate
+          pip install dist/*.whl
+
+      - name: Verify CLI entry point
+        run: |
+          source /tmp/cold_venv/bin/activate
+          cambrian --help
+
+      - name: Verify cambrian init
+        run: |
+          source /tmp/cold_venv/bin/activate
+          TMPDIR=$(mktemp -d)
+          cambrian init --dir "$TMPDIR/test_project"
+
+          # 필수 구조 검증
+          test -d "$TMPDIR/test_project/skills"
+          test -d "$TMPDIR/test_project/schemas"
+          test -d "$TMPDIR/test_project/skill_pool"
+          test -f "$TMPDIR/test_project/cambrian.yaml"
+          test -f "$TMPDIR/test_project/schemas/meta.schema.json"
+          test -f "$TMPDIR/test_project/schemas/interface.schema.json"
+
+          # 시드 스킬 최소 1개 존재
+          SKILL_COUNT=$(ls -d "$TMPDIR/test_project/skills"/*/ 2>/dev/null | wc -l)
+          test "$SKILL_COUNT" -ge 1
+
+          echo "cold-install init OK: $SKILL_COUNT seed skills"
+
+      - name: Verify scan (smoke)
+        run: |
+          source /tmp/cold_venv/bin/activate
+          TMPDIR=$(mktemp -d)
+          cambrian init --dir "$TMPDIR/proj"
+
+          # 샘플 프로젝트
+          mkdir -p "$TMPDIR/sample"
+          echo "print('hello')" > "$TMPDIR/sample/main.py"
+
+          cd "$TMPDIR/proj"
+          cambrian scan --project "$TMPDIR/sample" --no-search

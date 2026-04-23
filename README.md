@@ -1,8 +1,12 @@
 # Cambrian
 
-**Self-evolving skill engine for AI agents.**
+**Evolutionary trust harness for AI work.**
 
-태스크 실패 시 외부 스킬을 자동 탐색·흡수·융합하여 스스로 강해지는 시스템.
+Cambrian은 AI 위에 입히는 프로젝트용 진화형 신뢰 하네스입니다.
+
+프로젝트 기억, 실행 규칙, 검증, 명시적 채택, 학습 기록을 AI 작업 위에 덧씌워 더 일관되고 안전하게 일하게 만듭니다.
+
+Cambrian은 project memory와 explicit adoption 흐름을 통해 AI 출력을 바로 밀어 넣지 않고, 진단과 검증을 거쳐 안전하게 이어지게 돕습니다.
 
 ## Quick Start
 
@@ -10,16 +14,33 @@
 pip install -e ".[anthropic,dev]"
 export ANTHROPIC_API_KEY=sk-ant-...
 
-# 프로젝트 초기화 (14개 시드 스킬 + 설정 파일 생성)
-cambrian init --dir ./my_project
-cd ./my_project
+# 프로젝트 하네스 맞추기
+cambrian init --wizard
 
-# 스킬 목록 확인
-cambrian skills
+# 자연어 요청 시작
+cambrian init --wizard
 
-# 태스크 실행
-cambrian run -d utility -t greeting -i '{"text": "hello"}'
+cambrian do "fix the login bug"
+
+cambrian do --continue
+
+# 현재 프로젝트 기억과 최근 여정 확인
+cambrian status
+
+# 지금까지 Cambrian이 로컬에서 무엇을 도왔는지 요약 확인
+cambrian summary
 ```
+
+Cambrian은 AI 결과를 자동으로 곧바로 적용하지 않습니다.
+먼저 diagnose, validation, patch proposal, explicit apply/adoption 흐름을 거칩니다.
+
+문서:
+
+- [첫 실행 demo](docs/FIRST_RUN_DEMO.md)
+- [알파 설치 / doctor / smoke](docs/ALPHA_INSTALL.md)
+- [프로젝트 모드 빠른 시작](docs/PROJECT_MODE_QUICKSTART.md)
+- [명령어 안내](docs/COMMANDS.md)
+- [아티팩트 안내](docs/ARTIFACTS.md)
 
 ## Installation
 

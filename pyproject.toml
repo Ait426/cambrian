@@ -21,6 +21,7 @@ all = [
     "google-generativeai>=0.8.0",
 ]
 dev = [
+    "build>=1.2",
     "pytest>=8.0",
 ]
 
@@ -28,8 +29,10 @@ dev = [
 cambrian = "engine.cli:main"
 
 [tool.setuptools]
-packages = ["engine", "engine._data"]
 include-package-data = true
+
+[tool.setuptools.packages.find]
+include = ["engine*"]
 
 [tool.setuptools.package-data]
 "engine" = ["*.json", "*.yaml", "*.md"]

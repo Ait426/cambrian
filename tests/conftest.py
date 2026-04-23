@@ -3,6 +3,8 @@ from pathlib import Path
 import pytest
 import yaml
 
+collect_ignore_glob = ["fixtures/project_mode/login_bug/tests/test_*.py"]
+
 
 @pytest.fixture
 def schemas_dir():
