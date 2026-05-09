@@ -19,6 +19,7 @@ skill_pool/*.db
 
 # Logs
 *.log
+.launch_runs/
 
 # Data
 data/

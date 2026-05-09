@@ -672,6 +672,8 @@ def _stack_check(signals: dict[str, list[str]], compat: dict[str, Any]) -> PackR
     detected = {item.lower() for item in signals.get("stacks", [])}
     if not expected:
         return _check("project_stack_fit", "Project stack fit", "skip", "pack does not declare stack compatibility")
+    if "local_files" in expected:
+        return _check("project_stack_fit", "Project stack fit", "pass", "local file workspace is available")
     if detected & expected:
         return _check("project_stack_fit", "Project stack fit", "pass", f"project stack matches: {', '.join(sorted(detected & expected))}")
     if detected:

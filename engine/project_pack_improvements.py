@@ -140,6 +140,9 @@ class PackImprovementQueueBuilder:
             "usage_summary_ref": getattr(usage, "summary_id", None),
             "release_ref": release_ref,
         }
+        proof_source_refs = getattr(proof, "source_refs", {}) if proof is not None else {}
+        if isinstance(proof_source_refs, dict) and proof_source_refs.get("latest_validation_evidence_ref"):
+            source_refs["validation_evidence_ref"] = proof_source_refs.get("latest_validation_evidence_ref")
         decisions = PackImprovementDecisionStore().latest_status_by_item(default_pack_improvement_decisions_path(root))
         items = _items_from_sources(root, canonical_pack, summary, usage, proof, release_report, source_refs, decisions)
         top_item = _top_item(items)
@@ -530,6 +533,8 @@ def _items_from_sources(
         for signal_kind in _signals_mentioned(weak):
             for kind in _kinds_for_negative_signal(signal_kind):
                 _merge_spec(specs, kind, signal_kind, 1, _dedupe([*evidence_refs, str(source_refs.get("proof_ref") or "")]))
+    for kind, signal_kind in _studio_agent_proof_gap_improvements(proof):
+        _merge_spec(specs, kind, signal_kind, 1, _dedupe([*evidence_refs, str(source_refs.get("proof_ref") or "")]))
 
     usage_degraded = _usage_degraded_signals(usage)
     for signal_kind in usage_degraded:
@@ -660,6 +665,8 @@ def _priority(
     summary: PackRetrospectiveSummary | None,
     proof: Any | None,
 ) -> str:
+    if kind == "improve_first_job_guide" and "runtime_evidence_gap" in signals:
+        return "medium"
     if kind == "add_benchmark_case" and "worked_well" not in signals and "benchmark_value" not in signals:
         return "medium" if count >= 2 else "low"
     if count >= 3:
@@ -846,6 +853,29 @@ def _usage_degraded_signals(usage: Any | None) -> list[str]:
     if _rate_low(rates.get("regression_free_apply_rate")):
         signals.append("safety_risk")
     return _dedupe(signals)
+
+
+def _studio_agent_proof_gap_improvements(proof: Any | None) -> list[tuple[str, str]]:
+    if proof is None:
+        return []
+    if getattr(proof, "pack_kind", None) != "agent" or getattr(proof, "source_kind", None) != "cambrian_studio":
+        return []
+    used = int(getattr(proof, "used_count", 0) or 0)
+    linked = int(getattr(proof, "outcome_linked_count", 0) or 0)
+    verdict = str(getattr(proof, "reputation_verdict", "") or "")
+    gaps: list[tuple[str, str]] = []
+    if used == 0:
+        gaps.append(("improve_first_job_guide", "runtime_evidence_gap"))
+    elif linked == 0 and verdict in {"insufficient_data", "unproven"}:
+        gaps.append(("improve_validation_support", "runtime_outcome_gap"))
+    metrics = {
+        str(getattr(metric, "key", "") or ""): getattr(metric, "value", None)
+        for metric in getattr(proof, "key_metrics", []) or []
+    }
+    contract_status = str(metrics.get("contract_validation_status") or "")
+    if contract_status and contract_status not in {"satisfied", "not_declared", "not_recorded"}:
+        gaps.append(("improve_validation_support", "contract_validation_review_gap"))
+    return gaps
 
 
 def _release_check_degraded_signals(release_report: Any | None) -> list[str]:

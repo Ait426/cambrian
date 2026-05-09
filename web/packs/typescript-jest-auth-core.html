@@ -1,0 +1,156 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>TypeScript Jest Auth Core · Cambrian</title>
+  <style>
+    :root {
+      --ink: #18211f;
+      --paper: #f4efe2;
+      --paper-strong: #fff8e8;
+      --moss: #40594b;
+      --copper: #b95f37;
+      --blueprint: #1d4f67;
+      --line: rgba(24, 33, 31, 0.18);
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      color: var(--ink);
+      font-family: "Aptos", "Trebuchet MS", sans-serif;
+      background:
+        radial-gradient(circle at 12% 18%, rgba(185, 95, 55, 0.18), transparent 26rem),
+        radial-gradient(circle at 88% 8%, rgba(29, 79, 103, 0.20), transparent 22rem),
+        linear-gradient(135deg, #f7f0df 0%, #e8ddc2 48%, #d7e2d1 100%);
+      min-height: 100vh;
+    }
+    body::before {
+      content: "";
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      background-image: linear-gradient(var(--line) 1px, transparent 1px), linear-gradient(90deg, var(--line) 1px, transparent 1px);
+      background-size: 44px 44px;
+      mask-image: linear-gradient(to bottom, rgba(0,0,0,.25), transparent 72%);
+    }
+    a { color: var(--blueprint); }
+    .shell { width: min(1120px, calc(100% - 32px)); margin: 0 auto; padding: 28px 0 64px; }
+    .nav { display: flex; justify-content: space-between; align-items: center; gap: 16px; margin-bottom: 42px; }
+    .brand { font-family: Georgia, serif; font-weight: 700; font-size: 1.35rem; letter-spacing: -0.03em; }
+    .nav a { text-decoration: none; font-weight: 800; }
+    .hero, .panel, .card {
+      background: rgba(255, 248, 232, 0.78);
+      border: 1px solid rgba(24, 33, 31, 0.16);
+      box-shadow: 0 24px 80px rgba(31, 42, 37, 0.14);
+      backdrop-filter: blur(10px);
+    }
+    .hero { padding: clamp(28px, 5vw, 64px); border-radius: 34px; position: relative; overflow: hidden; }
+    .eyebrow { color: var(--copper); font-weight: 900; text-transform: uppercase; letter-spacing: 0.12em; font-size: 0.78rem; }
+    h1 { font-family: Georgia, serif; font-size: clamp(3rem, 9vw, 6.8rem); line-height: 0.88; letter-spacing: -0.075em; margin: 14px 0 20px; max-width: 920px; }
+    h2 { font-family: Georgia, serif; font-size: clamp(2rem, 4vw, 3.4rem); line-height: .95; letter-spacing: -0.055em; margin: 0 0 18px; }
+    h3 { margin: 0 0 10px; font-size: 1.05rem; }
+    p { font-size: 1.04rem; line-height: 1.7; }
+    .lead { font-size: clamp(1.08rem, 2vw, 1.35rem); max-width: 760px; }
+    .cta-row { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 26px; }
+    .button { display: inline-flex; align-items: center; gap: 8px; padding: 13px 18px; border-radius: 999px; text-decoration: none; font-weight: 900; border: 1px solid var(--ink); background: var(--ink); color: var(--paper); }
+    .button.alt { background: transparent; color: var(--ink); }
+    .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 18px; margin-top: 22px; }
+    .panel, .card { border-radius: 26px; padding: 24px; }
+    .section { margin-top: 26px; }
+    .badge-row { display: flex; flex-wrap: wrap; gap: 8px; margin: 16px 0; }
+    .badge { border: 1px solid rgba(24,33,31,.22); border-radius: 999px; padding: 7px 10px; background: rgba(255,255,255,.36); font-size: .86rem; font-weight: 800; }
+    pre { white-space: pre-wrap; overflow-x: auto; background: #17211f; color: #f7f0df; border-radius: 18px; padding: 18px; font-size: .95rem; line-height: 1.55; }
+    ul { padding-left: 1.1rem; }
+    li { margin: 7px 0; }
+    .split { display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(280px, .85fr); gap: 18px; }
+    .warning { border-left: 5px solid var(--copper); }
+    .small { color: rgba(24,33,31,.72); font-size: .93rem; }
+    .builder-grid { display: grid; grid-template-columns: minmax(280px, .95fr) minmax(0, 1.05fr); gap: 18px; align-items: start; }
+    .field { display: grid; gap: 7px; margin-bottom: 14px; }
+    label { font-weight: 900; }
+    input, textarea, select {
+      width: 100%;
+      border: 1px solid rgba(24,33,31,.22);
+      border-radius: 14px;
+      background: rgba(255,255,255,.54);
+      color: var(--ink);
+      font: inherit;
+      padding: 11px 12px;
+    }
+    textarea { min-height: 86px; resize: vertical; }
+    .score-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 10px; }
+    .score { border: 1px solid rgba(24,33,31,.16); border-radius: 18px; padding: 14px; background: rgba(255,255,255,.34); }
+    .score strong { display: block; font-size: 1.45rem; }
+    .ok { color: var(--moss); font-weight: 900; }
+    .risk { color: var(--copper); font-weight: 900; }
+    @media (max-width: 780px) {
+      .split { grid-template-columns: 1fr; }
+      .builder-grid { grid-template-columns: 1fr; }
+      .nav { align-items: flex-start; flex-direction: column; }
+    }
+  </style>
+</head>
+<body>
+  <main class="shell">
+    <nav class="nav">
+      <div class="brand">Cambrian Hiring Desk</div>
+      <div><a href="../index.html">Home</a> · <a href="../studio/index.html">Studio</a> · <a href="../packs/index.html">Packs</a></div>
+    </nav>
+
+    <section class="hero">
+      <div class="eyebrow">Lane Pack · seed</div>
+      <h1>TypeScript Jest Auth Core</h1>
+      <p class="lead">Best for <strong>Python + pytest + narrow auth/login bug fixes</strong>. This is Cambrian's first representative worker/lane pack.</p>
+      <div class="badge-row"><span class="badge">typescript</span><span class="badge">jest</span><span class="badge">auth</span><span class="badge">api</span><span class="badge">bug_fix</span></div>
+    </section>
+    <section class="split section">
+      <article class="panel">
+        <h2>Includes</h2>
+        <h3>Workers</h3><ul><li>ts-bug-fix-agent</li><li>jest-regression-test-agent</li><li>review-agent</li></ul><h3>Team</h3><ul><li>typescript-jest-auth-team</li></ul><h3>Template</h3><ul><li>typescript-jest-auth-template</li></ul><h3>Benchmark</h3><ul><li>typescript-jest-auth-workset</li></ul>
+      </article>
+      <aside class="panel">
+        <h2>Install locally</h2>
+        <p>This page does not install anything by itself.</p>
+        <p>This web page does not install the pack directly. Run the install command in your local project.</p>
+        <pre>cambrian install pack typescript-jest-auth-core
+cambrian pack activate typescript-jest-auth-core
+cambrian pack start "로그인 에러 수정해"
+cambrian install doctor</pre>
+        <p class="small">Manifest fallback:</p>
+        <pre>cambrian install manifest ./packs/typescript-jest-auth-core.cambrian-pack.yaml</pre>
+        <p class="small">Trust: trusted</p>
+        <p class="small">SHA-256: d0a683377951a77045b2fe0ae2632b1bca6d111235c895e42b73286c90302de4</p>
+        <pre>cambrian pack verify typescript-jest-auth-core
+cambrian install verify typescript-jest-auth-core</pre>
+        <p><a class="button alt" href="../assets/typescript-jest-auth-core.cambrian-pack.yaml" download>Download manifest</a></p>
+      </aside>
+    </section>
+    <section class="grid section">
+      <article class="panel warning">
+        <h2>Known limits</h2>
+        <ul><li>Strongest for TypeScript + Jest auth/API bug fixes, not broad frontend rewrites.</li></ul>
+      </article>
+      <article class="panel">
+        <h2>Proof status</h2>
+        <p><strong>Seed pack. Local proof required.</strong></p>
+
+        <ul></ul>
+        <p>Generate local proof after real usage.</p>
+        <p>Generate or refresh proof inside your project after install:</p>
+        <pre>cambrian pack proof typescript-jest-auth-core</pre>
+        <p class="small">This static page does not claim public outcome metrics.</p>
+        <p class="small">No public validated proposal rate is claimed on this static page.</p>
+      </article>
+      <article class="panel">
+        <h2>Runtime boundary</h2>
+        <p>The web page is the hiring desk.</p>
+        <p>The web catalog is the hiring desk. Your local Cambrian runtime does the actual install, job handoff, validation, and proof.</p>
+        <p>This page does not execute code or mutate `.cambrian/` state.</p>
+        <p>웹은 고용/선택 화면이고, 실제 설치·검증·진화는 로컬 Cambrian runtime에서 수행됩니다.</p>
+      </article>
+    </section>
+
+  </main>
+</body>
+</html>

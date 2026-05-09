@@ -1,0 +1,8 @@
+response_kind: patch_candidate
+summary: Normalize username before login lookup.
+target_path: src/auth.py
+old_text: "return username"
+new_text: "return username.strip().lower()"
+reason: The login guard compares usernames against normalized records, so incoming usernames should be stripped and lowercased before lookup.
+related_tests:
+  - tests/test_auth.py

@@ -425,10 +425,19 @@ def render_bridge_packet_markdown(packet: BridgePacket) -> str:
         )
         selected_agents = _as_list(contract.get("selected_agents"))
         selected_skills = _as_list(contract.get("selected_skills"))
+        validation_criteria = _as_list(contract.get("validation_criteria"))
+        approval_required_actions = _as_list(contract.get("approval_required_actions"))
+        forbidden_actions = _as_list(contract.get("forbidden_actions"))
         if selected_agents:
             lines.extend(["- selected_agents:"] + [f"  - {item}" for item in selected_agents])
         if selected_skills:
             lines.extend(["- selected_skills:"] + [f"  - {item}" for item in selected_skills])
+        if validation_criteria:
+            lines.extend(["- validation_criteria:"] + [f"  - {item}" for item in validation_criteria])
+        if approval_required_actions:
+            lines.extend(["- approval_required_actions:"] + [f"  - {item}" for item in approval_required_actions])
+        if forbidden_actions:
+            lines.extend(["- forbidden_actions:"] + [f"  - {item}" for item in forbidden_actions])
         must_do = _as_list(contract.get("must_do"))
         must_not_do = _as_list(contract.get("must_not_do"))
         if must_do:
@@ -749,8 +758,30 @@ def _execution_contract(
     selected_agents = _as_list(active_pack_context.get("selected_agents")) or _as_list(agent_summary.get("active_agents"))
     selected_skills = _as_list(active_pack_context.get("selected_skills"))
     validation_commands = _as_list(active_pack_context.get("validation_commands")) or _as_list(harness_summary.get("test_command"))
+    validation_criteria = _as_list(active_pack_context.get("validation_criteria"))
+    forbidden_actions = _as_list(active_pack_context.get("forbidden_actions"))
+    approval_required_actions = _as_list(active_pack_context.get("approval_required_actions"))
     change_policy = str(active_pack_context.get("change_policy") or "proposal_only")
     harness_id = active_pack_context.get("harness_id") or active_pack_context.get("pack_id") or harness_summary.get("harness_id")
+    must_do = [
+        "요청을 설치된 하네스, 인력, 스킬, 정책 기준으로 분석한다.",
+        "근거와 불확실성을 분리해서 설명한다.",
+        "패치가 필요하면 자동 적용이 아니라 patch_candidate로 제안한다.",
+        "검증 명령과 회귀 위험을 함께 적는다.",
+        "response_contract에 맞는 YAML 또는 JSON으로 답한다.",
+    ]
+    if validation_criteria:
+        must_do.append("결과가 계약 validation_criteria를 어떻게 만족하는지 설명한다.")
+    must_not_do = [
+        "프로젝트 파일을 직접 수정했다고 주장하지 않는다.",
+        "사용자가 제공하지 않은 secret, API key, 개인 정보를 요구하거나 출력하지 않는다.",
+        "패치를 적용했다고 말하지 않는다.",
+        "패킷 밖의 사실을 확정적으로 가정하지 않는다.",
+        "검증하지 않은 성공을 성공처럼 말하지 않는다.",
+    ]
+    if approval_required_actions:
+        must_not_do.append("approval_required_actions는 사용자 승인 전 실행하지 않는다.")
+    must_not_do.extend([f"금지 행동을 수행하지 않는다: {item}" for item in forbidden_actions])
     return {
         "contract_version": "1.0",
         "execution_engines": ["Codex", "Claude", "Cursor", "GPT", "local model"],
@@ -763,24 +794,12 @@ def _execution_contract(
         "selected_skills": selected_skills,
         "change_policy": change_policy,
         "validation_commands": validation_commands,
-        "must_do": _dedupe(
-            [
-                "요청을 설치된 하네스, 인력, 스킬, 정책 기준으로 분석한다.",
-                "근거와 불확실성을 분리해서 설명한다.",
-                "패치가 필요하면 자동 적용이 아니라 patch_candidate로 제안한다.",
-                "검증 명령과 회귀 위험을 함께 적는다.",
-                "response_contract에 맞는 YAML 또는 JSON으로 답한다.",
-            ]
-        ),
-        "must_not_do": _dedupe(
-            [
-                "프로젝트 파일을 직접 수정했다고 주장하지 않는다.",
-                "사용자가 제공하지 않은 secret, API key, 개인 정보를 요구하거나 출력하지 않는다.",
-                "패치를 적용했다고 말하지 않는다.",
-                "패킷 밖의 사실을 확정적으로 가정하지 않는다.",
-                "검증하지 않은 성공을 성공처럼 말하지 않는다.",
-            ]
-        ),
+        "validation_criteria": validation_criteria,
+        "forbidden_actions": forbidden_actions,
+        "approval_required_actions": approval_required_actions,
+        "contract_template_kind": active_pack_context.get("contract_template_kind"),
+        "must_do": _dedupe(must_do),
+        "must_not_do": _dedupe(must_not_do),
         "response_contract": response_contract,
         "handoff_back": [
             "AI 응답을 ai_reply_patch_candidate.yaml 파일로 저장한다.",
@@ -795,6 +814,9 @@ def _codex_claude_instruction(contract: dict[str, Any]) -> str:
     agents = ", ".join(_as_list(contract.get("selected_agents"))) or "선택된 agent 없음"
     skills = ", ".join(_as_list(contract.get("selected_skills"))) or "선택된 skill 없음"
     validation = ", ".join(_as_list(contract.get("validation_commands"))) or "명시된 검증 명령 없음"
+    criteria = "; ".join(_as_list(contract.get("validation_criteria"))) or "명시된 계약 검증 기준 없음"
+    approvals = "; ".join(_as_list(contract.get("approval_required_actions"))) or "승인 필요 행동 없음"
+    forbidden = "; ".join(_as_list(contract.get("forbidden_actions"))) or "금지 행동 없음"
     return "\n".join(
         [
             "너는 Cambrian이 이 프로젝트 안에 설치한 AI 회사의 실행 엔진이다.",
@@ -803,6 +825,9 @@ def _codex_claude_instruction(contract: dict[str, Any]) -> str:
             f"투입 skill: {skills}",
             f"변경 정책: {contract.get('change_policy') or 'proposal_only'}",
             f"검증 명령 후보: {validation}",
+            f"계약 검증 기준: {criteria}",
+            f"승인 필요 행동: {approvals}",
+            f"금지 행동: {forbidden}",
             "소스 파일을 직접 수정했다고 주장하지 말고, patch_candidate 또는 analysis 형태로 답하라.",
             "반드시 response_contract에 맞는 YAML 또는 JSON으로 답하라.",
         ]

@@ -277,7 +277,8 @@ class PackProofBuilder:
         release_candidate = _latest_release_candidate(root, pack_id)
         local_release = _latest_local_release(root, pack_id)
         rollout_plan = _latest_rollout_plan(root, pack_id)
-        known_limits = _known_limits(record, summary, verdict, retro_summary)
+        validation_evidence = _latest_validation_evidence(root, pack_id)
+        known_limits = _known_limits(record, summary, verdict, retro_summary, validation_evidence)
         source_refs = _source_refs(root, record, active_context, summary, pack_id)
         if retro_summary is not None:
             source_refs["retrospective_summary_ref"] = f".cambrian/packs/retrospectives/summaries/{retro_summary.summary_id}"
@@ -293,6 +294,8 @@ class PackProofBuilder:
             source_refs["local_release_ref"] = getattr(local_release, "release_id", None)
         if rollout_plan is not None:
             source_refs["rollout_ref"] = getattr(rollout_plan, "rollout_id", None)
+        if validation_evidence is not None:
+            source_refs["latest_validation_evidence_ref"] = validation_evidence.get("_evidence_ref")
 
         card = PackProofCard(
             schema_version=SCHEMA_VERSION,
@@ -310,14 +313,14 @@ class PackProofBuilder:
             installed=record is not None and record.status != "uninstalled",
             reputation_verdict=verdict,
             maturity_hint=maturity_hint,
-            key_metrics=_key_metrics(summary),
-            claims=_claims(summary, best_lane),
+            key_metrics=_key_metrics(summary, validation_evidence),
+            claims=_claims(summary, best_lane, validation_evidence),
             best_observed_lane=best_lane,
             best_observed_workset=best_workset,
             used_count=used_count,
             outcome_linked_count=outcome_linked_count,
             why_useful=_why_useful(verdict, summary, best_lane, best_workset, retro_summary),
-            where_weak=_where_weak(verdict, summary, retro_summary, improvement_queue, derivative_plan, vnext_workbench, release_candidate, local_release, rollout_plan),
+            where_weak=_where_weak(verdict, summary, retro_summary, improvement_queue, derivative_plan, vnext_workbench, release_candidate, local_release, rollout_plan, validation_evidence),
             known_limits=known_limits,
             next_actions=_next_actions(pack_id, best_workset, improvement_queue, derivative_plan, vnext_workbench, release_candidate, local_release, rollout_plan),
             source_refs=source_refs,
@@ -458,6 +461,15 @@ def render_pack_proof_card(card: PackProofCard) -> str:
         "Median time to validated proposal:",
         f"  {_seconds_text(metrics.get('median_time_to_validated_proposal'))}",
     ]
+    if metrics.get("contract_validation_status"):
+        lines.extend(
+            [
+                "",
+                "Contract validation:",
+                f"  status: {metrics.get('contract_validation_status')}",
+                f"  criteria: {metrics.get('contract_validation_criteria_count') or 0}",
+            ]
+        )
     if card.best_observed_lane:
         lines.extend(["", "Best observed lane:", f"  {card.best_observed_lane}"])
     if card.best_observed_workset:
@@ -506,6 +518,9 @@ def render_pack_proof_markdown(card: PackProofCard) -> str:
         f"- adoption rate: {_rate_text(metrics.get('adoption_rate'))}",
         f"- regression-free apply rate: {_rate_text(metrics.get('regression_free_apply_rate'))}",
         f"- median time to validated proposal: {_seconds_text(metrics.get('median_time_to_validated_proposal'))}",
+        "",
+        f"- contract validation status: {metrics.get('contract_validation_status') or 'not_recorded'}",
+        f"- contract validation criteria: {metrics.get('contract_validation_criteria_count') or 0}",
         "",
         "## Why Useful",
     ]
@@ -633,7 +648,7 @@ def _maturity_hint(verdict: str) -> str:
     return mapping.get(verdict, "candidate")
 
 
-def _key_metrics(summary: PackUsageSummary) -> list[PackProofMetric]:
+def _key_metrics(summary: PackUsageSummary, validation_evidence: dict[str, Any] | None = None) -> list[PackProofMetric]:
     counts = summary.counts
     rates = summary.rates
     medians = summary.medians
@@ -656,6 +671,15 @@ def _key_metrics(summary: PackUsageSummary) -> list[PackProofMetric]:
             "validated proposal까지 걸린 중앙 시간",
         ),
     ]
+    if validation_evidence is not None:
+        criteria = _as_list(validation_evidence.get("validation_criteria"))
+        status = str(validation_evidence.get("validation_criteria_status") or "not_declared")
+        specs.extend(
+            [
+                ("contract_validation_status", status, "status", "latest job evidence contract validation status"),
+                ("contract_validation_criteria_count", len(criteria), "count", "contract validation criteria in latest evidence"),
+            ]
+        )
     return [
         PackProofMetric(
             key=key,
@@ -668,7 +692,7 @@ def _key_metrics(summary: PackUsageSummary) -> list[PackProofMetric]:
     ]
 
 
-def _claims(summary: PackUsageSummary, best_lane: str | None) -> list[PackProofClaim]:
+def _claims(summary: PackUsageSummary, best_lane: str | None, validation_evidence: dict[str, Any] | None = None) -> list[PackProofClaim]:
     counts = summary.counts
     rates = summary.rates
     refs = [ref for ref in summary.source_refs if ref]
@@ -678,7 +702,7 @@ def _claims(summary: PackUsageSummary, best_lane: str | None) -> list[PackProofC
     human_rate = _float_or_none(rates.get("human_intervention_rate"))
     autonomy_rate = _float_or_none(rates.get("validation_autonomy_rate"))
 
-    return [
+    claims = [
         PackProofClaim(
             claim_id="pack_reaches_validated_proposal",
             title="Pack reaches validated proposal",
@@ -715,6 +739,31 @@ def _claims(summary: PackUsageSummary, best_lane: str | None) -> list[PackProofC
             evidence_refs=refs,
         ),
     ]
+    contract_claim = _validation_evidence_claim(validation_evidence)
+    if contract_claim is not None:
+        claims.append(contract_claim)
+    return claims
+
+
+def _validation_evidence_claim(validation_evidence: dict[str, Any] | None) -> PackProofClaim | None:
+    if validation_evidence is None:
+        return None
+    criteria = _as_list(validation_evidence.get("validation_criteria"))
+    status = str(validation_evidence.get("validation_criteria_status") or "not_declared")
+    evidence_ref = str(validation_evidence.get("_evidence_ref") or validation_evidence.get("evidence_ref") or "")
+    if status == "satisfied":
+        verdict = "proven"
+    elif criteria:
+        verdict = "manual_review_required"
+    else:
+        verdict = "insufficient_data"
+    return PackProofClaim(
+        claim_id="agent_contract_validation",
+        title="Agent contract validation",
+        verdict=verdict,
+        summary=f"{len(criteria)} contract validation criteria are {status}.",
+        evidence_refs=[evidence_ref] if evidence_ref else [],
+    )
 
 
 def _why_useful(verdict: str, summary: PackUsageSummary, best_lane: str | None, best_workset: str | None, retro_summary: Any | None = None) -> list[str]:
@@ -748,6 +797,7 @@ def _where_weak(
     release_candidate: Any | None = None,
     local_release: Any | None = None,
     rollout_plan: Any | None = None,
+    validation_evidence: dict[str, Any] | None = None,
 ) -> list[str]:
     counts = summary.counts
     rates = summary.rates
@@ -789,10 +839,20 @@ def _where_weak(
         lines.append(f"local release recorded: {getattr(local_release, 'target_pack_id', 'vNext')}")
     if rollout_plan is not None:
         lines.append(f"rollout available: {getattr(rollout_plan, 'new_pack_id', 'vNext')}")
+    if validation_evidence is not None:
+        status = str(validation_evidence.get("validation_criteria_status") or "not_declared")
+        if status not in {"satisfied", "not_declared"}:
+            lines.append(f"latest contract validation evidence is {status}")
     return _dedupe(lines)
 
 
-def _known_limits(record: InstalledPackRecord | None, summary: PackUsageSummary, verdict: str, retro_summary: Any | None = None) -> list[str]:
+def _known_limits(
+    record: InstalledPackRecord | None,
+    summary: PackUsageSummary,
+    verdict: str,
+    retro_summary: Any | None = None,
+    validation_evidence: dict[str, Any] | None = None,
+) -> list[str]:
     limits: list[str] = []
     if record is not None:
         limits.extend(record.warnings)
@@ -803,6 +863,10 @@ def _known_limits(record: InstalledPackRecord | None, summary: PackUsageSummary,
         limits.append("current local evidence suggests caution before recommendation")
     if retro_summary is not None:
         limits.extend(getattr(retro_summary, "known_limits", [])[:5])
+    if validation_evidence is not None:
+        status = str(validation_evidence.get("validation_criteria_status") or "not_declared")
+        if status not in {"satisfied", "not_declared"}:
+            limits.append("latest contract validation evidence is not satisfied yet")
     limits.append("proof card is local-only and is not uploaded automatically")
     return _dedupe(limits)
 
@@ -965,6 +1029,19 @@ def _source_refs(root: Path, record: InstalledPackRecord | None, active_context:
         "benchmark_refs": [],
     }
     return refs
+
+
+def _latest_validation_evidence(root: Path, pack_id: str) -> dict[str, Any] | None:
+    evidence_dir = root / ".cambrian" / "evidence" / "validation"
+    if not evidence_dir.exists():
+        return None
+    for path in sorted(evidence_dir.glob("*.yaml"), key=lambda item: item.stat().st_mtime, reverse=True):
+        payload = _load_any(path)
+        if str(payload.get("pack_id") or "") != pack_id:
+            continue
+        payload["_evidence_ref"] = _relative(path, root)
+        return payload
+    return None
 
 
 def _latest_release_ref(root: Path, pack_id: str) -> str | None:

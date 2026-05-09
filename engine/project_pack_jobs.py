@@ -322,6 +322,18 @@ class PackJobStarter:
                 next_command,
             ],
             usage_event_ref=None,
+            outcome_snapshot={
+                "harness_id": context.pack_id,
+                "selected_agents": list(context.workers),
+                "selected_skills": [],
+                "dispatch_reason": "Selected from installed pack context.",
+                "change_policy": "proposal_only",
+                "contract_template_kind": context.contract_template_kind,
+                "validation_criteria": list(context.validation_criteria),
+                "forbidden_actions": list(context.forbidden_actions),
+                "approval_required_actions": list(context.approval_required_actions),
+                "validation_commands": [],
+            },
             warnings=warnings,
             errors=[],
         )
@@ -339,6 +351,10 @@ class PackJobStarter:
             summary=f"pack job started: {job_id}",
         )
         job.usage_event_ref = _relative(event_ref, root) if event_ref is not None else None
+        proof_paths = _refresh_local_proof(root, context.pack_id)
+        if proof_paths:
+            job.outcome_snapshot["proof_ref"] = proof_paths.get("yaml")
+            job.outcome_snapshot["proof_markdown_ref"] = proof_paths.get("md")
         job.next_actions.append(f"cambrian pack job-show {job.job_id}")
         PackJobStore().save(job, job_path)
         return PackJobStartResult(
@@ -660,6 +676,17 @@ def _job_warnings(readiness: PackReadinessReport, context: ActivePackContext, re
         if not any(token in text for token in ["auth", "login", "로그인", "username", "account"]):
             warnings.append("Request may be outside auth/login lane; validated proposal quality may be lower.")
     return _dedupe(warnings)
+
+
+def _refresh_local_proof(root: Path, pack_ref: str) -> dict[str, str]:
+    try:
+        from engine.project_pack_proof import PackProofBuilder, save_pack_proof_card
+
+        card = PackProofBuilder().build(root, pack_ref)
+        return save_pack_proof_card(root, card, format_kind="both")
+    except Exception as exc:
+        logger.warning("pack job proof refresh failed: %s", exc)
+        return {}
 
 
 def _job_from_dict(payload: dict[str, Any]) -> PackJob:

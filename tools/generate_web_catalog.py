@@ -49,8 +49,10 @@ def generate(catalog_path: Path, out_dir: Path) -> None:
 
     assets_dir = out_dir / "assets"
     packs_dir = out_dir / "packs"
+    studio_dir = out_dir / "studio"
     assets_dir.mkdir(parents=True, exist_ok=True)
     packs_dir.mkdir(parents=True, exist_ok=True)
+    studio_dir.mkdir(parents=True, exist_ok=True)
 
     catalog_asset = _catalog_asset(catalog_path, catalog, manifest_records)
     _write_text(assets_dir / "catalog.json", json.dumps(catalog_asset, indent=2, ensure_ascii=False) + "\n")
@@ -58,6 +60,7 @@ def generate(catalog_path: Path, out_dir: Path) -> None:
         shutil.copyfile(record["manifest_path"], assets_dir / record["asset_name"])
 
     _write_text(out_dir / "index.html", _landing_html(catalog_asset))
+    _write_text(studio_dir / "index.html", _studio_html())
     _write_text(packs_dir / "index.html", _packs_index_html(catalog_asset))
     for record in manifest_records:
         pack_id = str(record["entry"].get("pack_id"))
@@ -204,10 +207,11 @@ def _public_proof_payload(payload: dict[str, Any]) -> dict[str, Any]:
 def _write_text(path: Path, content: str) -> None:
     """UTF-8 텍스트를 저장한다."""
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(content, encoding="utf-8", newline="\n")
+    normalized = "\n".join(line.rstrip() for line in content.splitlines()) + "\n"
+    path.write_text(normalized, encoding="utf-8", newline="\n")
 
 
-def _layout(title: str, body: str) -> str:
+def _layout(title: str, body: str, nav_prefix: str = "") -> str:
     """공통 HTML layout."""
     return f"""<!doctype html>
 <html lang="en">
@@ -277,8 +281,27 @@ def _layout(title: str, body: str) -> str:
     .split {{ display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(280px, .85fr); gap: 18px; }}
     .warning {{ border-left: 5px solid var(--copper); }}
     .small {{ color: rgba(24,33,31,.72); font-size: .93rem; }}
+    .builder-grid {{ display: grid; grid-template-columns: minmax(280px, .95fr) minmax(0, 1.05fr); gap: 18px; align-items: start; }}
+    .field {{ display: grid; gap: 7px; margin-bottom: 14px; }}
+    label {{ font-weight: 900; }}
+    input, textarea, select {{
+      width: 100%;
+      border: 1px solid rgba(24,33,31,.22);
+      border-radius: 14px;
+      background: rgba(255,255,255,.54);
+      color: var(--ink);
+      font: inherit;
+      padding: 11px 12px;
+    }}
+    textarea {{ min-height: 86px; resize: vertical; }}
+    .score-row {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 10px; }}
+    .score {{ border: 1px solid rgba(24,33,31,.16); border-radius: 18px; padding: 14px; background: rgba(255,255,255,.34); }}
+    .score strong {{ display: block; font-size: 1.45rem; }}
+    .ok {{ color: var(--moss); font-weight: 900; }}
+    .risk {{ color: var(--copper); font-weight: 900; }}
     @media (max-width: 780px) {{
       .split {{ grid-template-columns: 1fr; }}
+      .builder-grid {{ grid-template-columns: 1fr; }}
       .nav {{ align-items: flex-start; flex-direction: column; }}
     }}
   </style>
@@ -287,18 +310,13 @@ def _layout(title: str, body: str) -> str:
   <main class="shell">
     <nav class="nav">
       <div class="brand">Cambrian Hiring Desk</div>
-      <div><a href="{_nav_prefix(title)}index.html">Home</a> · <a href="{_nav_prefix(title)}packs/index.html">Packs</a></div>
+      <div><a href="{nav_prefix}index.html">Home</a> · <a href="{nav_prefix}studio/index.html">Studio</a> · <a href="{nav_prefix}packs/index.html">Packs</a></div>
     </nav>
     {body}
   </main>
 </body>
 </html>
 """
-
-
-def _nav_prefix(title: str) -> str:
-    """detail page에서 상대 링크 prefix를 맞춘다."""
-    return "../" if title.startswith("Auth Bug Core") else ""
 
 
 def _landing_html(catalog: dict[str, Any]) -> str:
@@ -310,6 +328,7 @@ def _landing_html(catalog: dict[str, Any]) -> str:
       <h1>Install AI workers into the AI you already use.</h1>
       <p class="lead">이미 쓰는 AI에 검증된 AI 일꾼을 설치하세요. Cambrian lets you install worker packs into your local project, then keeps the actual install, validation, and proof inside your local Cambrian runtime.</p>
       <div class="cta-row">
+        <a class="button" href="studio/index.html">Open Cambrian Studio</a>
         <a class="button" href="packs/index.html">Browse Packs</a>
         <a class="button alt" href="packs/auth-bug-core.html">Start with Auth Bug Core</a>
         <a class="button alt" href="assets/catalog.json">View catalog JSON</a>
@@ -334,6 +353,325 @@ cambrian install pack auth-bug-core</pre>
     </section>
     """
     return _layout("AI Worker Installer", body)
+
+
+def _studio_html() -> str:
+    """Cambrian Studio builder page HTML."""
+    body = """
+    <section class="hero">
+      <div class="eyebrow">Cambrian Studio · Agent Contract Builder</div>
+      <h1>Build an AI agent contract.</h1>
+      <p class="lead">비개발자도 문서 정리 에이전트를 만들고, Cambrian Runtime에 설치할 수 있는 pack manifest로 내보낼 수 있습니다. Studio는 클라우드 실행기가 아니라 로컬 Cambrian Runtime을 조종하는 제작 화면입니다.</p>
+      <div class="cta-row">
+        <a class="button alt" href="../packs/index.html">Browse existing packs</a>
+        <a class="button alt" href="../assets/catalog.json">Inspect catalog JSON</a>
+      </div>
+    </section>
+    <section class="builder-grid section">
+      <form class="panel" id="studio-form">
+        <h2>Document agent</h2>
+        <div class="field">
+          <label for="agent-name">에이전트 이름</label>
+          <input id="agent-name" value="Document Organizer Agent" />
+        </div>
+        <div class="field">
+          <label for="author">제작자</label>
+          <input id="author" value="local-author" />
+        </div>
+        <div class="field">
+          <label for="mission">맡길 일</label>
+          <textarea id="mission">문서를 주제별로 분류하고, 중복 파일 후보와 정리 제안을 만든다.</textarea>
+        </div>
+        <div class="field">
+          <label for="doc-types">문서 유형</label>
+          <input id="doc-types" value="pdf, docx, txt, markdown" />
+        </div>
+        <div class="field">
+          <label for="output-format">결과물 형식</label>
+          <select id="output-format">
+            <option value="markdown_report">Markdown report</option>
+            <option value="csv_index">CSV index</option>
+            <option value="checklist">Checklist</option>
+          </select>
+        </div>
+        <div class="field">
+          <label for="forbidden">금지 행동</label>
+          <textarea id="forbidden">원본 파일 삭제
+외부 서비스로 문서 업로드
+사용자 승인 없는 파일 이동</textarea>
+        </div>
+        <div class="field">
+          <label for="approval">승인 필요한 행동</label>
+          <textarea id="approval">파일 이름 변경
+폴더 이동
+중복 후보 격리</textarea>
+        </div>
+        <div class="field">
+          <label for="validation">검증 기준</label>
+          <textarea id="validation">원본 파일을 변경하지 않았는지 확인
+분류 기준과 예외 파일 목록을 결과에 포함
+중복 후보는 근거와 함께 표시</textarea>
+        </div>
+        <div class="field">
+          <label for="known-limits">Known limits</label>
+          <textarea id="known-limits">암호화된 문서는 사용자가 직접 해제해야 한다.
+OCR이 필요한 스캔 PDF는 별도 도구가 필요할 수 있다.</textarea>
+        </div>
+        <div class="cta-row">
+          <button class="button" id="download-pack" type="button">Download pack</button>
+          <button class="button alt" id="reset-builder" type="reset">Reset</button>
+        </div>
+      </form>
+      <aside class="panel">
+        <h2>Preflight proof</h2>
+        <p class="small">실제 성능 proof는 로컬 job 실행 후에만 생성됩니다. 이 리포트는 설치 전 계약 완성도와 위험도를 보여줍니다.</p>
+        <div class="score-row">
+          <div class="score"><span>완성도</span><strong id="completion-score">0%</strong></div>
+          <div class="score"><span>위험도</span><strong id="risk-level">unknown</strong></div>
+          <div class="score"><span>Proof</span><strong>preflight_only</strong></div>
+        </div>
+        <h3>검증 결과</h3>
+        <ul id="preflight-list"></ul>
+        <h3>Install command</h3>
+        <pre id="install-command"></pre>
+        <h3>Start command</h3>
+        <pre id="start-command"></pre>
+        <h3>Pack preview</h3>
+        <pre id="yaml-preview"></pre>
+      </aside>
+    </section>
+    <section class="grid section">
+      <article class="panel">
+        <h2>Runtime boundary</h2>
+        <p>Studio는 에이전트 계약과 pack manifest를 만듭니다. 실제 설치, job start, validation, proof, evolution은 로컬 Cambrian Runtime이 담당합니다.</p>
+      </article>
+      <article class="panel warning">
+        <h2>No fake proof</h2>
+        <p>이 화면은 실행 전 성공률을 주장하지 않습니다. 성공률, 사용자 수정률, 검증 통과율은 로컬 evidence가 생긴 뒤에만 표시합니다.</p>
+      </article>
+    </section>
+    <script>
+      const fields = [
+        "agent-name",
+        "author",
+        "mission",
+        "doc-types",
+        "output-format",
+        "forbidden",
+        "approval",
+        "validation",
+        "known-limits"
+      ];
+
+      function text(id) {
+        return document.getElementById(id).value.trim();
+      }
+
+      function slug(value) {
+        const safe = value.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+        return safe || "document-organizer-agent";
+      }
+
+      function items(value) {
+        return value.split(/[\\n,]/).map((item) => item.trim()).filter(Boolean);
+      }
+
+      function q(value) {
+        return `"${String(value).replace(/\\\\/g, "\\\\\\\\").replace(/"/g, "\\\\\\"").replace(/\\n/g, " ")}"`;
+      }
+
+      function listBlock(values, indent) {
+        if (!values.length) {
+          return `${" ".repeat(indent)}[]`;
+        }
+        return values.map((value) => `${" ".repeat(indent)}- ${q(value)}`).join("\\n");
+      }
+
+      function buildYaml() {
+        const name = text("agent-name") || "Document Organizer Agent";
+        const packId = slug(name);
+        const author = text("author") || "local-author";
+        const mission = text("mission") || "문서를 정리한다.";
+        const docTypes = items(text("doc-types"));
+        const forbidden = items(text("forbidden"));
+        const approval = items(text("approval"));
+        const validation = items(text("validation"));
+        const limits = items(text("known-limits"));
+        const format = text("output-format") || "markdown_report";
+
+        return `schema_version: "1.0"
+pack_id: ${packId}
+pack_name: ${q(name)}
+pack_kind: agent
+version: "0.1.0"
+
+description: >
+  ${mission}
+
+source:
+  kind: cambrian_studio
+  registry: local
+  author: ${q(author)}
+  origin_ref: web/studio
+  provenance: studio_generated
+  public_visibility: private
+  signature_status: unsigned_local
+
+compatibility:
+  stacks:
+    - local_files
+  request_classes:
+    - document_organization
+  domains:
+    - documents
+    - knowledge_management
+
+workers:
+  - id: ${packId}
+    name: ${q(name)}
+    capabilities:
+      - document classification
+      - duplicate candidate detection
+      - organization report drafting
+    tags:
+      - documents
+      - organizer
+      - studio_generated
+
+teams:
+  - name: ${packId}-team
+    lead_agent_id: ${packId}
+    supporting_agent_ids: []
+    tags:
+      - documents
+      - organizer
+
+templates:
+  - name: ${packId}-template
+    template_kind: agent_contract
+    description: ${q(mission)}
+    tags:
+      - documents
+      - organizer
+      - studio_generated
+    project_defaults:
+      stack:
+        - local_files
+      primary_use_cases:
+        - document_organization
+      output_format: ${q(format)}
+      document_types:
+${listBlock(docTypes, 8)}
+    safety_defaults:
+      explicit_adoption_only: true
+      preserve_source_artifacts: true
+      no_external_upload: true
+      approval_required_actions:
+${listBlock(approval, 8)}
+      forbidden_actions:
+${listBlock(forbidden, 8)}
+    policy_defaults:
+      read_only_first: true
+      draft_outputs_only: true
+      require_user_approval_for_file_moves: true
+    validation_defaults:
+      proof_status: preflight_only
+      runtime_evidence: none
+      success_metrics_available: false
+      validation_criteria:
+${listBlock(validation, 8)}
+    evolution_defaults:
+      track_signals:
+        - user_correction_required
+        - validation_gap_found
+        - forbidden_action_blocked
+        - organization_rule_changed
+    fit_hints:
+      - strongest for local document organization and draft reports
+
+benchmarks:
+  - name: ${packId}-preflight-workset
+    description: Preflight checklist for document organization agents
+    tags:
+      - documents
+      - preflight
+
+proof_seed:
+  status: preflight_only
+  runtime_evidence: none
+  success_rate: null
+  human_intervention_rate: null
+  validation_pass_rate: null
+  notes:
+    - Actual performance proof is generated only after local Cambrian runtime jobs.
+
+marketplace:
+  license: personal_local
+  checksum: pending_after_export
+  signature: unsigned_local
+  evolution_lineage: []
+  known_limits:
+${listBlock(limits, 4)}
+
+install:
+  install_as_library: true
+  auto_apply: false
+  auto_bootstrap: false
+  auto_promote: false
+  auto_canary: false
+
+warnings:
+  - Generated by Cambrian Studio preflight. Local runtime evidence is required before public proof claims.
+  - Do not expose private source documents or secrets in public proof exports.
+`;
+      }
+
+      function preflight() {
+        const checks = [];
+        const required = ["agent-name", "mission", "forbidden", "approval", "validation"];
+        const filled = required.filter((id) => text(id).length > 0).length;
+        const completion = Math.round((filled / required.length) * 100);
+        const forbidden = items(text("forbidden")).join(" ").toLowerCase();
+        const approval = items(text("approval")).join(" ").toLowerCase();
+        const riskyWords = ["delete", "삭제", "send", "발송", "upload", "업로드", "move", "이동"];
+        const riskHits = riskyWords.filter((word) => `${forbidden} ${approval}`.includes(word)).length;
+        const risk = riskHits >= 4 ? "high" : riskHits >= 2 ? "medium" : "low";
+
+        checks.push(text("mission") ? "역할과 목표가 정의됨" : "역할과 목표 확인 필요");
+        checks.push(text("validation") ? "검증 기준이 존재함" : "검증 기준 확인 필요");
+        checks.push(text("forbidden") ? "금지 행동이 명시됨" : "금지 행동 확인 필요");
+        checks.push(text("approval") ? "승인 필요 행동이 명시됨" : "승인 필요 행동 확인 필요");
+        checks.push("실제 성능 proof는 아직 없음");
+
+        document.getElementById("completion-score").textContent = `${completion}%`;
+        document.getElementById("risk-level").textContent = risk;
+        document.getElementById("risk-level").className = risk === "low" ? "ok" : "risk";
+        document.getElementById("preflight-list").innerHTML = checks.map((item) => `<li>${item}</li>`).join("");
+        const fileName = `${slug(text("agent-name")) || "document-organizer-agent"}.cambrian-pack.yaml`;
+        const packId = slug(text("agent-name")) || "document-organizer-agent";
+        document.getElementById("install-command").textContent = `cambrian install manifest ./${fileName}`;
+        document.getElementById("start-command").textContent = `cambrian job start --pack ${packId} "문서 폴더를 주제별로 정리해줘"`;
+        document.getElementById("yaml-preview").textContent = buildYaml();
+      }
+
+      function downloadPack() {
+        const fileName = `${slug(text("agent-name")) || "document-organizer-agent"}.cambrian-pack.yaml`;
+        const blob = new Blob([buildYaml()], { type: "text/yaml;charset=utf-8" });
+        const link = document.createElement("a");
+        link.href = URL.createObjectURL(blob);
+        link.download = fileName;
+        link.click();
+        URL.revokeObjectURL(link.href);
+      }
+
+      fields.forEach((id) => document.getElementById(id).addEventListener("input", preflight));
+      document.getElementById("output-format").addEventListener("change", preflight);
+      document.getElementById("download-pack").addEventListener("click", downloadPack);
+      document.getElementById("studio-form").addEventListener("reset", () => setTimeout(preflight, 0));
+      preflight();
+    </script>
+    """
+    return _layout("Cambrian Studio", body, nav_prefix="../")
 
 
 def _packs_index_html(catalog: dict[str, Any]) -> str:
@@ -363,7 +701,7 @@ def _packs_index_html(catalog: dict[str, Any]) -> str:
       {''.join(cards)}
     </section>
     """
-    return _layout("Packs", body)
+    return _layout("Packs", body, nav_prefix="../")
 
 
 def _pack_detail_html(record: dict[str, Any], catalog: dict[str, Any]) -> str:
@@ -452,7 +790,7 @@ cambrian install verify {pack_id}</pre>
       </article>
     </section>
     """
-    return _layout(f"{entry.get('pack_name')}", body)
+    return _layout(f"{entry.get('pack_name')}", body, nav_prefix="../")
 
 
 def _asset_pack(catalog: dict[str, Any], pack_id: str) -> dict[str, Any]:

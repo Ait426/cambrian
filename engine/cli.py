@@ -923,6 +923,7 @@ def main() -> None:
         parents=[common_parser],
     )
     job_start_parser.add_argument("request", help="작업 요청")
+    job_start_parser.add_argument("--pack", dest="pack_ref_option", default=None, help="작업을 맡길 installed pack id/ref")
     job_start_parser.add_argument("--json", action="store_true", dest="json_output", help="JSON 출력")
     job_ingest_parser = job_subparsers.add_parser(
         "ingest",
@@ -1500,6 +1501,13 @@ def main() -> None:
         parents=[common_parser],
     )
     pack_job_validate_parser.add_argument("job_ref", help="job id/path/latest")
+    pack_job_validate_parser.add_argument(
+        "--criteria-status",
+        choices=["satisfied", "failed"],
+        help="수동 검토한 agent contract validation criteria 상태",
+    )
+    pack_job_validate_parser.add_argument("--criteria-notes", help="수동 contract criteria 검토 메모")
+    pack_job_validate_parser.add_argument("--reviewer", help="수동 contract criteria 검토자")
     pack_job_validate_parser.add_argument("--json", action="store_true", dest="json_output", help="JSON 출력")
     pack_job_apply_parser = pack_subparsers.add_parser(
         "job-apply",
@@ -10379,7 +10387,13 @@ def _handle_pack(args: argparse.Namespace) -> None:
 
     if command == "job-validate":
         try:
-            result = PackJobValidator().validate(root, str(getattr(args, "job_ref")))
+            result = PackJobValidator().validate(
+                root,
+                str(getattr(args, "job_ref")),
+                criteria_status=getattr(args, "criteria_status", None),
+                criteria_notes=getattr(args, "criteria_notes", None),
+                reviewer=getattr(args, "reviewer", None),
+            )
         except (FileNotFoundError, ValueError) as exc:
             print(f"Pack job validate blocked: {exc}", file=sys.stderr)
             sys.exit(1)
@@ -11387,7 +11401,13 @@ def _handle_pack_launch_path(args: argparse.Namespace, root: Path, repo_root: Pa
         from engine.project_pack_job_reply import PackJobValidator, render_pack_job_validation_result
 
         try:
-            result = PackJobValidator().validate(root, str(getattr(args, "job_ref")))
+            result = PackJobValidator().validate(
+                root,
+                str(getattr(args, "job_ref")),
+                criteria_status=getattr(args, "criteria_status", None),
+                criteria_notes=getattr(args, "criteria_notes", None),
+                reviewer=getattr(args, "reviewer", None),
+            )
         except (FileNotFoundError, ValueError) as exc:
             print(f"Pack job validate blocked: {exc}", file=sys.stderr)
             sys.exit(1)
@@ -16227,8 +16247,49 @@ def _handle_team(args: argparse.Namespace) -> None:
     sys.exit(1)
 
 def _handle_job(args: argparse.Namespace) -> None:
+    root = Path.cwd().resolve()
     command = getattr(args, "job_command", None)
     if command == "start":
+        pack_ref = getattr(args, "pack_ref_option", None)
+        if pack_ref:
+            from engine.project_pack_jobs import PackJobStarter, default_pack_job_path
+
+            try:
+                result = PackJobStarter().start(root, str(getattr(args, "request", "")), pack_ref=str(pack_ref))
+            except (KeyError, FileNotFoundError, ValueError) as exc:
+                print(f"Job start blocked: {exc}", file=sys.stderr)
+                sys.exit(1)
+            job_payload = result.to_dict()
+            job = dict(job_payload.get("job", {})) if isinstance(job_payload.get("job"), dict) else {}
+            outcome = dict(job.get("outcome_snapshot", {})) if isinstance(job.get("outcome_snapshot"), dict) else {}
+            next_commands = list(job.get("next_actions", [])) if isinstance(job.get("next_actions"), list) else []
+            packet_ref = str(result.job.linked_bridge_packet_ref or job.get("linked_bridge_packet_ref") or "")
+            job_ref = _relative_cli(default_pack_job_path(root, result.job), root)
+            pack_job_payload = {"job_ref": job_ref, "packet_ref": packet_ref, "result": job_payload}
+            payload = {
+                "ok": True,
+                "status": "created",
+                "job_status": job.get("status"),
+                "job_id": job.get("job_id"),
+                "harness_id": outcome.get("harness_id") or job.get("pack_id"),
+                "workforce_id": outcome.get("workforce_id"),
+                "selected_agents": list(outcome.get("selected_agents", [])) if isinstance(outcome.get("selected_agents"), list) else [],
+                "selected_skills": list(outcome.get("selected_skills", [])) if isinstance(outcome.get("selected_skills"), list) else [],
+                "dispatch_reason": outcome.get("dispatch_reason"),
+                "change_policy": outcome.get("change_policy"),
+                "validation_commands": list(outcome.get("validation_commands", [])) if isinstance(outcome.get("validation_commands"), list) else [],
+                "request_packet_ref": packet_ref,
+                "request_packet": packet_ref,
+                "job_ref": job_ref,
+                "ai_provider_called": False,
+                "source_code_modified": False,
+                "next_commands": next_commands,
+                "pack_job": pack_job_payload,
+            }
+            _emit_cli_payload(payload, bool(getattr(args, "json_output", False)))
+            if result.job.status == "blocked":
+                sys.exit(1)
+            return
         payload = _start_custom_job(str(getattr(args, "request", "")), selected_agent_id=None, entry_mode="job_start")
         _emit_cli_payload(payload, bool(getattr(args, "json_output", False)))
         _exit_if_blocked(payload)

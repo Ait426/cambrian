@@ -19,7 +19,7 @@ logger = logging.getLogger(__name__)
 
 SCHEMA_VERSION = "1.0.0"
 MANIFEST_SCHEMA_VERSION = "1.0"
-SUPPORTED_PACK_KINDS = {"worker", "team", "template", "lane"}
+SUPPORTED_PACK_KINDS = {"worker", "team", "template", "lane", "agent"}
 
 
 def _now() -> str:
@@ -892,6 +892,35 @@ def _validate_manifest_content(manifest: PackManifest) -> None:
         raise ValueError("template pack requires at least one template")
     if manifest.pack_kind == "lane" and not manifest.lane:
         raise ValueError("lane pack requires lane metadata")
+    if manifest.pack_kind == "agent":
+        _validate_agent_manifest_content(manifest)
+
+
+def _validate_agent_manifest_content(manifest: PackManifest) -> None:
+    """Studio agent contract pack의 최소 실행 계약을 검증한다."""
+    if not manifest.workers:
+        raise ValueError("agent pack requires at least one worker")
+    if not manifest.templates:
+        raise ValueError("agent pack requires at least one agent contract template")
+    contract_templates = [
+        item for item in manifest.templates if str(item.get("template_kind") or "") == "agent_contract"
+    ]
+    if not contract_templates:
+        raise ValueError("agent pack requires an agent_contract template")
+    for template in contract_templates:
+        safety = _as_dict(template.get("safety_defaults"))
+        forbidden = {item.lower() for item in _as_list(safety.get("forbidden_actions"))}
+        approvals = {item.lower() for item in _as_list(safety.get("approval_required_actions"))}
+        conflicts = sorted(forbidden & approvals)
+        if conflicts:
+            raise ValueError(
+                "agent contract has conflicting forbidden and approval-required actions: "
+                + ", ".join(conflicts)
+            )
+        validation = _as_dict(template.get("validation_defaults"))
+        criteria = _as_list(validation.get("validation_criteria"))
+        if not criteria:
+            raise ValueError("agent contract requires validation criteria")
 
 
 def _validate_install_policy(manifest: PackManifest, errors: list[str]) -> None:
@@ -1107,6 +1136,8 @@ def _template_entry(manifest: PackManifest, item: dict[str, Any]) -> dict[str, A
         "team_defaults": _as_dict(item.get("team_defaults")),
         "policy_defaults": _as_dict(item.get("policy_defaults")),
         "context_defaults": _as_dict(item.get("context_defaults")),
+        "validation_defaults": _as_dict(item.get("validation_defaults")),
+        "evolution_defaults": _as_dict(item.get("evolution_defaults")),
         "fit_hints": _as_list(item.get("fit_hints")),
         "warnings": _as_list(item.get("warnings")),
         "errors": [],
@@ -1194,6 +1225,8 @@ def _same_template(existing: dict[str, Any], new: dict[str, Any]) -> bool:
         "team_defaults",
         "policy_defaults",
         "context_defaults",
+        "validation_defaults",
+        "evolution_defaults",
     ]
     return _canonical({key: existing.get(key) for key in keys}) == _canonical({key: new.get(key) for key in keys})
 

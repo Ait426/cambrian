@@ -1,0 +1,141 @@
+{
+  "schema_version": "1.0",
+  "source_kind": "local_seed",
+  "updated_at": "2026-05-04T00:00:00Z",
+  "packs": [
+    {
+      "pack_id": "auth-bug-core",
+      "pack_name": "Auth Bug Core",
+      "pack_kind": "lane",
+      "version": "0.1.0",
+      "maturity": "seed",
+      "proof_status": "Seed pack. Local proof required.",
+      "proof_refs": [],
+      "qualification_refs": [],
+      "canary_refs": [],
+      "known_limits": [
+        "Strongest for narrow auth/login bug fixes, not broad refactors."
+      ],
+      "manifest_sha256": "72332265cbe86c7d7992032ff163b8755bf7e489c13d34362c55bf69880e037b",
+      "trust_level": "trusted",
+      "description": "Python + pytest + narrow auth/login bug fix lane pack",
+      "tags": [
+        "auth",
+        "login",
+        "pytest",
+        "bug_fix"
+      ],
+      "compatibility": {
+        "stacks": [
+          "python"
+        ],
+        "test_frameworks": [
+          "pytest"
+        ],
+        "lane_ids": [
+          "python-pytest-auth-bug-core"
+        ],
+        "request_classes": [
+          "bug_fix",
+          "regression_test"
+        ]
+      },
+      "warnings": [
+        "Strongest for narrow auth/login bug fixes, not broad refactors."
+      ],
+      "manifest_asset": "assets/auth-bug-core.cambrian-pack.yaml",
+      "detail_path": "packs/auth-bug-core.html",
+      "install_command": "cambrian install pack auth-bug-core",
+      "manifest_install_command": "cambrian install manifest ./packs/auth-bug-core.cambrian-pack.yaml",
+      "proof": null,
+      "includes": {
+        "workers": [
+          "bug-fix-agent",
+          "regression-test-agent",
+          "review-agent"
+        ],
+        "teams": [
+          "auth-bug-team"
+        ],
+        "templates": [
+          "auth-bug-template"
+        ],
+        "benchmarks": [
+          "auth-bug-workset"
+        ]
+      }
+    },
+    {
+      "pack_id": "typescript-jest-auth-core",
+      "pack_name": "TypeScript Jest Auth Core",
+      "pack_kind": "lane",
+      "version": "0.1.0",
+      "maturity": "seed",
+      "proof_status": "Seed pack. Local proof required.",
+      "proof_refs": [],
+      "qualification_refs": [],
+      "canary_refs": [],
+      "known_limits": [
+        "Strongest for TypeScript + Jest auth/API bug fixes, not broad frontend rewrites."
+      ],
+      "manifest_sha256": "d0a683377951a77045b2fe0ae2632b1bca6d111235c895e42b73286c90302de4",
+      "trust_level": "trusted",
+      "description": "TypeScript + Jest + auth/API bug fix lane pack",
+      "tags": [
+        "typescript",
+        "jest",
+        "auth",
+        "api",
+        "bug_fix"
+      ],
+      "compatibility": {
+        "stacks": [
+          "typescript"
+        ],
+        "test_frameworks": [
+          "jest"
+        ],
+        "lane_ids": [
+          "typescript-jest-auth-core"
+        ],
+        "request_classes": [
+          "bug_fix",
+          "regression_test"
+        ],
+        "domains": [
+          "auth",
+          "api",
+          "tests"
+        ]
+      },
+      "warnings": [
+        "Strongest for TypeScript + Jest auth/API bug fixes, not broad frontend rewrites."
+      ],
+      "manifest_asset": "assets/typescript-jest-auth-core.cambrian-pack.yaml",
+      "detail_path": "packs/typescript-jest-auth-core.html",
+      "install_command": "cambrian install pack typescript-jest-auth-core",
+      "manifest_install_command": "cambrian install manifest ./packs/typescript-jest-auth-core.cambrian-pack.yaml",
+      "proof": null,
+      "includes": {
+        "workers": [
+          "ts-bug-fix-agent",
+          "jest-regression-test-agent",
+          "review-agent"
+        ],
+        "teams": [
+          "typescript-jest-auth-team"
+        ],
+        "templates": [
+          "typescript-jest-auth-template"
+        ],
+        "benchmarks": [
+          "typescript-jest-auth-workset"
+        ]
+      }
+    }
+  ],
+  "boundary": {
+    "web": "hiring desk / control plane",
+    "local_runtime": "install, job handoff, validation, and proof"
+  }
+}

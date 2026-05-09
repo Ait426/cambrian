@@ -26,6 +26,8 @@ from engine.project_pack_usage import safe_record_pack_usage_from_context
 
 logger = logging.getLogger(__name__)
 
+MANUAL_CONTRACT_REVIEW_STATUSES = {"satisfied", "failed"}
+
 
 @dataclass
 class PackJobReplyResult:
@@ -87,6 +89,11 @@ class PackJobValidationResult:
     checked_artifacts: list[str] = field(default_factory=list)
     unchecked_items: list[str] = field(default_factory=list)
     validation_commands: list[str] = field(default_factory=list)
+    validation_criteria: list[str] = field(default_factory=list)
+    validation_criteria_status: str = "not_declared"
+    manual_contract_review: dict[str, Any] = field(default_factory=dict)
+    forbidden_actions: list[str] = field(default_factory=list)
+    approval_required_actions: list[str] = field(default_factory=list)
     manual_validation_required: bool = False
     evidence_ref: str | None = None
     request_packet_ref: str | None = None
@@ -138,10 +145,28 @@ class PackJobReplyHandler:
 class PackJobValidator:
     """validation-ready pack job을 continue --validate 경로로 이어준다."""
 
-    def validate(self, project_root: Path, job_ref: str) -> PackJobValidationResult:
+    def validate(
+        self,
+        project_root: Path,
+        job_ref: str,
+        *,
+        criteria_status: str | None = None,
+        criteria_notes: str | None = None,
+        reviewer: str | None = None,
+    ) -> PackJobValidationResult:
         """Pack job을 validated proposal까지 이어간다. apply/adoption은 수행하지 않는다."""
         root, job, job_path = _load_job(project_root, job_ref)
         job_file_ref = _relative(default_pack_job_path(root, job), root)
+        if criteria_status is not None:
+            return _manual_contract_review_result(
+                root,
+                job,
+                job_path,
+                job_file_ref,
+                criteria_status,
+                criteria_notes,
+                reviewer,
+            )
         if job.status == "validated":
             return _validation_result(root, job, job_file_ref, "validated", [])
         if job.pack_kind == "custom_harness" or job.pack_id.startswith("custom-"):
@@ -270,6 +295,20 @@ def render_pack_job_validation_result(result: PackJobValidationResult) -> str:
             f"  manual_validation_required: {result.manual_validation_required}",
         ]
     )
+    if result.validation_criteria or result.manual_contract_review:
+        lines.extend(
+            [
+                "",
+                "Contract criteria:",
+                f"  status: {result.validation_criteria_status}",
+                f"  count: {len(result.validation_criteria)}",
+            ]
+        )
+        if result.manual_contract_review:
+            lines.append(f"  reviewer: {result.manual_contract_review.get('reviewer')}")
+            notes = str(result.manual_contract_review.get("notes") or "").strip()
+            if notes:
+                lines.append(f"  notes: {notes}")
     if result.validation_commands:
         lines.extend(["", "Validation commands:"])
         lines.extend([f"  - {item}" for item in result.validation_commands])
@@ -699,24 +738,133 @@ def _save_job(root: Path, job: PackJob, job_path: Path) -> Path:
     return PackJobStore().save(job, default_pack_job_path(root, job) if job_path.name == "latest.yaml" else job_path)
 
 
+def _manual_contract_review_result(
+    root: Path,
+    job: PackJob,
+    job_path: Path,
+    job_ref: str,
+    criteria_status: str,
+    criteria_notes: str | None,
+    reviewer: str | None,
+) -> PackJobValidationResult:
+    normalized_status = _manual_contract_review_status(criteria_status)
+    validation_criteria = _validation_criteria_for_job(root, job)
+    if not validation_criteria:
+        raise ValueError("contract validation criteria are not available for this pack job")
+    reviewed_at = _now()
+    review_payload = {
+        "status": normalized_status,
+        "reviewer": str(reviewer or "local_user").strip() or "local_user",
+        "reviewed_at": reviewed_at,
+        "notes": str(criteria_notes or "").strip(),
+    }
+    snapshot = dict(job.outcome_snapshot)
+    snapshot["validation_criteria"] = list(validation_criteria)
+    snapshot["validation_criteria_status"] = normalized_status
+    snapshot["manual_contract_review"] = dict(review_payload)
+    snapshot["validated_contract_criteria"] = normalized_status == "satisfied"
+    job.outcome_snapshot = snapshot
+    if normalized_status == "satisfied":
+        job.status = "validated"
+        job.validation_status = "validated"
+        job.final_status = job.final_status or "validated"
+        job.completed_at = reviewed_at
+        job.next_command = f"cambrian pack proof {job.pack_id}"
+        job.next_actions = [
+            f"cambrian pack proof {job.pack_id}",
+            f"cambrian pack job-show {job.job_id}",
+        ]
+        job.errors = _without_contract_flow_blockers(job.errors)
+    else:
+        job.status = "blocked"
+        job.validation_status = "failed"
+        job.final_status = job.final_status or "failed"
+        job.next_command = f"cambrian pack job-show {job.job_id}"
+        job.next_actions = [
+            f"cambrian pack job-show {job.job_id}",
+            f"cambrian pack proof {job.pack_id}",
+        ]
+        job.errors = _dedupe([*job.errors, "Contract validation criteria failed manual review"])
+    _save_job(root, job, job_path)
+    return _validation_result(
+        root,
+        job,
+        job_ref,
+        job.validation_status or "failed",
+        [],
+        criteria_status_override=normalized_status,
+        manual_contract_review=review_payload,
+        next_actions_override=list(job.next_actions),
+    )
+
+
+def _manual_contract_review_status(status: str) -> str:
+    normalized = str(status or "").strip().lower()
+    if normalized not in MANUAL_CONTRACT_REVIEW_STATUSES:
+        allowed = ", ".join(sorted(MANUAL_CONTRACT_REVIEW_STATUSES))
+        raise ValueError(f"criteria status must be one of: {allowed}")
+    return normalized
+
+
+def _validation_criteria_for_job(root: Path, job: PackJob) -> list[str]:
+    execution_contract = _job_execution_contract(root, job)
+    return _as_list(execution_contract.get("validation_criteria")) or _as_list(
+        job.outcome_snapshot.get("validation_criteria")
+    )
+
+
+def _without_contract_flow_blockers(errors: list[str]) -> list[str]:
+    generic_validation_blockers = {
+        "pack job is not validation-ready",
+        "no patch candidate reply has been routed yet",
+        "linked do session is missing",
+        "patch intent handoff is missing",
+        "Contract validation criteria failed manual review",
+    }
+    return _dedupe([item for item in errors if item not in generic_validation_blockers])
+
+
 def _validation_result(
     root: Path,
     job: PackJob,
     job_ref: str,
     status: str,
     warnings: list[str],
+    *,
+    criteria_status_override: str | None = None,
+    manual_contract_review: dict[str, Any] | None = None,
+    next_actions_override: list[str] | None = None,
 ) -> PackJobValidationResult:
     generated_at = _now()
     merged_warnings = _dedupe([*warnings, *job.warnings])
     errors = list(job.errors)
-    next_actions = PackJobNextBuilder().build(root, job)
+    review_payload = dict(manual_contract_review or {})
+    next_actions = list(next_actions_override) if next_actions_override is not None else PackJobNextBuilder().build(root, job)
     next_actions = _validation_next_actions(job, next_actions)
     validation_commands = _validation_commands(job, next_actions)
+    execution_contract = _job_execution_contract(root, job)
+    validation_criteria = _as_list(execution_contract.get("validation_criteria")) or _as_list(
+        job.outcome_snapshot.get("validation_criteria")
+    )
+    forbidden_actions = _as_list(execution_contract.get("forbidden_actions")) or _as_list(
+        job.outcome_snapshot.get("forbidden_actions")
+    )
+    approval_required_actions = _as_list(execution_contract.get("approval_required_actions")) or _as_list(
+        job.outcome_snapshot.get("approval_required_actions")
+    )
+    validation_criteria_status = criteria_status_override or _validation_criteria_status(status, validation_criteria)
     manual_required = _manual_validation_required(job, status, validation_commands)
     contract_status = _validation_contract_status(status, manual_required, errors)
     trust_gate_status = _trust_gate_status(status, manual_required, errors)
     checked_artifacts = _checked_validation_artifacts(root, job, job_ref)
-    unchecked_items = _unchecked_validation_items(status, manual_required, validation_commands, errors)
+    unchecked_items = _unchecked_validation_items(
+        status,
+        manual_required,
+        validation_commands,
+        errors,
+        validation_criteria,
+        validation_criteria_status,
+    )
     evidence_ref = _save_validation_evidence(
         root,
         {
@@ -731,6 +879,11 @@ def _validation_result(
             "checked_artifacts": checked_artifacts,
             "unchecked_items": unchecked_items,
             "validation_commands": validation_commands,
+            "validation_criteria": validation_criteria,
+            "validation_criteria_status": validation_criteria_status,
+            "manual_contract_review": review_payload,
+            "forbidden_actions": forbidden_actions,
+            "approval_required_actions": approval_required_actions,
             "manual_validation_required": manual_required,
             "request_packet_ref": job.linked_bridge_packet_ref,
             "reply_file_ref": job.linked_bridge_reply_ref,
@@ -744,6 +897,7 @@ def _validation_result(
             "ai_provider_called": False,
         },
     )
+    _refresh_local_proof(root, job.pack_id)
     return PackJobValidationResult(
         schema_version=SCHEMA_VERSION,
         generated_at=generated_at,
@@ -762,6 +916,11 @@ def _validation_result(
         checked_artifacts=checked_artifacts,
         unchecked_items=unchecked_items,
         validation_commands=validation_commands,
+        validation_criteria=validation_criteria,
+        validation_criteria_status=validation_criteria_status,
+        manual_contract_review=review_payload,
+        forbidden_actions=forbidden_actions,
+        approval_required_actions=approval_required_actions,
         manual_validation_required=manual_required,
         evidence_ref=evidence_ref,
         request_packet_ref=job.linked_bridge_packet_ref,
@@ -839,6 +998,25 @@ def _checked_validation_artifacts(root: Path, job: PackJob, job_ref: str) -> lis
     )
 
 
+def _job_execution_contract(root: Path, job: PackJob) -> dict[str, Any]:
+    if not job.linked_bridge_packet_ref:
+        return {}
+    packet_path = Path(job.linked_bridge_packet_ref)
+    if not packet_path.is_absolute():
+        packet_path = Path(root).resolve() / packet_path
+    packet = _load_yaml(packet_path)
+    contract = packet.get("execution_contract")
+    return dict(contract) if isinstance(contract, dict) else {}
+
+
+def _validation_criteria_status(status: str, validation_criteria: list[str]) -> str:
+    if not validation_criteria:
+        return "not_declared"
+    if status == "validated":
+        return "satisfied"
+    return "manual_review_required"
+
+
 def _source_reply_ref_from_bridge_reply(root: Path, job: PackJob) -> str | None:
     if not job.linked_bridge_reply_ref:
         return None
@@ -855,12 +1033,19 @@ def _unchecked_validation_items(
     manual_required: bool,
     validation_commands: list[str],
     errors: list[str],
+    validation_criteria: list[str] | None = None,
+    validation_criteria_status: str | None = None,
 ) -> list[str]:
     items: list[str] = []
     if manual_required:
         items.append("Cambrian did not execute validation commands automatically")
     if validation_commands and status != "validated":
         items.append("Human must run validation commands and record the outcome")
+    if validation_criteria and status != "validated":
+        if validation_criteria_status == "failed":
+            items.append("Contract validation criteria failed manual review")
+        elif validation_criteria_status not in {"satisfied", "not_declared"}:
+            items.append("Contract validation criteria require manual review")
     if status != "validated":
         items.append("Patch proposal was not applied to source code")
     if errors:
@@ -873,6 +1058,17 @@ def _save_validation_evidence(root: Path, payload: dict[str, Any]) -> str:
     evidence_path = evidence_dir / f"{_slug(str(payload.get('job_id') or 'job'), 'job')}.yaml"
     _save_yaml(evidence_path, payload)
     return _relative(evidence_path, root)
+
+
+def _refresh_local_proof(root: Path, pack_id: str) -> dict[str, str]:
+    try:
+        from engine.project_pack_proof import PackProofBuilder, save_pack_proof_card
+
+        card = PackProofBuilder().build(root, pack_id)
+        return save_pack_proof_card(root, card, format_kind="both")
+    except Exception as exc:  # noqa: BLE001 - validation evidence 저장이 본 작업이고 proof 갱신 실패는 경고만 남긴다.
+        logger.warning("pack validation proof refresh failed: %s", exc)
+        return {}
 
 
 def _bool_or_none(value: Any) -> bool | None:

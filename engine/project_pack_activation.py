@@ -19,6 +19,7 @@ from engine.project_pack_install import (
     default_install_dir,
     default_installed_packs_path,
     _as_list,
+    _as_dict,
     _load_yaml,
     _relative,
     _save_yaml,
@@ -92,6 +93,10 @@ class ActivePackContext:
     default_template: str | None
     default_workset: str | None
     status: str
+    contract_template_kind: str | None = None
+    validation_criteria: list[str] = field(default_factory=list)
+    forbidden_actions: list[str] = field(default_factory=list)
+    approval_required_actions: list[str] = field(default_factory=list)
     warnings: list[str] = field(default_factory=list)
     errors: list[str] = field(default_factory=list)
 
@@ -329,14 +334,21 @@ def pack_context_bridge_payload(context: ActivePackContext) -> dict[str, Any]:
         "pack_id": context.pack_id,
         "pack_ref": context.pack_ref,
         "pack_name": context.pack_name,
+        "pack_kind": context.pack_kind,
         "namespace": context.namespace,
         "version": context.version,
         "lane_id": context.lane_id,
         "lane_label": context.lane_label,
         "workers": list(context.workers),
+        "selected_agents": list(context.workers),
         "team": context.default_team,
         "template": context.default_template,
         "benchmark": context.default_workset,
+        "change_policy": "proposal_only",
+        "contract_template_kind": context.contract_template_kind,
+        "validation_criteria": list(context.validation_criteria),
+        "forbidden_actions": list(context.forbidden_actions),
+        "approval_required_actions": list(context.approval_required_actions),
         "soft_context_only": True,
     }
 
@@ -551,6 +563,7 @@ def _context_from_record(project_root: Path, record: InstalledPackRecord) -> Act
     warnings = list(record.warnings or [])
     if manifest is None:
         warnings.append("manifest copy를 읽지 못해 installed_artifacts 요약만 사용했습니다.")
+    contract_defaults = _agent_contract_defaults(manifest, default_template)
     return ActivePackContext(
         schema_version=SCHEMA_VERSION,
         activated_at=_now(),
@@ -574,9 +587,45 @@ def _context_from_record(project_root: Path, record: InstalledPackRecord) -> Act
         default_template=default_template,
         default_workset=default_workset,
         status="active",
+        contract_template_kind=contract_defaults.get("contract_template_kind"),
+        validation_criteria=_as_list(contract_defaults.get("validation_criteria")),
+        forbidden_actions=_as_list(contract_defaults.get("forbidden_actions")),
+        approval_required_actions=_as_list(contract_defaults.get("approval_required_actions")),
         warnings=warnings,
         errors=list(record.errors or []),
     )
+
+
+def _agent_contract_defaults(manifest: PackManifest | None, default_template: str | None) -> dict[str, Any]:
+    if manifest is None or manifest.pack_kind != "agent":
+        return {}
+    templates = [dict(item) for item in manifest.templates if isinstance(item, dict)]
+    selected: dict[str, Any] | None = None
+    if default_template:
+        for template in templates:
+            candidates = {
+                str(template.get("name") or ""),
+                str(template.get("template_id") or ""),
+            }
+            if default_template in candidates:
+                selected = template
+                break
+    if selected is None:
+        for template in templates:
+            if str(template.get("template_kind") or "") == "agent_contract":
+                selected = template
+                break
+    if selected is None:
+        return {}
+    safety_defaults = _as_dict(selected.get("safety_defaults"))
+    validation_defaults = _as_dict(selected.get("validation_defaults"))
+    template_kind = str(selected.get("template_kind") or "") or None
+    return {
+        "contract_template_kind": template_kind,
+        "validation_criteria": _as_list(validation_defaults.get("validation_criteria")),
+        "forbidden_actions": _as_list(safety_defaults.get("forbidden_actions")),
+        "approval_required_actions": _as_list(safety_defaults.get("approval_required_actions")),
+    }
 
 
 def _load_manifest_for_record(project_root: Path, record: InstalledPackRecord) -> PackManifest | None:
@@ -641,6 +690,10 @@ def _context_from_dict(payload: dict[str, Any]) -> ActivePackContext:
         default_template=str(payload.get("default_template")) if payload.get("default_template") is not None else None,
         default_workset=str(payload.get("default_workset")) if payload.get("default_workset") is not None else None,
         status=str(payload.get("status") or "inactive"),
+        contract_template_kind=str(payload.get("contract_template_kind")) if payload.get("contract_template_kind") is not None else None,
+        validation_criteria=_as_list(payload.get("validation_criteria")),
+        forbidden_actions=_as_list(payload.get("forbidden_actions")),
+        approval_required_actions=_as_list(payload.get("approval_required_actions")),
         warnings=_as_list(payload.get("warnings")),
         errors=_as_list(payload.get("errors")),
     )
