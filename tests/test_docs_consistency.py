@@ -190,3 +190,23 @@ def test_no_forbidden_overclaim_in_product_docs() -> None:
 
     for phrase in forbidden_phrases:
         assert phrase not in combined
+
+
+def test_agent_marketplace_future_is_positioned_as_later_proof_backed_branch() -> None:
+    index = _product_doc("00_INDEX.md")
+    future = _product_doc("43_AGENT_MARKETPLACE_FUTURE.md")
+
+    assert "43_AGENT_MARKETPLACE_FUTURE.md" in index
+    assert "Long-term future branch" in index
+    assert "does not replace the current product identity" in index
+
+    for phrase in [
+        "Cambrian Agent Marketplace Future",
+        "현재 제품 정의를 바꾸기 위한 문서가 아니다",
+        "신뢰 기반 플랫폼",
+        "지금의 우선순위는 마켓플레이스 구현이 아니다",
+        "signed Cambrian pack",
+        "outcome evidence",
+        "proof-backed marketplace",
+    ]:
+        assert phrase in future

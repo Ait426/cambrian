@@ -46,6 +46,13 @@ The current source of truth is:
 
 All older AI worker, pack, lane, and preset language is compatibility vocabulary unless a section explicitly marks it as current product identity.
 
+Long-term future branch:
+
+1. `43_AGENT_MARKETPLACE_FUTURE.md`
+
+This future document does not replace the current product identity.
+It frames a possible proof-backed agent marketplace after Cambrian has strong runtime, proof, signed pack, evolution, and registry foundations.
+
 먼저 읽을 문서:
 
 1. `14_PRODUCT_CONSTITUTION.md`
@@ -223,6 +230,7 @@ Cambrian의 진화는 새로운 artifact를 많이 만드는 것이 아니다.
 41. `39_RELEASE_GATE_DECISION_LOOP.md`
 42. `40_AUTO_ITERATION_ARCHIVE_FRESH_START.md`
 43. `41_EXPLICIT_NEXT_GOAL_CONTRACT.md`
+44. `43_AGENT_MARKETPLACE_FUTURE.md`
 
 권장 순서가 번호 순서와 완전히 같지는 않다.
 처음에는 철학과 아키텍처를 먼저 이해하고, 그다음 상태 모델과 세부 용어를 보면 된다.
