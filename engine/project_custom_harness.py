@@ -68,6 +68,14 @@ def default_custom_plan_path(project_root: Path) -> Path:
     return Path(project_root).resolve() / ".cambrian" / "plan.yaml"
 
 
+def default_custom_jobs_dir(project_root: Path) -> Path:
+    return Path(project_root).resolve() / ".cambrian" / "packs" / "jobs"
+
+
+def default_custom_job_path(project_root: Path, job_id: str) -> Path:
+    return default_custom_jobs_dir(project_root) / f"{_slug(job_id, 'job')}.yaml"
+
+
 @dataclass
 class CustomHarnessInstallResult:
     schema_version: str
@@ -293,7 +301,6 @@ def create_custom_harness_job(
     entry_mode: str = "job_start",
 ) -> tuple[dict[str, Any], dict[str, Any]]:
     from engine.project_bridge import ProjectBridgeBuilder, ProjectBridgeStore, default_bridge_packet_path, render_bridge_packet
-    from engine.project_pack_jobs import PackJob, PackJobStartResult, PackJobStore, default_pack_job_path
 
     root = Path(project_root).resolve()
     harness = load_custom_harness(root)
@@ -349,37 +356,37 @@ def create_custom_harness_job(
         "cambrian job ingest latest ai_reply_patch_candidate.yaml",
         "cambrian job validate latest",
     ]
-    job = PackJob(
-        schema_version=SCHEMA_VERSION,
-        job_id=job_id,
-        created_at=_now(),
-        updated_at=None,
-        pack_ref=harness_id,
-        pack_id=harness_id,
-        pack_name=str(harness.get("id") or harness_id),
-        pack_kind="custom_harness",
-        namespace="custom",
-        version=None,
-        request=request_text,
-        request_class=packet.request_intent,
-        lane_id=f"{harness.get('language')}-{harness.get('test_framework')}",
-        lane_label=_lane_label(harness),
-        readiness_status="ready",
-        readiness_ref=None,
-        setup_plan_ref=_relative(default_custom_plan_path(root), root) if default_custom_plan_path(root).exists() else None,
-        entry_mode=entry_mode,
-        linked_bridge_packet_ref=_relative(packet_path, root),
-        linked_session_id=None,
-        linked_session_ref=None,
-        linked_request_ref=None,
-        active_team=None,
-        active_template=None,
-        active_workset=None,
-        status="waiting_for_ai_reply",
-        next_command=next_commands[0],
-        next_actions=["Copy the request to your AI tool.", *next_commands],
-        usage_event_ref=None,
-        outcome_snapshot={
+    job = {
+        "schema_version": SCHEMA_VERSION,
+        "job_id": job_id,
+        "created_at": _now(),
+        "updated_at": None,
+        "pack_ref": harness_id,
+        "pack_id": harness_id,
+        "pack_name": str(harness.get("id") or harness_id),
+        "pack_kind": "custom_harness",
+        "namespace": "custom",
+        "version": None,
+        "request": request_text,
+        "request_class": packet.request_intent,
+        "lane_id": f"{harness.get('language')}-{harness.get('test_framework')}",
+        "lane_label": _lane_label(harness),
+        "readiness_status": "ready",
+        "readiness_ref": None,
+        "setup_plan_ref": _relative(default_custom_plan_path(root), root) if default_custom_plan_path(root).exists() else None,
+        "entry_mode": entry_mode,
+        "linked_bridge_packet_ref": _relative(packet_path, root),
+        "linked_session_id": None,
+        "linked_session_ref": None,
+        "linked_request_ref": None,
+        "active_team": None,
+        "active_template": None,
+        "active_workset": None,
+        "status": "waiting_for_ai_reply",
+        "next_command": next_commands[0],
+        "next_actions": ["Copy the request to your AI tool.", *next_commands],
+        "usage_event_ref": None,
+        "outcome_snapshot": {
             "harness_id": harness_id,
             "workforce_id": str(workforce.get("id")) if isinstance(workforce, dict) and workforce.get("id") else None,
             "selected_agents": list(selected_agents),
@@ -388,31 +395,39 @@ def create_custom_harness_job(
             "change_policy": str(harness.get("policy", {}).get("change_mode") or "proposal_only"),
             "validation_commands": list(validation.get("test_commands", []) if isinstance(validation.get("test_commands"), list) else []),
         },
-        warnings=[],
-        errors=[],
-    )
-    job_path = PackJobStore().save(job, default_pack_job_path(root, job))
-    result = PackJobStartResult(
-        schema_version=SCHEMA_VERSION,
-        generated_at=_now(),
-        job=job,
-        human_summary=[
+        "warnings": [],
+        "errors": [],
+    }
+    job_path = _save_custom_job(root, job)
+    result = {
+        "schema_version": SCHEMA_VERSION,
+        "generated_at": _now(),
+        "job": job,
+        "human_summary": [
             f"custom harness job started for {harness_id}",
             "AI provider was not called.",
             "Source code was not modified.",
         ],
-        packet_preview=render_bridge_packet(packet),
-        next_actions=list(job.next_actions),
-        warnings=[],
-        errors=[],
-    )
+        "packet_preview": render_bridge_packet(packet),
+        "next_actions": list(job["next_actions"]),
+        "warnings": [],
+        "errors": [],
+    }
     payload = {
-        "job": result.job.to_dict(),
+        "job": dict(job),
         "job_ref": _relative(job_path, root),
         "packet_ref": _relative(packet_path, root),
-        "packet_preview": result.packet_preview,
+        "packet_preview": result["packet_preview"],
     }
-    return result.to_dict(), payload
+    return result, payload
+
+
+def _save_custom_job(root: Path, job: dict[str, Any]) -> Path:
+    job_id = str(job.get("job_id") or "job-custom")
+    job_path = default_custom_job_path(root, job_id)
+    _save_yaml(job_path, job)
+    _save_yaml(default_custom_jobs_dir(root) / "latest.yaml", job)
+    return job_path
 
 
 def _load_or_scan_profile(root: Path) -> Any:
