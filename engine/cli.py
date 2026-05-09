@@ -334,6 +334,167 @@ def main() -> None:
         help="입력 데이터 (JSON 문자열)",
     )
 
+    for _action in benchmark_parser._actions:
+        if getattr(_action, "dest", None) in {"domain", "tags", "input"}:
+            _action.required = False
+    benchmark_subparsers = benchmark_parser.add_subparsers(
+        dest="benchmark_command",
+        help="benchmark 하위 명령",
+    )
+    benchmark_case_add_parser = benchmark_subparsers.add_parser(
+        "case-add",
+        help="반복 측정할 benchmark case 저장",
+        parents=[common_parser],
+    )
+    benchmark_case_add_parser.add_argument("request", help="benchmark request")
+    benchmark_case_add_parser.add_argument("--name", default=None, help="case name")
+    benchmark_case_add_parser.add_argument("--class", dest="request_class", choices=["bug_fix", "review", "docs", "refactor", "unknown"], default="unknown")
+    benchmark_case_add_parser.add_argument("--description", default=None)
+    benchmark_case_add_parser.add_argument("--tag", action="append", default=[], dest="benchmark_tags")
+    benchmark_case_add_parser.add_argument("--focus", action="append", default=[], dest="expected_focus")
+    benchmark_case_add_parser.add_argument("--json", action="store_true", dest="json_output", help="JSON 출력")
+    benchmark_cases_parser = benchmark_subparsers.add_parser(
+        "cases",
+        help="benchmark case 목록",
+        parents=[common_parser],
+    )
+    benchmark_cases_parser.add_argument("--class", dest="request_class", choices=["bug_fix", "review", "docs", "refactor", "unknown"], default=None)
+    benchmark_cases_parser.add_argument("--json", action="store_true", dest="json_output", help="JSON 출력")
+    benchmark_workset_save_parser = benchmark_subparsers.add_parser(
+        "workset-save",
+        help="benchmark workset 저장",
+        parents=[common_parser],
+    )
+    benchmark_workset_save_parser.add_argument("name", help="workset name")
+    benchmark_workset_save_parser.add_argument("--case", action="append", default=[], dest="case_refs", help="case id 또는 name")
+    benchmark_workset_save_parser.add_argument("--description", default=None)
+    benchmark_workset_save_parser.add_argument("--tag", action="append", default=[], dest="benchmark_tags")
+    benchmark_workset_save_parser.add_argument("--json", action="store_true", dest="json_output", help="JSON 출력")
+    benchmark_worksets_parser = benchmark_subparsers.add_parser(
+        "worksets",
+        help="benchmark workset 목록",
+        parents=[common_parser],
+    )
+    benchmark_worksets_parser.add_argument("--json", action="store_true", dest="json_output", help="JSON 출력")
+    benchmark_attach_parser = benchmark_subparsers.add_parser(
+        "attach",
+        help="case에 mode별 결과 연결",
+        parents=[common_parser],
+    )
+    benchmark_attach_parser.add_argument("case_ref", help="case id 또는 name")
+    benchmark_attach_parser.add_argument("--mode", choices=["raw_ai", "bridge_only", "cambrian_guided", "cambrian_full", "manual_baseline"], required=True)
+    benchmark_attach_parser.add_argument("--session", default=None, help="do session id 또는 path")
+    benchmark_attach_parser.add_argument("--reply", default=None, help="bridge reply id 또는 path")
+    benchmark_attach_parser.add_argument("--manual-result", default=None, help="manual result yaml/json")
+    benchmark_attach_parser.add_argument("--summary", default=None)
+    benchmark_attach_parser.add_argument("--verdict", choices=["strong", "good", "mixed", "weak"], default=None)
+    benchmark_attach_parser.add_argument("--json", action="store_true", dest="json_output", help="JSON 출력")
+    benchmark_report_parser = benchmark_subparsers.add_parser(
+        "report",
+        help="workset benchmark 비교 리포트",
+        parents=[common_parser],
+    )
+    benchmark_report_parser.add_argument("workset_name", help="workset name 또는 id")
+    benchmark_report_parser.add_argument("--save", action="store_true", help="benchmark report 저장")
+    benchmark_report_parser.add_argument("--json", action="store_true", dest="json_output", help="JSON 출력")
+    benchmark_baseline_save_parser = benchmark_subparsers.add_parser(
+        "baseline-save",
+        help="현재 benchmark report를 baseline으로 저장",
+        parents=[common_parser],
+    )
+    benchmark_baseline_save_parser.add_argument("workset_name", help="workset name 또는 id")
+    benchmark_baseline_save_parser.add_argument("--report", default=None, help="baseline source report path")
+    benchmark_baseline_save_parser.add_argument("--json", action="store_true", dest="json_output", help="JSON 출력")
+    benchmark_baselines_parser = benchmark_subparsers.add_parser(
+        "baselines",
+        help="benchmark baseline 목록",
+        parents=[common_parser],
+    )
+    benchmark_baselines_parser.add_argument("--workset", default=None, help="workset name filter")
+    benchmark_baselines_parser.add_argument("--json", action="store_true", dest="json_output", help="JSON 출력")
+    benchmark_compare_parser = benchmark_subparsers.add_parser(
+        "compare",
+        help="current benchmark report를 baseline과 비교",
+        parents=[common_parser],
+    )
+    benchmark_compare_parser.add_argument("workset_name", help="workset name 또는 id")
+    benchmark_compare_parser.add_argument("--against", default=None, help="baseline path 또는 baseline id")
+    benchmark_compare_parser.add_argument("--save", action="store_true", help="benchmark compare report 저장")
+    benchmark_compare_parser.add_argument("--json", action="store_true", dest="json_output", help="JSON 출력")
+    benchmark_replay_parser = benchmark_subparsers.add_parser(
+        "replay",
+        help="benchmark case를 안전하게 재생",
+        parents=[common_parser],
+    )
+    benchmark_replay_parser.add_argument("case_ref", help="case id 또는 name")
+    benchmark_replay_parser.add_argument("--mode", choices=["cambrian_guided", "cambrian_full"], default="cambrian_guided")
+    benchmark_replay_parser.add_argument("--save", action="store_true", default=True, help="replay report 저장")
+    benchmark_replay_parser.add_argument("--record-result", action="store_true", default=True, help="benchmark result 자동 기록")
+    benchmark_replay_parser.add_argument("--json", action="store_true", dest="json_output", help="JSON 출력")
+    benchmark_replay_show_parser = benchmark_subparsers.add_parser(
+        "replay-show",
+        help="benchmark replay 상세 보기",
+        parents=[common_parser],
+    )
+    benchmark_replay_show_parser.add_argument("replay_ref", help="replay id 또는 path")
+    benchmark_replay_show_parser.add_argument("--json", action="store_true", dest="json_output", help="JSON 출력")
+    benchmark_replays_parser = benchmark_subparsers.add_parser(
+        "replays",
+        help="benchmark replay 목록",
+        parents=[common_parser],
+    )
+    benchmark_replays_parser.add_argument("--json", action="store_true", dest="json_output", help="JSON 출력")
+    benchmark_replay_workset_parser = benchmark_subparsers.add_parser(
+        "replay-workset",
+        help="benchmark workset 전체를 안전하게 재생",
+        parents=[common_parser],
+    )
+    benchmark_replay_workset_parser.add_argument("workset_name", help="workset name 또는 id")
+    benchmark_replay_workset_parser.add_argument("--mode", choices=["cambrian_guided", "cambrian_full"], default="cambrian_guided")
+    benchmark_replay_workset_parser.add_argument("--save", action="store_true", default=True, help="workset replay report 저장")
+    benchmark_replay_workset_parser.add_argument("--record-results", action="store_true", default=True, help="case별 benchmark result 자동 기록")
+    benchmark_replay_workset_parser.add_argument("--json", action="store_true", dest="json_output", help="JSON 출력")
+    benchmark_autonomy_board_parser = benchmark_subparsers.add_parser(
+        "autonomy-board",
+        help="workset autonomy evidence board 보기",
+        parents=[common_parser],
+    )
+    benchmark_autonomy_board_parser.add_argument("workset_name", help="workset name 또는 id")
+    benchmark_autonomy_board_parser.add_argument("--save", action="store_true", help="autonomy board 저장")
+    benchmark_autonomy_board_parser.add_argument("--json", action="store_true", dest="json_output", help="JSON 출력")
+    benchmark_workset_replays_parser = benchmark_subparsers.add_parser(
+        "workset-replays",
+        help="benchmark workset replay 목록",
+        parents=[common_parser],
+    )
+    benchmark_workset_replays_parser.add_argument("--workset", default=None, help="workset name filter")
+    benchmark_workset_replays_parser.add_argument("--json", action="store_true", dest="json_output", help="JSON 출력")
+    benchmark_bottlenecks_parser = benchmark_subparsers.add_parser(
+        "bottlenecks",
+        help="workset autonomy bottleneck 분석",
+        parents=[common_parser],
+    )
+    benchmark_bottlenecks_parser.add_argument("workset_name", help="workset name 또는 id")
+    benchmark_bottlenecks_parser.add_argument("--mode", choices=["all", "cambrian_guided", "cambrian_full"], default="all")
+    benchmark_bottlenecks_parser.add_argument("--save", action="store_true", help="bottleneck report 저장")
+    benchmark_bottlenecks_parser.add_argument("--json", action="store_true", dest="json_output", help="JSON 출력")
+    benchmark_proof_parser = benchmark_subparsers.add_parser(
+        "proof",
+        help="benchmark/metrics/autonomy/bottleneck 증거를 한 장짜리 proof pack으로 묶기",
+        parents=[common_parser],
+    )
+    benchmark_proof_parser.add_argument("workset_name", help="workset name 또는 id")
+    benchmark_proof_parser.add_argument("--save", action="store_true", help="proof YAML/Markdown report 저장")
+    benchmark_proof_parser.add_argument("--format", choices=["yaml", "md", "both"], default="both", help="--save 시 저장 형식")
+    benchmark_proof_parser.add_argument("--json", action="store_true", dest="json_output", help="JSON 출력")
+    benchmark_proof_show_parser = benchmark_subparsers.add_parser(
+        "proof-show",
+        help="저장된 benchmark proof pack 보기",
+        parents=[common_parser],
+    )
+    benchmark_proof_show_parser.add_argument("proof_ref", help="proof id 또는 path")
+    benchmark_proof_show_parser.add_argument("--json", action="store_true", dest="json_output", help="JSON 출력")
+
     feedback_parser = subparsers.add_parser(
         "feedback",
         help="스킬 피드백 저장",
@@ -1062,6 +1223,26 @@ def main() -> None:
     demo_create_parser.add_argument(
         "--json", action="store_true", dest="json_output", help="JSON 출력",
     )
+
+    metrics_parser = subparsers.add_parser(
+        "metrics",
+        help="주간 운영 지표 대시보드",
+        parents=[common_parser],
+    )
+    metrics_subparsers = metrics_parser.add_subparsers(
+        dest="metrics_command",
+        help="metrics 하위 명령",
+    )
+    metrics_week_parser = metrics_subparsers.add_parser(
+        "week",
+        help="주간 운영 지표 계산",
+        parents=[common_parser],
+    )
+    metrics_week_parser.add_argument("--start", default=None, help="시작일 YYYY-MM-DD")
+    metrics_week_parser.add_argument("--end", default=None, help="종료일 YYYY-MM-DD")
+    metrics_week_parser.add_argument("--save", action="store_true", help="weekly metrics report 저장")
+    metrics_week_parser.add_argument("--json", action="store_true", dest="json_output", help="JSON 출력")
+
 
     status_parser = subparsers.add_parser(
         "status",
@@ -2758,6 +2939,8 @@ def main() -> None:
             _handle_init(args)
         elif args.command == "demo":
             _handle_demo(args)
+        elif args.command == "metrics":
+            _handle_metrics(args)
         elif args.command == "status":
             _handle_status(args)
         elif args.command == "summary":
@@ -3068,6 +3251,13 @@ def _handle_benchmark(args: argparse.Namespace) -> None:
     Args:
         args: argparse가 파싱한 네임스페이스
     """
+    if getattr(args, "benchmark_command", None):
+        _handle_project_benchmark(args)
+        return
+    if not args.domain or not args.tags or not args.input:
+        print("기존 skill benchmark에는 --domain, --tags, --input 이 필요합니다.", file=sys.stderr)
+        print("작업셋 비교는 예: cambrian benchmark case-add \"로그인 에러 수정\"", file=sys.stderr)
+        sys.exit(1)
     try:
         input_data = json.loads(args.input)
     except json.JSONDecodeError:
@@ -3103,6 +3293,395 @@ def _handle_benchmark(args: argparse.Namespace) -> None:
         )
     print("-" * 56)
     print(f"Best: {report.best_skill_id} | {report.successful_count}/{report.total_candidates} succeeded")
+
+
+def _handle_project_benchmark(args: argparse.Namespace) -> None:
+    """반복 작업 benchmark workset 명령을 처리한다."""
+    from engine.project_benchmarks import (
+        BenchmarkReportBuilder,
+        BenchmarkResultRecorder,
+        BenchmarkStore,
+        case_path,
+        create_benchmark_case,
+        create_benchmark_workset,
+        render_attach_result,
+        render_cases,
+        render_report,
+        render_worksets,
+        report_path,
+        workset_path,
+    )
+    from engine.project_benchmark_compare import (
+        BenchmarkBaselineBuilder,
+        BenchmarkBaselineStore,
+        BenchmarkCompareBuilder,
+        BenchmarkCompareStore,
+        baseline_path,
+        compare_path,
+        default_baselines_dir,
+        render_baseline_saved,
+        render_baselines,
+        render_compare_report,
+        resolve_report_for_baseline,
+    )
+    from engine.project_benchmark_replay import (
+        BenchmarkReplayRunner,
+        BenchmarkReplayStore,
+        default_replay_path,
+        default_replays_dir,
+        render_replay_report,
+        render_replays,
+        resolve_replay_path,
+        save_replay_result,
+    )
+    from engine.project_benchmark_workset_replay import (
+        AutonomyEvidenceBoardBuilder,
+        AutonomyEvidenceBoardStore,
+        WorksetReplayRunner,
+        WorksetReplayStore,
+        default_autonomy_board_path,
+        default_workset_replay_path,
+        default_workset_replays_dir,
+        render_autonomy_board,
+        render_workset_replay,
+    )
+    from engine.project_autonomy_bottlenecks import (
+        AutonomyBottleneckAnalyzer,
+        AutonomyBottleneckStore,
+        default_bottleneck_report_path,
+        render_bottleneck_report,
+    )
+    from engine.project_benchmark_proof import (
+        BenchmarkProofBuilder,
+        BenchmarkProofStore,
+        default_proof_yaml_path,
+        proof_markdown_path,
+        render_proof_pack,
+        resolve_proof_path,
+    )
+
+    root = Path.cwd().resolve()
+    command = getattr(args, "benchmark_command", None)
+    store = BenchmarkStore()
+
+    if command == "case-add":
+        case = create_benchmark_case(
+            request=args.request,
+            name=getattr(args, "name", None),
+            request_class=getattr(args, "request_class", "unknown"),
+            description=getattr(args, "description", None),
+            tags=list(getattr(args, "benchmark_tags", []) or []),
+            expected_focus=list(getattr(args, "expected_focus", []) or []),
+        )
+        saved = store.save_case(case, case_path(root, case))
+        if getattr(args, "json_output", False):
+            print(json.dumps({"status": "saved", "case": case.to_dict(), "saved_path": str(saved.resolve())}, indent=2, ensure_ascii=False))
+            return
+        print("Benchmark case saved.")
+        print("")
+        print("Case:")
+        print(f"  {case.name}")
+        print("")
+        print("Saved:")
+        print(f"  {_relative_cli(saved, root)}")
+        return
+
+    if command == "cases":
+        cases = store.list_cases(root)
+        request_class = getattr(args, "request_class", None)
+        if request_class:
+            cases = [case for case in cases if case.request_class == request_class]
+        if getattr(args, "json_output", False):
+            print(json.dumps({"cases": [case.to_dict() for case in cases]}, indent=2, ensure_ascii=False))
+            return
+        print(render_cases(cases))
+        return
+
+    if command == "workset-save":
+        workset = create_benchmark_workset(
+            project_root=root,
+            name=args.name,
+            case_refs=list(getattr(args, "case_refs", []) or []),
+            description=getattr(args, "description", None),
+            tags=list(getattr(args, "benchmark_tags", []) or []),
+        )
+        saved = store.save_workset(workset, workset_path(root, workset))
+        if getattr(args, "json_output", False):
+            print(json.dumps({"status": "saved", "workset": workset.to_dict(), "saved_path": str(saved.resolve())}, indent=2, ensure_ascii=False))
+            return
+        print("Benchmark workset saved.")
+        print("")
+        print("Workset:")
+        print(f"  {workset.name}")
+        print("")
+        print("Cases:")
+        for case_id in workset.case_ids:
+            print(f"  - {case_id}")
+        if workset.warnings:
+            print("")
+            print("Warnings:")
+            for warning in workset.warnings:
+                print(f"  - {warning}")
+        print("")
+        print("Saved:")
+        print(f"  {_relative_cli(saved, root)}")
+        return
+
+    if command == "worksets":
+        worksets = store.list_worksets(root)
+        if getattr(args, "json_output", False):
+            print(json.dumps({"worksets": [workset.to_dict() for workset in worksets]}, indent=2, ensure_ascii=False))
+            return
+        print(render_worksets(worksets))
+        return
+
+    if command == "attach":
+        result, saved = BenchmarkResultRecorder().record(
+            root,
+            case_ref=args.case_ref,
+            mode=args.mode,
+            session_ref=getattr(args, "session", None),
+            reply_ref=getattr(args, "reply", None),
+            manual_result_ref=getattr(args, "manual_result", None),
+            summary=getattr(args, "summary", None),
+            verdict=getattr(args, "verdict", None),
+        )
+        if getattr(args, "json_output", False):
+            print(json.dumps({"status": "recorded", "result": result.to_dict(), "saved_path": str(saved.resolve())}, indent=2, ensure_ascii=False))
+            return
+        print(render_attach_result(result, saved, root))
+        return
+
+    if command == "report":
+        report = BenchmarkReportBuilder().build(root, args.workset_name)
+        saved = None
+        if getattr(args, "save", False):
+            saved = store.save_report(report, report_path(root, report))
+        if getattr(args, "json_output", False):
+            payload = report.to_dict()
+            payload["saved_path"] = str(saved.resolve()) if saved else None
+            print(json.dumps(payload, indent=2, ensure_ascii=False))
+            return
+        print(render_report(report))
+        if saved is not None:
+            print("")
+            print("Saved:")
+            print(f"  {_relative_cli(saved, root)}")
+        return
+
+    if command == "baseline-save":
+        source_report = resolve_report_for_baseline(root, args.workset_name, getattr(args, "report", None))
+        snapshot = BenchmarkBaselineBuilder().from_report(source_report)
+        saved = BenchmarkBaselineStore().save(snapshot, baseline_path(root, snapshot))
+        if getattr(args, "json_output", False):
+            print(json.dumps({"status": "saved", "baseline": snapshot.to_dict(), "saved_path": str(saved.resolve())}, indent=2, ensure_ascii=False))
+            return
+        print(render_baseline_saved(snapshot, saved, root))
+        return
+
+    if command == "baselines":
+        baselines = BenchmarkBaselineStore().list(default_baselines_dir(root))
+        workset_name = getattr(args, "workset", None)
+        if workset_name:
+            baselines = [baseline for baseline in baselines if baseline.workset_name == workset_name]
+        if getattr(args, "json_output", False):
+            print(json.dumps({"baselines": [baseline.to_dict() for baseline in baselines]}, indent=2, ensure_ascii=False))
+            return
+        print(render_baselines(baselines))
+        return
+
+    if command == "compare":
+        baseline_ref = getattr(args, "against", None)
+        report = BenchmarkCompareBuilder().build(
+            root,
+            args.workset_name,
+            baseline_path=Path(baseline_ref) if baseline_ref else None,
+        )
+        saved = None
+        if getattr(args, "save", False):
+            saved = BenchmarkCompareStore().save(report, compare_path(root, report))
+        if getattr(args, "json_output", False):
+            payload = report.to_dict()
+            payload["saved_path"] = str(saved.resolve()) if saved else None
+            print(json.dumps(payload, indent=2, ensure_ascii=False))
+            return
+        print(render_compare_report(report))
+        if saved is not None:
+            print("")
+            print("Saved:")
+            print(f"  {_relative_cli(saved, root)}")
+        return
+
+    if command == "replay":
+        report = BenchmarkReplayRunner().run(root, args.case_ref, args.mode)
+        saved = None
+        result_saved = None
+        if getattr(args, "save", True):
+            saved = BenchmarkReplayStore().save(report, default_replay_path(root, report))
+        if getattr(args, "record_result", True):
+            replay_ref = _relative_cli(saved, root) if saved is not None else None
+            result_saved = save_replay_result(root, report, replay_ref)
+        if getattr(args, "json_output", False):
+            payload = report.to_dict()
+            payload["saved_path"] = str(saved.resolve()) if saved else None
+            payload["result_path"] = str(result_saved.resolve()) if result_saved else None
+            print(json.dumps(payload, indent=2, ensure_ascii=False))
+            return
+        print(
+            render_replay_report(
+                report,
+                saved_path=_relative_cli(saved, root) if saved is not None else None,
+                result_path=_relative_cli(result_saved, root) if result_saved is not None else None,
+            )
+        )
+        return
+
+    if command == "replay-show":
+        replay_path = resolve_replay_path(root, args.replay_ref)
+        report = BenchmarkReplayStore().load(replay_path)
+        if getattr(args, "json_output", False):
+            print(json.dumps(report.to_dict(), indent=2, ensure_ascii=False))
+            return
+        print(render_replay_report(report, saved_path=_relative_cli(replay_path, root)))
+        return
+
+    if command == "replays":
+        reports = BenchmarkReplayStore().list(default_replays_dir(root))
+        if getattr(args, "json_output", False):
+            print(json.dumps({"replays": [report.to_dict() for report in reports]}, indent=2, ensure_ascii=False))
+            return
+        print(render_replays(reports))
+        return
+
+    if command == "replay-workset":
+        report = WorksetReplayRunner().run(
+            root,
+            args.workset_name,
+            args.mode,
+            record_results=getattr(args, "record_results", True),
+        )
+        saved = None
+        if getattr(args, "save", True):
+            saved = WorksetReplayStore().save(report, default_workset_replay_path(root, report))
+        if getattr(args, "json_output", False):
+            payload = report.to_dict()
+            if saved is not None:
+                payload["saved_path"] = str(saved.resolve())
+            print(json.dumps(payload, indent=2, ensure_ascii=False))
+            return
+        print(render_workset_replay(report, saved_path=_relative_cli(saved, root) if saved is not None else None))
+        return
+
+    if command == "autonomy-board":
+        board = AutonomyEvidenceBoardBuilder().build(root, args.workset_name)
+        saved = None
+        if getattr(args, "save", False):
+            saved = AutonomyEvidenceBoardStore().save(board, default_autonomy_board_path(root, board))
+        if getattr(args, "json_output", False):
+            payload = board.to_dict()
+            if saved is not None:
+                payload["saved_path"] = str(saved.resolve())
+            print(json.dumps(payload, indent=2, ensure_ascii=False))
+            return
+        print(render_autonomy_board(board, saved_path=_relative_cli(saved, root) if saved is not None else None))
+        return
+
+    if command == "workset-replays":
+        reports = WorksetReplayStore().list(default_workset_replays_dir(root))
+        workset_name = getattr(args, "workset", None)
+        if workset_name:
+            reports = [report for report in reports if report.workset_name == workset_name]
+        if getattr(args, "json_output", False):
+            print(json.dumps({"workset_replays": [report.to_dict() for report in reports]}, indent=2, ensure_ascii=False))
+            return
+        if not reports:
+            print("Benchmark Workset Replays")
+            print("==================================================")
+            print("")
+            print("Recent:")
+            print("  none")
+            return
+        lines = [
+            "Benchmark Workset Replays",
+            "==================================================",
+            "",
+            "Recent:",
+        ]
+        for index, report in enumerate(reports[:20], start=1):
+            validated = report.summary.get("validated_proposal_rate")
+            validated_text = "n/a" if validated is None else f"{float(validated) * 100:.0f}%"
+            lines.append(f"  {index}. {report.workset_name} [{report.mode}] validated {validated_text}")
+        print("\n".join(lines))
+        return
+
+    if command == "proof":
+        report = BenchmarkProofBuilder().build(root, args.workset_name)
+        saved_yaml = None
+        saved_md = None
+        if getattr(args, "save", False):
+            save_format = getattr(args, "format", "both")
+            yaml_path = default_proof_yaml_path(root, report)
+            if save_format in {"yaml", "both"}:
+                saved_yaml = BenchmarkProofStore().save_yaml(report, yaml_path)
+            if save_format in {"md", "both"}:
+                if saved_yaml is None:
+                    saved_yaml = yaml_path
+                saved_md = BenchmarkProofStore().save_markdown(report, proof_markdown_path(saved_yaml))
+        if getattr(args, "json_output", False):
+            payload = report.to_dict()
+            payload["saved_yaml_path"] = str(saved_yaml.resolve()) if saved_yaml else None
+            payload["saved_markdown_path"] = str(saved_md.resolve()) if saved_md else None
+            print(json.dumps(payload, indent=2, ensure_ascii=False))
+            return
+        print(render_proof_pack(report))
+        if saved_yaml is not None or saved_md is not None:
+            print("")
+            print("Saved:")
+            if saved_yaml is not None:
+                print(f"  yaml: {_relative_cli(saved_yaml, root)}")
+            if saved_md is not None:
+                print(f"  md  : {_relative_cli(saved_md, root)}")
+        return
+
+    if command == "proof-show":
+        try:
+            proof_path = resolve_proof_path(root, str(getattr(args, "proof_ref")))
+            report = BenchmarkProofStore().load_yaml(proof_path)
+        except FileNotFoundError as exc:
+            print(f"Benchmark proof not found: {exc}", file=sys.stderr)
+            sys.exit(1)
+        if getattr(args, "json_output", False):
+            payload = report.to_dict()
+            payload["saved_path"] = _relative_cli(proof_path, root)
+            print(json.dumps(payload, indent=2, ensure_ascii=False))
+            return
+        print(render_proof_pack(report))
+        return
+
+    if command == "bottlenecks":
+        report = AutonomyBottleneckAnalyzer().build(root, args.workset_name, mode=args.mode)
+        saved = None
+        if getattr(args, "save", False):
+            saved = AutonomyBottleneckStore().save(report, default_bottleneck_report_path(root, report))
+        if getattr(args, "json_output", False):
+            payload = report.to_dict()
+            if saved is not None:
+                payload["saved_path"] = str(saved.resolve())
+            print(json.dumps(payload, indent=2, ensure_ascii=False))
+            return
+        print(render_bottleneck_report(report, saved_path=_relative_cli(saved, root) if saved is not None else None))
+        return
+
+    print("benchmark 하위 명령이 올바르지 않습니다.", file=sys.stderr)
+    sys.exit(1)
+
+
+def _relative_cli(path: Path, root: Path) -> str:
+    """CLI 출력용 상대 경로."""
+    try:
+        return str(path.resolve().relative_to(root.resolve())).replace("\\", "/")
+    except ValueError:
+        return str(path.resolve())
 
 
 def _handle_feedback(args: argparse.Namespace) -> None:
@@ -5217,6 +5796,51 @@ def _handle_init(args: argparse.Namespace) -> None:
         return
 
     print(render_init_summary(result))
+
+
+def _handle_metrics(args: argparse.Namespace) -> None:
+    """cambrian metrics 처리."""
+    from engine.project_metrics import (
+        ProjectMetricsBuilder,
+        ProjectMetricsStore,
+        default_weekly_metrics_path,
+        render_weekly_metrics,
+    )
+
+    command = getattr(args, "metrics_command", None)
+    if command != "week":
+        print("metrics 하위 명령이 올바르지 않습니다. 예: cambrian metrics week", file=sys.stderr)
+        sys.exit(1)
+
+    root = Path.cwd().resolve()
+    report = ProjectMetricsBuilder().build_week(
+        root,
+        start=getattr(args, "start", None),
+        end=getattr(args, "end", None),
+    )
+    saved_path: Path | None = None
+    if getattr(args, "save", False):
+        saved_path = ProjectMetricsStore().save(
+            report,
+            default_weekly_metrics_path(root, report.week_id),
+        )
+
+    if getattr(args, "json_output", False):
+        payload = report.to_dict()
+        payload["saved_path"] = str(saved_path.resolve()) if saved_path else None
+        print(json.dumps(payload, indent=2, ensure_ascii=False))
+        return
+
+    print(render_weekly_metrics(report))
+    if saved_path is not None:
+        try:
+            saved_ref = str(saved_path.resolve().relative_to(root)).replace("\\", "/")
+        except ValueError:
+            saved_ref = str(saved_path.resolve())
+        print("")
+        print("Saved:")
+        print(f"  {saved_ref}")
+
 
 
 def _handle_status(args: argparse.Namespace) -> None:

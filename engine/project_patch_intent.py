@@ -217,6 +217,12 @@ class PatchIntentForm:
     next_actions: list[str]
     next_commands: list[dict] = field(default_factory=list)
     memory_guidance: dict = field(default_factory=dict)
+    origin: str | None = None
+    source_bridge_reply_ref: str | None = None
+    source_bridge_packet_ref: str | None = None
+    source_request_ref: str | None = None
+    source_session_ref: str | None = None
+    bridge_prefill: dict = field(default_factory=dict)
 
     def to_dict(self) -> dict:
         """직렬화용 dict."""
@@ -284,6 +290,14 @@ class PatchIntentStore:
             next_actions=list(payload.get("next_actions", [])),
             memory_guidance=dict(payload.get("memory_guidance", {}))
             if isinstance(payload.get("memory_guidance"), dict)
+            else {},
+            origin=payload.get("origin"),
+            source_bridge_reply_ref=payload.get("source_bridge_reply_ref"),
+            source_bridge_packet_ref=payload.get("source_bridge_packet_ref"),
+            source_request_ref=payload.get("source_request_ref"),
+            source_session_ref=payload.get("source_session_ref"),
+            bridge_prefill=dict(payload.get("bridge_prefill", {}))
+            if isinstance(payload.get("bridge_prefill"), dict)
             else {},
         )
 
