@@ -14,9 +14,11 @@ import yaml
 
 from engine.project_clarifier import ClarificationSession, RunClarifier
 from engine.project_errors import hint_for_do_session, render_recovery_hint
+from engine.project_metrics import build_session_metrics_context
 from engine.project_next import NextCommandBuilder
 from engine.project_mode import ProjectRunPreparer
 from engine.project_router import ProjectSkillRouter
+from engine.project_win_lane import render_request_lane_fit
 
 logger = logging.getLogger(__name__)
 
@@ -151,6 +153,15 @@ class DoSession:
     summary: dict
     next_actions: list[str]
     next_commands: list[dict] = field(default_factory=list)
+    harness_context: dict = field(default_factory=dict)
+    agent_context: dict = field(default_factory=dict)
+    harness_policy_context: dict = field(default_factory=dict)
+    team_context: dict = field(default_factory=dict)
+    team_policy_context: dict = field(default_factory=dict)
+    template_context: dict = field(default_factory=dict)
+    win_lane_context: dict = field(default_factory=dict)
+    bridge_context: dict = field(default_factory=dict)
+    metrics_context: dict = field(default_factory=dict)
     continuations: list[dict] = field(default_factory=list)
     warnings: list[str] = field(default_factory=list)
     errors: list[str] = field(default_factory=list)
@@ -184,6 +195,15 @@ class DoSessionStore:
             summary=dict(payload.get("summary", {})) if isinstance(payload.get("summary"), dict) else {},
             next_actions=list(payload.get("next_actions", [])),
             next_commands=list(payload.get("next_commands", [])),
+            harness_context=dict(payload.get("harness_context", {})) if isinstance(payload.get("harness_context"), dict) else {},
+            agent_context=dict(payload.get("agent_context", {})) if isinstance(payload.get("agent_context"), dict) else {},
+            harness_policy_context=dict(payload.get("harness_policy_context", {})) if isinstance(payload.get("harness_policy_context"), dict) else {},
+            team_context=dict(payload.get("team_context", {})) if isinstance(payload.get("team_context"), dict) else {},
+            team_policy_context=dict(payload.get("team_policy_context", {})) if isinstance(payload.get("team_policy_context"), dict) else {},
+            template_context=dict(payload.get("template_context", {})) if isinstance(payload.get("template_context"), dict) else {},
+            win_lane_context=dict(payload.get("win_lane_context", {})) if isinstance(payload.get("win_lane_context"), dict) else {},
+            bridge_context=dict(payload.get("bridge_context", {})) if isinstance(payload.get("bridge_context"), dict) else {},
+            metrics_context=dict(payload.get("metrics_context", {})) if isinstance(payload.get("metrics_context"), dict) else {},
             continuations=list(payload.get("continuations", [])),
             warnings=list(payload.get("warnings", [])),
             errors=list(payload.get("errors", [])),
@@ -286,11 +306,13 @@ class ProjectDoRunner:
         test_paths = _dedupe([str(item) for item in options.get("tests", []) if item])
         execute = bool(options.get("execute", False))
         no_scan = bool(options.get("no_scan", False))
+        explicit_agent_id = str(options.get("agent") or "").strip() or None
 
+        session_created_at = _now()
         session = DoSession(
             schema_version="1.0.0",
             session_id=_session_id(),
-            created_at=_now(),
+            created_at=session_created_at,
             updated_at=None,
             user_request=request_text,
             project_initialized=False,
@@ -320,6 +342,15 @@ class ProjectDoRunner:
             },
             next_actions=[],
             next_commands=[],
+            harness_context={},
+            agent_context={},
+            harness_policy_context={},
+            team_context={},
+            team_policy_context={},
+            template_context={},
+            win_lane_context={},
+            bridge_context={},
+            metrics_context=build_session_metrics_context(session_created_at=session_created_at),
             continuations=[],
         )
 
@@ -397,13 +428,53 @@ class ProjectDoRunner:
             session.warnings.append("같은 요청의 열린 clarification을 재사용했습니다.")
             request_payload = self._load_request_payload(root, clarification_session.request_artifact_path)
         else:
-            base_result = self._preparer.prepare(
-                project_root=root,
-                user_request=request_text,
-                no_scan=no_scan,
-                execute=False,
-                dry_run=False,
-            )
+            try:
+                base_result = self._preparer.prepare(
+                    project_root=root,
+                    user_request=request_text,
+                    no_scan=no_scan,
+                    execute=False,
+                    dry_run=False,
+                    explicit_agent_id=explicit_agent_id,
+                )
+            except KeyError:
+                session.status = "blocked"
+                session.current_stage = "blocked"
+                session.errors.append(f"requested agent was not found: {explicit_agent_id}")
+                session.next_actions = [
+                    "cambrian agent list",
+                    f"cambrian agent recommend {_quote_arg(request_text)}",
+                ]
+                session.next_commands = NextCommandBuilder.from_actions(
+                    session.next_actions,
+                    stage="blocked",
+                )
+                self._append_continuation(
+                    session,
+                    action="do_requested",
+                    result="blocked",
+                )
+                self._save_session(root, session)
+                return session
+            except ValueError as exc:
+                session.status = "blocked"
+                session.current_stage = "blocked"
+                session.errors.append(str(exc))
+                session.next_actions = [
+                    "cambrian agent list",
+                    f"cambrian agent show {explicit_agent_id}",
+                ]
+                session.next_commands = NextCommandBuilder.from_actions(
+                    session.next_actions,
+                    stage="blocked",
+                )
+                self._append_continuation(
+                    session,
+                    action="do_requested",
+                    result="blocked",
+                )
+                self._save_session(root, session)
+                return session
             request_payload = self._load_request_payload(root, base_result.request_path)
             clarification_ref = (
                 str(base_result.clarification.get("artifact_path", "") or "")
@@ -421,6 +492,13 @@ class ProjectDoRunner:
                 Path(root / base_result.request_path).resolve()
                 if base_result is not None else None
             ),
+        )
+        self._refresh_metrics_context(
+            session=session,
+            source_paths=source_paths,
+            test_paths=test_paths,
+            use_suggestion=use_suggestion,
+            explicit_agent_id=explicit_agent_id,
         )
 
         if clarification_path is not None and wants_choice:
@@ -458,6 +536,34 @@ class ProjectDoRunner:
             request_payload=request_payload,
             clarification_session=clarification_session,
         )
+        if session.bridge_context:
+            hint = session.bridge_context.get("context_hint")
+            if isinstance(hint, dict):
+                session.summary["bridge_context_hint"] = hint
+        try:
+            from engine.project_pack_activation import apply_active_pack_to_do_session
+
+            apply_active_pack_to_do_session(root, session)
+        except Exception as exc:
+            logger.warning("active pack do context failed: %s", exc)
+        try:
+            from engine.project_improvement_interventions import (
+                active_intervention_summary,
+                intervention_metrics_context,
+            )
+            from engine.project_improvement_decisions import kept_improvements_summary
+
+            intervention = active_intervention_summary(root)
+            if intervention:
+                session.summary["improvement_intervention"] = intervention
+            kept = kept_improvements_summary(root)
+            if kept:
+                session.summary["kept_improvements"] = kept
+            metrics_payload = intervention_metrics_context(root)
+            if metrics_payload:
+                session.metrics_context.update(metrics_payload)
+        except Exception as exc:
+            logger.warning("improvement intervention summary failed: %s", exc)
 
         if session.status != "blocked":
             session.status = self._resolve_status(
@@ -561,6 +667,33 @@ class ProjectDoRunner:
             context_ref = request_payload.get("context_scan_path") or request_payload.get("context_scan_ref")
             if isinstance(context_ref, str) and context_ref:
                 session.artifacts["context_scan_path"] = context_ref
+            if isinstance(request_payload.get("harness_context"), dict):
+                session.harness_context = dict(request_payload.get("harness_context", {}))
+            if isinstance(request_payload.get("agent_context"), dict):
+                session.agent_context = dict(request_payload.get("agent_context", {}))
+            if isinstance(request_payload.get("harness_policy_context"), dict):
+                session.harness_policy_context = dict(request_payload.get("harness_policy_context", {}))
+            if isinstance(request_payload.get("team_context"), dict):
+                session.team_context = dict(request_payload.get("team_context", {}))
+            if isinstance(request_payload.get("team_policy_context"), dict):
+                session.team_policy_context = dict(request_payload.get("team_policy_context", {}))
+            if isinstance(request_payload.get("template_context"), dict):
+                session.template_context = dict(request_payload.get("template_context", {}))
+            if isinstance(request_payload.get("win_lane_context"), dict):
+                session.win_lane_context = dict(request_payload.get("win_lane_context", {}))
+        try:
+            from engine.project_bridge_context import relevant_bridge_context_hint_summary
+
+            hint = relevant_bridge_context_hint_summary(project_root, session.user_request)
+        except Exception as exc:
+            logger.warning("bridge context hint summary failed: %s", exc)
+            hint = {}
+        if hint and int(hint.get("hint_count", 0) or 0) > 0:
+            session.bridge_context = {
+                "context_hint": hint,
+                "source": "bridge_analysis",
+            }
+            session.summary["bridge_context_hint"] = hint
 
     @staticmethod
     def _build_summary(
@@ -728,6 +861,55 @@ class ProjectDoRunner:
         session.current_stage = _current_stage_from_status(session.status)
         self._store.save(project_root, session)
 
+    @staticmethod
+    def _refresh_metrics_context(
+        *,
+        session: DoSession,
+        source_paths: list[str],
+        test_paths: list[str],
+        use_suggestion,
+        explicit_agent_id: str | None,
+    ) -> None:
+        """do session의 운영 계측 필드를 최신 컨텍스트로 갱신한다."""
+        lead_agent_id = ""
+        if isinstance(session.agent_context, dict):
+            lead_agent_id = str(session.agent_context.get("lead_agent_id", "") or "")
+        team_id = ""
+        if isinstance(session.team_context, dict):
+            active_team = session.team_context.get("active_team")
+            best_team = session.team_context.get("best_team")
+            if isinstance(active_team, dict):
+                team_id = str(active_team.get("team_id") or active_team.get("name") or "")
+            elif isinstance(best_team, dict):
+                team_id = str(best_team.get("team_id") or best_team.get("name") or "")
+        template_name = ""
+        if isinstance(session.template_context, dict):
+            for key in ("current_template_name", "template_name", "selected_template_name", "name"):
+                if session.template_context.get(key):
+                    template_name = str(session.template_context.get(key))
+                    break
+        metrics = build_session_metrics_context(
+            session_created_at=session.created_at,
+            lead_agent_id=lead_agent_id or None,
+            team_id=team_id or None,
+            template_name=template_name or None,
+            existing=session.metrics_context,
+        )
+        human = metrics.setdefault("human_interventions", {})
+        human["source_selected_manually"] = bool(source_paths or use_suggestion is not None)
+        human["test_selected_manually"] = bool(test_paths)
+        human["explicit_agent_override"] = bool(explicit_agent_id)
+        if isinstance(session.bridge_context, dict) and session.bridge_context:
+            human["bridge_manual_ingest"] = bool(session.bridge_context.get("enabled") or session.bridge_context.get("context_hint"))
+        if isinstance(session.template_context, dict):
+            if session.template_context.get("canary_stage_id"):
+                metrics["canary_stage_id"] = session.template_context.get("canary_stage_id")
+            if session.template_context.get("template_selection_source"):
+                metrics["template_selection_source"] = session.template_context.get("template_selection_source")
+            if session.template_context.get("source_kind"):
+                metrics["template_source_kind"] = session.template_context.get("source_kind")
+        session.metrics_context = metrics
+
 
 def render_do_summary(session: DoSession | dict) -> str:
     """do 세션 결과를 사람이 읽기 쉽게 렌더링한다."""
@@ -763,10 +945,131 @@ def render_do_summary(session: DoSession | dict) -> str:
     if not payload.get("selected_skills"):
         lines.append("  - none")
     remembered = list(summary.get("remembered", []))
+    harness_context = payload.get("harness_context", {}) if isinstance(payload.get("harness_context"), dict) else {}
+    agent_context = payload.get("agent_context", {}) if isinstance(payload.get("agent_context"), dict) else {}
+    harness_policy_context = payload.get("harness_policy_context", {}) if isinstance(payload.get("harness_policy_context"), dict) else {}
+    team_context = payload.get("team_context", {}) if isinstance(payload.get("team_context"), dict) else {}
+    team_policy_context = payload.get("team_policy_context", {}) if isinstance(payload.get("team_policy_context"), dict) else {}
+    template_context = payload.get("template_context", {}) if isinstance(payload.get("template_context"), dict) else {}
+    win_lane_context = payload.get("win_lane_context", {}) if isinstance(payload.get("win_lane_context"), dict) else {}
     if remembered:
         lines.extend(["", "Remembered:"])
         for item in remembered[:3]:
             lines.append(f"  - {item}")
+    active_agents = list(harness_context.get("active_agents", [])) if isinstance(harness_context, dict) else []
+    if active_agents:
+        lines.extend(["", "Active agents:"])
+        for agent_id in active_agents:
+            lines.append(f"  - {agent_id}")
+    lead_agent_id = str(agent_context.get("lead_agent_id", "") or "")
+    supporting_agent_ids = [str(item) for item in agent_context.get("supporting_agent_ids", []) if item]
+    route_details = [
+        item
+        for item in agent_context.get("routes", [])
+        if isinstance(item, dict)
+    ]
+    if lead_agent_id:
+        lines.extend(["", "Lead agent:", f"  {lead_agent_id}"])
+    if supporting_agent_ids:
+        lines.extend(["", "Supporting agents:"])
+        for agent_id in supporting_agent_ids:
+            lines.append(f"  - {agent_id}")
+    policy_hints = [str(item) for item in harness_policy_context.get("applied_hints", []) if item] if isinstance(harness_policy_context, dict) else []
+    if policy_hints:
+        lines.extend(["", "Harness policy:"])
+        for item in policy_hints[:5]:
+            lines.append(f"  - {item}")
+    best_team = team_context.get("best_team") if isinstance(team_context, dict) else None
+    if isinstance(best_team, dict) and best_team.get("name"):
+        lines.extend(["", "Team hint:", f"  {best_team.get('name')} matches this request"])
+    policy_hints_for_team = [str(item) for item in team_policy_context.get("applied_hints", []) if item] if isinstance(team_policy_context, dict) else []
+    if policy_hints_for_team:
+        lines.extend(["", "Accepted team policy:"])
+        for item in policy_hints_for_team[:5]:
+            lines.append(f"  - {item}")
+    template_hints = [str(item) for item in template_context.get("applied_hints", []) if item] if isinstance(template_context, dict) else []
+    if template_hints:
+        lines.extend(["", "Harness template:"])
+        for item in template_hints[:3]:
+            lines.append(f"  - {item}")
+    if win_lane_context:
+        lines.extend(["", render_request_lane_fit(win_lane_context)])
+    active_pack_context = summary.get("active_pack_context") if isinstance(summary.get("active_pack_context"), dict) else {}
+    if active_pack_context:
+        lines.extend(
+            [
+                "",
+                "Active pack context:",
+                f"  pack    : {active_pack_context.get('pack_id') or 'unknown'}",
+                f"  team    : {active_pack_context.get('team') or 'none'}",
+                f"  template: {active_pack_context.get('template') or 'none'}",
+            ]
+        )
+        fit = str(summary.get("active_pack_fit") or "")
+        if fit:
+            lines.append(f"  fit     : {fit}")
+    bridge_hint = summary.get("bridge_context_hint") if isinstance(summary.get("bridge_context_hint"), dict) else {}
+    if bridge_hint:
+        files = ", ".join(bridge_hint.get("recommended_files", [])[:3]) or "none"
+        tests = ", ".join(bridge_hint.get("recommended_tests", [])[:3]) or "none"
+        lines.extend([
+            "",
+            "Bridge hint:",
+            f"  AI analysis suggested {files} / {tests} for this request",
+        ])
+    intervention_hint = summary.get("improvement_intervention") if isinstance(summary.get("improvement_intervention"), dict) else {}
+    if intervention_hint:
+        effects: list[str] = []
+        if intervention_hint.get("test_first_bias"):
+            effects.append("test-first")
+        if intervention_hint.get("narrow_scope_bias"):
+            effects.append("narrow-scope")
+        if intervention_hint.get("review_support_bias"):
+            effects.append("review-support")
+        if intervention_hint.get("preferred_context_paths"):
+            effects.append("context paths")
+        lines.extend([
+            "",
+            "Improvement intervention:",
+            f"  active: {intervention_hint.get('kind') or intervention_hint.get('active_intervention_id') or 'unknown'}",
+        ])
+        if effects:
+            lines.append(f"  hints : {', '.join(effects)}")
+    kept_hint = summary.get("kept_improvements") if isinstance(summary.get("kept_improvements"), dict) else {}
+    if kept_hint:
+        kept_effects: list[str] = []
+        if kept_hint.get("test_first_bias"):
+            kept_effects.append("test-first")
+        if kept_hint.get("narrow_scope_bias"):
+            kept_effects.append("narrow-scope")
+        if kept_hint.get("review_support_bias"):
+            kept_effects.append("review-support")
+        if kept_hint.get("preferred_context_paths"):
+            kept_effects.append("context paths")
+        lines.extend([
+            "",
+            "Kept improvement:",
+            f"  active: {', '.join(kept_hint.get('kept_fix_kinds', [])[:3]) or 'persistent overlay'}",
+        ])
+        if kept_effects:
+            lines.append(f"  hints : {', '.join(kept_effects)}")
+    team_decisions = team_context.get("decision_summary") if isinstance(team_context, dict) else None
+    if isinstance(team_decisions, dict):
+        accepted_hints = list(team_decisions.get("accepted_hints", []) if isinstance(team_decisions.get("accepted_hints"), list) else [])
+        backup_teams = list(team_decisions.get("backup_teams", []) if isinstance(team_decisions.get("backup_teams"), list) else [])
+        if accepted_hints:
+            lines.extend(["", "Team staffing note:", f"  {accepted_hints[-1]}"])
+        if backup_teams:
+            lines.extend(["", "Backup team:", f"  {backup_teams[-1]}"])
+    lead_route = next(
+        (item for item in route_details if str(item.get("agent_id", "")) == lead_agent_id),
+        None,
+    )
+    lead_reasons = list(lead_route.get("reasons", [])) if isinstance(lead_route, dict) else []
+    if lead_reasons:
+        lines.extend(["", "Why:"])
+        for reason in lead_reasons[:3]:
+            lines.append(f"  - {reason}")
 
     found_source = ", ".join(summary.get("selected_sources", []) or summary.get("found_sources", [])) or "none"
     found_test = ", ".join(summary.get("selected_tests", []) or summary.get("found_tests", [])) or "none"

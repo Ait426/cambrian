@@ -148,6 +148,7 @@ class SessionTimeline:
     errors: list[str]
     selected_sources: list[str] = field(default_factory=list)
     selected_tests: list[str] = field(default_factory=list)
+    agent_context: dict = field(default_factory=dict)
     artifact_path: str | None = None
 
     def to_dict(self) -> dict:
@@ -164,6 +165,7 @@ class SessionTimeline:
             "errors": list(self.errors),
             "selected_sources": list(self.selected_sources),
             "selected_tests": list(self.selected_tests),
+            "agent_context": dict(self.agent_context),
             "artifact_path": self.artifact_path,
         }
 
@@ -323,6 +325,7 @@ class ProjectTimelineReader:
                 next_actions=[],
                 warnings=[f"session을 읽을 수 없습니다: {session_path.name}"],
                 errors=[],
+                agent_context={},
                 artifact_path=_relative(session_path, project_root),
             )
 
@@ -332,6 +335,7 @@ class ProjectTimelineReader:
         selected_sources = list(summary.get("selected_sources", []) or summary.get("found_sources", []))
         selected_tests = list(summary.get("selected_tests", []) or summary.get("found_tests", []))
         next_actions = list(payload.get("next_actions", []))
+        agent_context = dict(payload.get("agent_context", {})) if isinstance(payload.get("agent_context"), dict) else {}
 
         events: list[TimelineEvent] = []
         request_event = self._build_request_event(project_root, payload, artifacts, warnings)
@@ -379,6 +383,7 @@ class ProjectTimelineReader:
             errors=list(payload.get("errors", [])),
             selected_sources=_dedupe([str(item) for item in selected_sources if item]),
             selected_tests=_dedupe([str(item) for item in selected_tests if item]),
+            agent_context=agent_context,
             artifact_path=_relative(session_path, project_root),
         )
 

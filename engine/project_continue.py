@@ -19,6 +19,7 @@ from engine.project_do import (
     _quote_arg,
 )
 from engine.project_errors import hint_for_continue_session, render_recovery_hint
+from engine.project_metrics import build_session_metrics_context
 from engine.project_next import NextCommandBuilder
 from engine.project_patch import PatchIntent, PatchProposalBuilder
 from engine.project_patch_apply import PatchApplier
@@ -252,9 +253,90 @@ class ProjectDoContinuationRunner:
             return self._build_missing_session(root, str(exc))
 
         session = self._store.load(session_path)
+        self._refresh_metrics_context(session)
+        if not isinstance(getattr(session, "harness_policy_context", None), dict) or not session.harness_policy_context:
+            try:
+                from engine.project_harness_policy import (
+                    build_and_save_policy_overlay,
+                    policy_context_from_overlay,
+                )
+
+                policy_overlay, policy_path = build_and_save_policy_overlay(root)
+                session.harness_policy_context = policy_context_from_overlay(policy_overlay, root, policy_path)
+            except Exception as exc:
+                session.warnings.append(f"harness policy overlay build failed: {exc}")
+        if not isinstance(getattr(session, "team_context", None), dict) or not session.team_context:
+            try:
+                from engine.project_teams import TeamRecommendationBuilder
+
+                session.team_context = TeamRecommendationBuilder().recommend(root, request=session.user_request)
+            except Exception as exc:
+                session.warnings.append(f"team recommendation failed: {exc}")
+        if not isinstance(getattr(session, "team_policy_context", None), dict) or not session.team_policy_context:
+            try:
+                from engine.project_team_policy import team_policy_context as build_team_policy_context
+
+                session.team_policy_context = build_team_policy_context(root)
+            except Exception as exc:
+                session.warnings.append(f"team policy overlay failed: {exc}")
+        if not isinstance(getattr(session, "template_context", None), dict) or not session.template_context:
+            try:
+                from engine.project_templates import template_context as build_template_context
+
+                session.template_context = build_template_context(root)
+            except Exception as exc:
+                session.warnings.append(f"template context load failed: {exc}")
         active_paths = self._store.list_active_paths(root)
         if session_ref is None and len(active_paths) > 1:
             session.warnings.append("열린 work session이 여러 개라서 가장 최근 session을 이어갑니다.")
+
+        explicit_agent_id = str(options.get("agent") or "").strip() or None
+        if explicit_agent_id:
+            self._mark_human_intervention(session, "explicit_agent_override")
+            from engine.project_agent_router import HarnessAwareAgentRouter
+
+            try:
+                routed_agents = HarnessAwareAgentRouter().route(
+                    user_request=session.user_request,
+                    project_root=root,
+                    explicit_agent_id=explicit_agent_id,
+                    prior_session_agent_context=session.agent_context,
+                )
+            except KeyError:
+                session.status = "blocked"
+                session.current_stage = "blocked"
+                session.errors = [f"requested agent was not found: {explicit_agent_id}"]
+                session.next_actions = [
+                    "cambrian agent list",
+                    f"cambrian agent recommend {_quote_arg(session.user_request)}",
+                ]
+                session.next_commands = NextCommandBuilder.from_actions(
+                    list(session.next_actions),
+                    stage="blocked",
+                )
+                self._store.save(root, session)
+                return session
+            except ValueError as exc:
+                session.status = "blocked"
+                session.current_stage = "blocked"
+                session.errors = [str(exc)]
+                session.next_actions = [
+                    "cambrian agent list",
+                    f"cambrian agent show {explicit_agent_id}",
+                ]
+                session.next_commands = NextCommandBuilder.from_actions(
+                    list(session.next_actions),
+                    stage="blocked",
+                )
+                self._store.save(root, session)
+                return session
+            session.agent_context = routed_agents.to_dict()
+        elif isinstance(session.agent_context, dict) and session.agent_context.get("lead_agent_id"):
+            session.agent_context = {
+                **dict(session.agent_context),
+                "selected_via": "session_carryover",
+            }
+        self._refresh_metrics_context(session)
 
         plan = self._planner.plan(session, root, options)
         stage = str(plan["stage"])
@@ -284,6 +366,13 @@ class ProjectDoContinuationRunner:
             session.next_actions = list(plan["next_commands"])
 
         self._refresh_summary(session, root)
+        self._attach_bridge_checklist_hint(session, root)
+        try:
+            from engine.project_pack_activation import apply_active_pack_to_do_session
+
+            apply_active_pack_to_do_session(root, session)
+        except Exception as exc:
+            logger.warning("active pack continue context failed: %s", exc)
         if not session.next_actions:
             refreshed_plan = self._planner.plan(session, root, options)
             session.next_actions = list(refreshed_plan["next_commands"])
@@ -309,6 +398,10 @@ class ProjectDoContinuationRunner:
         use_suggestion = options.get("use_suggestion")
         execute = bool(options.get("execute", False))
         has_answer = bool(sources or tests or use_suggestion is not None)
+        if sources or use_suggestion is not None:
+            self._mark_human_intervention(session, "source_selected_manually")
+        if tests:
+            self._mark_human_intervention(session, "test_selected_manually")
 
         clarification = self._clarifier.load(clarification_path)
         if has_answer:
@@ -347,6 +440,8 @@ class ProjectDoContinuationRunner:
             session.artifacts["report_path"] = execution.get("report_path")
             session.status = "diagnosed" if execution.get("status") == "completed" else "error"
             session.current_stage = "diagnosed" if execution.get("status") == "completed" else "error"
+            if execution.get("status") == "completed":
+                self._mark_milestone(session, "diagnosed_at")
             session.continuations.append(
                 {
                     "at": _now(),
@@ -397,8 +492,41 @@ class ProjectDoContinuationRunner:
                 options.get("new_text_file") is not None,
             ]
         )
+        explicit_old_override = any(
+            [
+                options.get("old_choice") is not None,
+                options.get("old_text") is not None,
+                options.get("old_text_file") is not None,
+            ]
+        )
+        explicit_new_override = any(
+            [
+                options.get("new_text") is not None,
+                options.get("new_text_file") is not None,
+            ]
+        )
         form = self._intent_store.load(intent_path)
+        bridge_prefill = dict(form.bridge_prefill or {})
+        if not bridge_prefill and isinstance(form.memory_guidance, dict) and isinstance(form.memory_guidance.get("bridge_prefill"), dict):
+            bridge_prefill = dict(form.memory_guidance.get("bridge_prefill", {}))
+        if (
+            not has_fill
+            and bool(options.get("validate") or options.get("propose") or options.get("execute"))
+            and bridge_prefill.get("enabled")
+            and form.old_text_candidates
+            and form.new_text is not None
+        ):
+            has_fill = True
+            options = {
+                **dict(options),
+                "old_choice": form.old_text_candidates[0].id,
+                "new_text": form.new_text,
+            }
         if has_fill:
+            if explicit_old_override:
+                self._mark_human_intervention(session, "old_text_overridden")
+            if explicit_new_override:
+                self._mark_human_intervention(session, "new_text_overridden")
             form = self._intent_filler.fill(
                 intent_path=intent_path,
                 old_choice=options.get("old_choice"),
@@ -422,6 +550,7 @@ class ProjectDoContinuationRunner:
         if form.status == "ready_for_proposal":
             session.status = "patch_intent_ready"
             session.current_stage = "patch_intent_ready"
+            self._mark_milestone(session, "patch_intent_ready_at")
             if options.get("propose") or options.get("validate") or options.get("execute"):
                 self._continue_patch_intent_ready(session, project_root, options)
                 return
@@ -493,6 +622,9 @@ class ProjectDoContinuationRunner:
         if str(validation.get("status", "")) == "passed":
             session.status = "patch_proposal_validated"
             session.current_stage = "patch_proposal_validated"
+            self._mark_milestone(session, "proposal_validated_at")
+            self._mark_result(session, "validated_proposal", True)
+            session.metrics_context["validation_path"] = "continue"
         else:
             session.status = "patch_proposal_ready"
             session.current_stage = "patch_proposal_ready"
@@ -544,6 +676,9 @@ class ProjectDoContinuationRunner:
         if str((proposal.validation or {}).get("status", "")) == "passed":
             session.status = "patch_proposal_validated"
             session.current_stage = "patch_proposal_validated"
+            self._mark_milestone(session, "proposal_validated_at")
+            self._mark_result(session, "validated_proposal", True)
+            session.metrics_context["validation_path"] = "continue"
         else:
             session.status = "patch_proposal_ready"
             session.current_stage = "patch_proposal_ready"
@@ -584,6 +719,9 @@ class ProjectDoContinuationRunner:
             session.artifacts["adoption_record_path"] = result.adoption_record_path
             session.status = "adopted"
             session.current_stage = "adopted"
+            self._mark_milestone(session, "applied_at")
+            self._mark_result(session, "adoption_succeeded", True)
+            self._mark_result(session, "apply_tests_passed", self._post_apply_passed(result.post_apply_tests))
             session.continuations.append(
                 {
                     "at": _now(),
@@ -601,6 +739,80 @@ class ProjectDoContinuationRunner:
         session.current_stage = "patch_proposal_validated"
         session.errors.extend(item for item in result.reasons if item not in session.errors)
         session.next_actions = [_continue_command(session, '--apply --reason "fix login normalization"')]
+
+    @staticmethod
+    def _refresh_metrics_context(session: DoSession) -> None:
+        """session의 최신 routing/team/template 정보를 metrics_context에 반영한다."""
+        existing = session.metrics_context if isinstance(session.metrics_context, dict) else {}
+        agent_context = session.agent_context if isinstance(session.agent_context, dict) else {}
+        team_context = session.team_context if isinstance(session.team_context, dict) else {}
+        template_context = session.template_context if isinstance(session.template_context, dict) else {}
+        bridge_context = session.bridge_context if isinstance(session.bridge_context, dict) else {}
+        active_team = team_context.get("active_team") if isinstance(team_context.get("active_team"), dict) else {}
+        best_team = team_context.get("best_team") if isinstance(team_context.get("best_team"), dict) else {}
+        session.metrics_context = build_session_metrics_context(
+            session_created_at=session.created_at or _now(),
+            lead_agent_id=str(agent_context.get("lead_agent_id") or "") or None,
+            team_id=str(
+                active_team.get("team_id")
+                or best_team.get("team_id")
+                or team_context.get("active_team_id")
+                or ""
+            )
+            or None,
+            template_name=str(
+                template_context.get("current_template_name")
+                or template_context.get("template_name")
+                or template_context.get("selected_template_name")
+                or template_context.get("name")
+                or ""
+            )
+            or None,
+            existing=existing,
+        )
+        if bridge_context.get("enabled") or bridge_context.get("source_mode") == "bridge":
+            session.metrics_context["source_mode"] = "bridge"
+            human = session.metrics_context.setdefault("human_interventions", {})
+            if isinstance(human, dict):
+                human["bridge_manual_ingest"] = True
+        if template_context.get("canary_stage_id"):
+            session.metrics_context["canary_stage_id"] = template_context.get("canary_stage_id")
+        if template_context.get("template_selection_source"):
+            session.metrics_context["template_selection_source"] = template_context.get("template_selection_source")
+        if template_context.get("source_kind"):
+            session.metrics_context["template_source_kind"] = template_context.get("source_kind")
+
+    @classmethod
+    def _mark_human_intervention(cls, session: DoSession, key: str) -> None:
+        cls._refresh_metrics_context(session)
+        human = session.metrics_context.setdefault("human_interventions", {})
+        if isinstance(human, dict):
+            human[key] = True
+
+    @classmethod
+    def _mark_milestone(cls, session: DoSession, key: str) -> None:
+        cls._refresh_metrics_context(session)
+        milestones = session.metrics_context.setdefault("milestones", {})
+        if isinstance(milestones, dict) and not milestones.get(key):
+            milestones[key] = _now()
+
+    @classmethod
+    def _mark_result(cls, session: DoSession, key: str, value: bool) -> None:
+        cls._refresh_metrics_context(session)
+        results = session.metrics_context.setdefault("results", {})
+        if isinstance(results, dict):
+            results[key] = bool(value)
+
+    @staticmethod
+    def _post_apply_passed(post_apply_tests: dict | None) -> bool:
+        if not isinstance(post_apply_tests, dict):
+            return False
+        try:
+            exit_code = int(post_apply_tests.get("exit_code", -1) if post_apply_tests.get("exit_code") is not None else -1)
+            failed = int(post_apply_tests.get("failed", 0) if post_apply_tests.get("failed") is not None else 0)
+        except (TypeError, ValueError):
+            return False
+        return exit_code == 0 and failed == 0
 
     def _ensure_patch_intent(self, session: DoSession, project_root: Path) -> Path | None:
         """diagnosis report에서 patch intent artifact를 보장한다."""
@@ -715,6 +927,18 @@ class ProjectDoContinuationRunner:
 
         session.summary = summary
 
+    def _attach_bridge_checklist_hint(self, session: DoSession, project_root: Path) -> None:
+        """연결된 bridge checklist의 다음 step을 continue 출력용 summary에 붙인다."""
+        try:
+            from engine.project_bridge_checklists import bridge_checklist_hint_for_session
+
+            hint = bridge_checklist_hint_for_session(project_root, session.session_id)
+        except Exception as exc:
+            logger.warning("bridge checklist hint load failed: %s", exc)
+            return
+        if hint:
+            session.summary["bridge_checklist"] = hint
+
     def _build_missing_session(self, project_root: Path, message: str) -> DoSession:
         """active session이 없을 때 보여줄 가짜 session 결과."""
         return DoSession(
@@ -792,6 +1016,39 @@ def render_do_continue_summary(session: DoSession | dict) -> str:
         f"  source: {', '.join(summary.get('selected_sources', []) or summary.get('found_sources', [])) or 'none'}",
         f"  test  : {', '.join(summary.get('selected_tests', []) or summary.get('found_tests', [])) or 'none'}",
     ]
+    agent_context = payload.get("agent_context", {}) if isinstance(payload.get("agent_context"), dict) else {}
+    lead_agent_id = str(agent_context.get("lead_agent_id", "") or "")
+    supporting_agent_ids = [str(item) for item in agent_context.get("supporting_agent_ids", []) if item]
+    if lead_agent_id:
+        lines.append(f"  lead  : {lead_agent_id}")
+    if supporting_agent_ids:
+        lines.append("  support:")
+        for agent_id in supporting_agent_ids:
+            lines.append(f"    - {agent_id}")
+    team_policy_context = payload.get("team_policy_context", {}) if isinstance(payload.get("team_policy_context"), dict) else {}
+    team_policy_hints = [str(item) for item in team_policy_context.get("applied_hints", []) if item]
+    if team_policy_hints:
+        lines.extend(["", "Accepted team policy still in effect:"])
+        for item in team_policy_hints[:3]:
+            lines.append(f"  - {item}")
+    template_context = payload.get("template_context", {}) if isinstance(payload.get("template_context"), dict) else {}
+    template_hints = [str(item) for item in template_context.get("applied_hints", []) if item]
+    if template_hints:
+        lines.extend(["", "Harness template still in effect:"])
+        for item in template_hints[:2]:
+            lines.append(f"  - {item}")
+
+    bridge_checklist = summary.get("bridge_checklist") if isinstance(summary.get("bridge_checklist"), dict) else {}
+    if bridge_checklist:
+        lines.extend(["", "Bridge plan step:"])
+        if bridge_checklist.get("overall_status") == "blocked":
+            lines.append(f"  blocked at {bridge_checklist.get('next_step_id') or 'step'}")
+            if bridge_checklist.get("blocked_note"):
+                lines.append(f"  note: {bridge_checklist.get('blocked_note')}")
+        elif bridge_checklist.get("next_step_text"):
+            lines.append(f"  {bridge_checklist.get('next_step_text')}")
+        else:
+            lines.append(f"  {bridge_checklist.get('overall_status') or 'open'}")
 
     if summary.get("diagnosis_result"):
         lines.append(f"  result: {summary.get('diagnosis_result')}")

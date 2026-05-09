@@ -440,83 +440,499 @@ def main() -> None:
 
     harness_parser = subparsers.add_parser(
         "harness",
-        help="Custom harness plan and install commands",
+        help="고급: project operating profile 관리",
         parents=[common_parser],
     )
-    harness_subparsers = harness_parser.add_subparsers(dest="harness_command", help="harness subcommand")
-    harness_plan_parser = harness_subparsers.add_parser("plan", help="Build harness plan", parents=[common_parser])
-    harness_plan_parser.add_argument("--seed-preset", default=None, dest="seed_preset", help="Reference preset")
-    harness_plan_parser.add_argument("--json", action="store_true", dest="json_output", help="JSON output")
-    harness_design_parser = harness_subparsers.add_parser("design", help="Build harness plan alias", parents=[common_parser])
-    harness_design_parser.add_argument("--seed-preset", default=None, dest="seed_preset", help="Reference preset")
-    harness_design_parser.add_argument("--json", action="store_true", dest="json_output", help="JSON output")
-    harness_install_parser = harness_subparsers.add_parser("install", help="Install harness", parents=[common_parser])
-    harness_install_parser.add_argument("--confirm", action="store_true", help="Confirm install")
-    harness_install_parser.add_argument("--seed-preset", default=None, dest="seed_preset", help="Reference preset")
-    harness_install_parser.add_argument("--json", action="store_true", dest="json_output", help="JSON output")
+    harness_subparsers = harness_parser.add_subparsers(
+        dest="harness_command",
+        help="harness ?섏쐞 紐낅졊",
+    )
+    harness_fit_parser = harness_subparsers.add_parser(
+        "fit",
+        help="?꾨줈?앺듃 ?섎꽕??留욎텣怨?agent registry ?앹꽦",
+        parents=[common_parser],
+    )
+    harness_fit_parser.add_argument("--json", action="store_true", dest="json_output", help="JSON 異쒕젰")
+    harness_show_parser = harness_subparsers.add_parser(
+        "show",
+        help="?꾩옱 harness profile 蹂닿린",
+        parents=[common_parser],
+    )
+    harness_show_parser.add_argument("--json", action="store_true", dest="json_output", help="JSON 異쒕젰")
+    harness_doctor_parser = harness_subparsers.add_parser(
+        "doctor",
+        help="harness source refs? active agent ?곹깭 ?먭?",
+        parents=[common_parser],
+    )
+    harness_doctor_parser.add_argument("--json", action="store_true", dest="json_output", help="JSON 異쒕젰")
 
-    interview_parser = harness_subparsers.add_parser("interview", help="Harness interview", parents=[common_parser])
-    interview_subparsers = interview_parser.add_subparsers(dest="interview_command", help="interview subcommand")
-    interview_start_parser = interview_subparsers.add_parser("start", help="Create interview questions", parents=[common_parser])
-    interview_start_parser.add_argument("--json", action="store_true", dest="json_output", help="JSON output")
-    interview_answer_parser = interview_subparsers.add_parser("answer", help="Apply interview answers", parents=[common_parser])
-    interview_answer_parser.add_argument("--answers", required=True, help="answers.yaml path")
-    interview_answer_parser.add_argument("--json", action="store_true", dest="json_output", help="JSON output")
+    harness_plan_parser = harness_subparsers.add_parser(
+        "plan",
+        help="인터뷰 답변 기반 custom harness plan을 만든다",
+        parents=[common_parser],
+    )
+    harness_plan_parser.add_argument("--seed-preset", default=None, help="선택 참고용 preset id")
+    harness_plan_parser.add_argument("--json", action="store_true", dest="json_output", help="JSON 출력")
+    harness_design_parser = harness_subparsers.add_parser(
+        "design",
+        help="인터뷰 답변 기반 custom harness design을 만든다",
+        parents=[common_parser],
+    )
+    harness_design_parser.add_argument("--seed-preset", default=None, help="선택 참고용 preset id")
+    harness_design_parser.add_argument("--json", action="store_true", dest="json_output", help="JSON 출력")
+    harness_install_parser = harness_subparsers.add_parser(
+        "install",
+        help="승인된 custom harness plan을 설치한다",
+        parents=[common_parser],
+    )
+    harness_install_parser.add_argument("--confirm", action="store_true", help="검토한 plan 설치를 승인한다")
+    harness_install_parser.add_argument("--seed-preset", default=None, help="선택 참고용 preset id")
+    harness_install_parser.add_argument("--json", action="store_true", dest="json_output", help="JSON 출력")
 
-    engineer_parser = harness_subparsers.add_parser("engineer", help="Pre-install engineering gate", parents=[common_parser])
-    engineer_subparsers = engineer_parser.add_subparsers(dest="engineer_command", help="engineer subcommand")
-    engineer_design_parser = engineer_subparsers.add_parser("design", help="Create design candidate", parents=[common_parser])
-    engineer_design_parser.add_argument("--json", action="store_true", dest="json_output", help="JSON output")
-    engineer_review_parser = engineer_subparsers.add_parser("review", help="Review design candidate", parents=[common_parser])
-    engineer_review_parser.add_argument("--json", action="store_true", dest="json_output", help="JSON output")
-    engineer_dry_run_parser = engineer_subparsers.add_parser("dry-run", help="Dry-run design candidate", parents=[common_parser])
-    engineer_dry_run_parser.add_argument("request", help="Request to validate")
-    engineer_dry_run_parser.add_argument("--json", action="store_true", dest="json_output", help="JSON output")
+    harness_engineer_parser = harness_subparsers.add_parser(
+        "engineer",
+        help="설치 전 하네스 설계 품질 검수와 dry-run",
+        parents=[common_parser],
+    )
+    harness_engineer_subparsers = harness_engineer_parser.add_subparsers(
+        dest="harness_engineer_command",
+        help="engineer 하위 명령",
+    )
+    harness_engineer_design_parser = harness_engineer_subparsers.add_parser(
+        "design",
+        help="profile과 interview answers로 설계 후보를 만든다",
+        parents=[common_parser],
+    )
+    harness_engineer_design_parser.add_argument("--seed-preset", default=None, help="선택 참고용 preset id")
+    harness_engineer_design_parser.add_argument("--json", action="store_true", dest="json_output", help="JSON 출력")
+    harness_engineer_review_parser = harness_engineer_subparsers.add_parser(
+        "review",
+        help="설계 후보 품질을 검수한다",
+        parents=[common_parser],
+    )
+    harness_engineer_review_parser.add_argument("--json", action="store_true", dest="json_output", help="JSON 출력")
+    harness_engineer_dry_run_parser = harness_engineer_subparsers.add_parser(
+        "dry-run",
+        help="실제 job 생성 없이 투입될 agent와 skill을 시뮬레이션한다",
+        parents=[common_parser],
+    )
+    harness_engineer_dry_run_parser.add_argument("request", help="dry-run 작업 요청")
+    harness_engineer_dry_run_parser.add_argument("--json", action="store_true", dest="json_output", help="JSON 출력")
+
+    harness_interview_parser = harness_subparsers.add_parser(
+        "interview",
+        help="custom harness 생성을 위한 질문/답변 세션",
+        parents=[common_parser],
+    )
+    harness_interview_subparsers = harness_interview_parser.add_subparsers(
+        dest="harness_interview_command",
+        help="interview 하위 명령",
+    )
+    harness_interview_start_parser = harness_interview_subparsers.add_parser(
+        "start",
+        help="프로젝트에 맞는 하네스 생성 질문을 만든다",
+        parents=[common_parser],
+    )
+    harness_interview_start_parser.add_argument("--json", action="store_true", dest="json_output", help="JSON 출력")
+    harness_interview_answer_parser = harness_interview_subparsers.add_parser(
+        "answer",
+        help="answers.yaml을 검증하고 plan 준비 상태를 확인한다",
+        parents=[common_parser],
+    )
+    harness_interview_answer_parser.add_argument("--answers", required=True, help="answers.yaml 경로")
+    harness_interview_answer_parser.add_argument("--json", action="store_true", dest="json_output", help="JSON 출력")
+
+    harness_suggest_parser = harness_subparsers.add_parser(
+        "suggest",
+        help="harness 조정 제안을 봅니다",
+        parents=[common_parser],
+    )
+    harness_suggest_parser.add_argument("--request", type=str, default=None, help="request-aware harness suggestion")
+    harness_suggest_parser.add_argument("--save", action="store_true", help="suggestion report를 저장합니다")
+    harness_suggest_parser.add_argument("--json", action="store_true", dest="json_output", help="JSON 출력")
+
+    harness_accept_parser = harness_subparsers.add_parser(
+        "accept",
+        help="harness suggestion을 명시적으로 받아들입니다",
+        parents=[common_parser],
+    )
+    harness_accept_parser.add_argument("suggestion_id", help="suggestion id")
+    harness_accept_parser.add_argument("--resolution", type=str, default=None, help="accept 이유 또는 메모")
+    harness_accept_parser.add_argument("--json", action="store_true", dest="json_output", help="JSON 출력")
+
+    harness_dismiss_parser = harness_subparsers.add_parser(
+        "dismiss",
+        help="harness suggestion을 기각합니다",
+        parents=[common_parser],
+    )
+    harness_dismiss_parser.add_argument("suggestion_id", help="suggestion id")
+    harness_dismiss_parser.add_argument("--resolution", type=str, default=None, help="dismiss 이유")
+    harness_dismiss_parser.add_argument("--json", action="store_true", dest="json_output", help="JSON 출력")
+
+    harness_decisions_parser = harness_subparsers.add_parser(
+        "decisions",
+        help="기록된 harness decision을 봅니다",
+        parents=[common_parser],
+    )
+    harness_decisions_parser.add_argument("--status", choices=["accepted", "dismissed"], default=None, help="decision status filter")
+    harness_decisions_parser.add_argument("--json", action="store_true", dest="json_output", help="JSON 출력")
 
     workforce_parser = subparsers.add_parser(
         "workforce",
-        help="Generate custom harness workforce",
+        help="custom harness에 맞는 AI 인력 구성을 만든다",
         parents=[common_parser],
     )
-    workforce_subparsers = workforce_parser.add_subparsers(dest="workforce_command", help="workforce subcommand")
-    workforce_generate_parser = workforce_subparsers.add_parser("generate", help="Generate workforce draft", parents=[common_parser])
-    workforce_generate_parser.add_argument("--json", action="store_true", dest="json_output", help="JSON output")
+    workforce_subparsers = workforce_parser.add_subparsers(
+        dest="workforce_command",
+        help="workforce 하위 명령",
+    )
+    workforce_generate_parser = workforce_subparsers.add_parser(
+        "generate",
+        help="프로젝트와 인터뷰 답변 기반 AI 인력 draft를 만든다",
+        parents=[common_parser],
+    )
+    workforce_generate_parser.add_argument("--json", action="store_true", dest="json_output", help="JSON 출력")
+
+    lane_parser = subparsers.add_parser(
+        "lane",
+        help="현재 Cambrian strongest lane profile을 봅니다",
+        parents=[common_parser],
+    )
+    lane_subparsers = lane_parser.add_subparsers(
+        dest="lane_command",
+        help="lane 하위 명령",
+    )
+    lane_show_parser = lane_subparsers.add_parser(
+        "show",
+        help="현재 win lane profile을 계산하고 저장합니다",
+        parents=[common_parser],
+    )
+    lane_show_parser.add_argument("--json", action="store_true", dest="json_output", help="JSON 출력")
 
     agent_parser = subparsers.add_parser(
         "agent",
-        help="Custom harness agent dispatch/run",
+        help="고급: local worker registry 관리",
         parents=[common_parser],
     )
-    agent_subparsers = agent_parser.add_subparsers(dest="agent_command", help="agent subcommand")
-    agent_dispatch_parser = agent_subparsers.add_parser("dispatch", help="Start an agent job", parents=[common_parser])
-    agent_dispatch_parser.add_argument("request", help="Work request")
-    agent_dispatch_parser.add_argument("--json", action="store_true", dest="json_output", help="JSON output")
-    agent_run_parser = agent_subparsers.add_parser("run", help="Start a job with an explicit agent", parents=[common_parser])
-    agent_run_parser.add_argument("agent_id", help="Agent ID")
-    agent_run_parser.add_argument("request", help="Work request")
-    agent_run_parser.add_argument("--json", action="store_true", dest="json_output", help="JSON output")
+    agent_subparsers = agent_parser.add_subparsers(
+        dest="agent_command",
+        help="agent ?섏쐞 紐낅졊",
+    )
+    agent_dispatch_parser = agent_subparsers.add_parser(
+        "dispatch",
+        help="현재 프로젝트 하네스에 맞춰 에이전트 작업을 시작한다",
+        parents=[common_parser],
+    )
+    agent_dispatch_parser.add_argument("request", help="에이전트에게 맡길 작업 요청")
+    agent_dispatch_parser.add_argument("--json", action="store_true", dest="json_output", help="JSON 출력")
+    agent_run_parser = agent_subparsers.add_parser(
+        "run",
+        help="생성된 특정 agent를 명시적으로 호출해 작업을 시작한다",
+        parents=[common_parser],
+    )
+    agent_run_parser.add_argument("agent_id", help="실행할 generated agent id")
+    agent_run_parser.add_argument("request", help="agent에게 맡길 작업 요청")
+    agent_run_parser.add_argument("--json", action="store_true", dest="json_output", help="JSON 출력")
+    agent_list_parser = agent_subparsers.add_parser(
+        "list",
+        help="?ъ슜 媛??agent passport 紐⑸줉",
+        parents=[common_parser],
+    )
+    agent_list_parser.add_argument("--json", action="store_true", dest="json_output", help="JSON 異쒕젰")
+    agent_show_parser = agent_subparsers.add_parser(
+        "show",
+        help="?뱀젙 agent passport ?곸꽭 蹂닿린",
+        parents=[common_parser],
+    )
+    agent_show_parser.add_argument("agent_id", help="agent id")
+    agent_show_parser.add_argument("--json", action="store_true", dest="json_output", help="JSON 異쒕젰")
+    agent_recommend_parser = agent_subparsers.add_parser(
+        "recommend",
+        help="?붿껌怨??섎꽕??湲곗? agent ?붿쿇",
+        parents=[common_parser],
+    )
+    agent_recommend_parser.add_argument("request", help="?먯뿰???붿껌")
+    agent_recommend_parser.add_argument("--json", action="store_true", dest="json_output", help="JSON 異쒕젰")
+    agent_history_parser = agent_subparsers.add_parser(
+        "history",
+        help="agent 로컬 경력 보기",
+        parents=[common_parser],
+    )
+    agent_history_parser.add_argument("agent_id", help="agent id")
+    agent_history_parser.add_argument("--limit", type=int, default=5, help="출력할 record 수")
+    agent_history_parser.add_argument("--json", action="store_true", dest="json_output", help="JSON 출력")
+    agent_review_parser = agent_subparsers.add_parser(
+        "review",
+        help="agent 현장 평가를 남깁니다",
+        parents=[common_parser],
+    )
+    agent_review_parser.add_argument("agent_id", help="agent id")
+    agent_review_parser.add_argument("text", help="review text")
+    agent_review_parser.add_argument("--rating", default="good", help="strong|good|mixed|weak")
+    agent_review_parser.add_argument("--kind", dest="review_kind", default="performance", help="performance|risk|praise|caution|fit")
+    agent_review_parser.add_argument("--tag", action="append", default=[], dest="review_tags", help="review tag")
+    agent_review_parser.add_argument("--session", default=None, help="session id or path")
+    agent_review_parser.add_argument("--artifact", action="append", default=[], dest="review_artifacts", help="linked artifact path")
+    agent_review_parser.add_argument("--json", action="store_true", dest="json_output", help="JSON 출력")
+    agent_reviews_parser = agent_subparsers.add_parser(
+        "reviews",
+        help="agent review 목록을 봅니다",
+        parents=[common_parser],
+    )
+    agent_reviews_parser.add_argument("agent_id", help="agent id")
+    agent_reviews_parser.add_argument("--rating", default=None, help="rating filter")
+    agent_reviews_parser.add_argument("--status", default=None, help="open|acknowledged")
+    agent_reviews_parser.add_argument("--limit", type=int, default=5, help="출력할 review 수")
+    agent_reviews_parser.add_argument("--json", action="store_true", dest="json_output", help="JSON 출력")
+    agent_trial_parser = agent_subparsers.add_parser(
+        "trial",
+        help="agent shadow trial run",
+        parents=[common_parser],
+    )
+    agent_trial_parser.add_argument("agent_id", help="shadow agent id")
+    agent_trial_parser.add_argument("request", help="request to trial")
+    agent_trial_parser.add_argument("--lead", dest="lead_agent_id", default=None, help="current lead agent id")
+    agent_trial_parser.add_argument("--save", action="store_true", help="save trial report")
+    agent_trial_parser.add_argument("--json", action="store_true", dest="json_output", help="JSON output")
+    agent_trial_show_parser = agent_subparsers.add_parser(
+        "trial-show",
+        help="show an agent trial report",
+        parents=[common_parser],
+    )
+    agent_trial_show_parser.add_argument("trial_ref", help="trial id or path")
+    agent_trial_show_parser.add_argument("--json", action="store_true", dest="json_output", help="JSON output")
+    agent_export_parser = agent_subparsers.add_parser(
+        "export",
+        help="agent passport export",
+        parents=[common_parser],
+    )
+    agent_export_parser.add_argument("agent_id", help="agent id")
+    agent_export_parser.add_argument("--out", help="export path")
+    agent_export_parser.add_argument("--json", action="store_true", dest="json_output", help="JSON output")
+    agent_import_parser = agent_subparsers.add_parser(
+        "import",
+        help="import external agent passport",
+        parents=[common_parser],
+    )
+    agent_import_parser.add_argument("passport_path", help="passport YAML file")
+    agent_import_parser.add_argument("--equip", action="store_true", help="equip after import")
+    agent_import_parser.add_argument("--json", action="store_true", dest="json_output", help="JSON output")
+    agent_equip_parser = agent_subparsers.add_parser(
+        "equip",
+        help="agent瑜??꾩옱 harness??옣李⑺븯湲?",
+        parents=[common_parser],
+    )
+    agent_equip_parser.add_argument("agent_id", help="agent id")
+    agent_equip_parser.add_argument("--json", action="store_true", dest="json_output", help="JSON 異쒕젰")
+    agent_hire_parser = agent_subparsers.add_parser(
+        "hire",
+        help="agent를 현재 harness에 채용합니다 (equip alias)",
+        parents=[common_parser],
+    )
+    agent_hire_parser.add_argument("agent_id", help="agent id")
+    agent_hire_parser.add_argument("--json", action="store_true", dest="json_output", help="JSON 출력")
+    agent_unequip_parser = agent_subparsers.add_parser(
+        "unequip",
+        help="agent瑜??꾩옱 harness?먯꽌 ?댁젣?섍린",
+        parents=[common_parser],
+    )
+    agent_unequip_parser.add_argument("agent_id", help="agent id")
+    agent_unequip_parser.add_argument("--json", action="store_true", dest="json_output", help="JSON 異쒕젰")
+
+    agent_fire_parser = agent_subparsers.add_parser(
+        "fire",
+        help="agent를 현재 harness에서 해제합니다 (unequip alias)",
+        parents=[common_parser],
+    )
+    agent_fire_parser.add_argument("agent_id", help="agent id")
+    agent_fire_parser.add_argument("--json", action="store_true", dest="json_output", help="JSON 출력")
 
     job_parser = subparsers.add_parser(
         "job",
-        help="Custom harness job commands",
+        help="에이전트 작업 응답 ingest와 validate를 실행한다",
         parents=[common_parser],
     )
-    job_subparsers = job_parser.add_subparsers(dest="job_command", help="job subcommand")
-    job_start_parser = job_subparsers.add_parser("start", help="Start custom harness job", parents=[common_parser])
-    job_start_parser.add_argument("request", help="Work request")
-    job_start_parser.add_argument("--json", action="store_true", dest="json_output", help="JSON output")
-    job_ingest_parser = job_subparsers.add_parser("ingest", help="Ingest AI reply", parents=[common_parser])
-    job_ingest_parser.add_argument("job_ref", nargs="?", default="latest", help="Job ID or latest")
-    job_ingest_parser.add_argument("reply_path", nargs="?", help="AI reply file")
-    job_ingest_parser.add_argument("--json", action="store_true", dest="json_output", help="JSON output")
-    job_validate_parser = job_subparsers.add_parser("validate", help="Validate job", parents=[common_parser])
-    job_validate_parser.add_argument("job_ref", nargs="?", default="latest", help="Job ID or latest")
-    job_validate_parser.add_argument("--json", action="store_true", dest="json_output", help="JSON output")
-    job_complete_parser = job_subparsers.add_parser("complete", help="Record job outcome", parents=[common_parser])
-    job_complete_parser.add_argument("job_ref", nargs="?", default="latest", help="Job ID or latest")
-    job_complete_parser.add_argument("--outcome", required=True, choices=["success", "partial", "failed", "rejected", "needs_more_info"], help="Human outcome")
-    job_complete_parser.add_argument("--notes", default="", help="Outcome notes")
-    job_complete_parser.add_argument("--json", action="store_true", dest="json_output", help="JSON output")
+    job_subparsers = job_parser.add_subparsers(
+        dest="job_command",
+        help="job 하위 명령",
+    )
+    job_start_parser = job_subparsers.add_parser(
+        "start",
+        help="설치된 workforce에서 필요한 인력을 골라 작업을 시작한다",
+        parents=[common_parser],
+    )
+    job_start_parser.add_argument("request", help="작업 요청")
+    job_start_parser.add_argument("--json", action="store_true", dest="json_output", help="JSON 출력")
+    job_ingest_parser = job_subparsers.add_parser(
+        "ingest",
+        help="AI reply 파일을 현재 job에 붙인다",
+        parents=[common_parser],
+    )
+    job_ingest_parser.add_argument("job_ref", help="job id/path/latest")
+    job_ingest_parser.add_argument("reply_file", help="AI reply YAML/JSON/text file")
+    job_ingest_parser.add_argument("--json", action="store_true", dest="json_output", help="JSON 출력")
+    job_validate_parser = job_subparsers.add_parser(
+        "validate",
+        help="job을 validation 단계로 이어간다",
+        parents=[common_parser],
+    )
+    job_validate_parser.add_argument("job_ref", help="job id/path/latest")
+    job_validate_parser.add_argument("--json", action="store_true", dest="json_output", help="JSON 출력")
+    job_complete_parser = job_subparsers.add_parser(
+        "complete",
+        help="job 결과를 사람이 outcome/evidence로 기록한다",
+        parents=[common_parser],
+    )
+    job_complete_parser.add_argument("job_ref", help="job id/path/latest")
+    job_complete_parser.add_argument(
+        "--outcome",
+        required=True,
+        choices=["success", "partial", "failed", "rejected", "needs_more_info"],
+        help="사람이 판정한 작업 결과",
+    )
+    job_complete_parser.add_argument("--notes", default="", help="작업 결과와 배운 점")
+    job_complete_parser.add_argument("--json", action="store_true", dest="json_output", help="JSON 출력")
+
+    dispatch_parser = subparsers.add_parser(
+        "dispatch",
+        help="현재 하네스의 staffing 추천 보드를 봅니다",
+        parents=[common_parser],
+    )
+    dispatch_subparsers = dispatch_parser.add_subparsers(
+        dest="dispatch_command",
+        help="dispatch 하위 명령",
+    )
+    dispatch_board_parser = dispatch_subparsers.add_parser(
+        "board",
+        help="현재 프로젝트 하네스 기준 배치 보드를 봅니다",
+        parents=[common_parser],
+    )
+    dispatch_board_parser.add_argument("--json", action="store_true", dest="json_output", help="JSON 출력")
+    dispatch_board_parser.add_argument("--save", action="store_true", help="dispatch board를 저장합니다")
+    dispatch_recommend_parser = dispatch_subparsers.add_parser(
+        "recommend",
+        help="특정 요청 기준 배치 추천을 봅니다",
+        parents=[common_parser],
+    )
+    dispatch_recommend_parser.add_argument("request", help="자연어 작업 요청")
+    dispatch_recommend_parser.add_argument("--json", action="store_true", dest="json_output", help="JSON 출력")
+
+    dispatch_accept_parser = dispatch_subparsers.add_parser(
+        "accept",
+        help="accept a staffing recommendation",
+        parents=[common_parser],
+    )
+    dispatch_accept_parser.add_argument("agent_id", help="agent id")
+    dispatch_accept_parser.add_argument("--decision", default="hire", help="hire|fire|keep|prefer_lead|prefer_support|keep_as_backup|watch_candidate")
+    dispatch_accept_parser.add_argument("--from", dest="source_ref", default=None, help="source report path")
+    dispatch_accept_parser.add_argument("--resolution", default=None, help="decision note")
+    dispatch_accept_parser.add_argument("--json", action="store_true", dest="json_output", help="JSON output")
+    dispatch_dismiss_parser = dispatch_subparsers.add_parser(
+        "dismiss",
+        help="dismiss a staffing recommendation",
+        parents=[common_parser],
+    )
+    dispatch_dismiss_parser.add_argument("agent_id", help="agent id")
+    dispatch_dismiss_parser.add_argument("--decision", default="hire", help="hire|fire|keep|prefer_lead|prefer_support|keep_as_backup|watch_candidate")
+    dispatch_dismiss_parser.add_argument("--from", dest="source_ref", default=None, help="source report path")
+    dispatch_dismiss_parser.add_argument("--resolution", default=None, help="decision note")
+    dispatch_dismiss_parser.add_argument("--json", action="store_true", dest="json_output", help="JSON output")
+    dispatch_decisions_parser = dispatch_subparsers.add_parser(
+        "decisions",
+        help="list staffing decisions",
+        parents=[common_parser],
+    )
+    dispatch_decisions_parser.add_argument("--status", choices=["accepted", "dismissed"], default=None)
+    dispatch_decisions_parser.add_argument("--json", action="store_true", dest="json_output", help="JSON output")
+
+    team_parser = subparsers.add_parser(
+        "team",
+        help="agent team preset 관리",
+        parents=[common_parser],
+    )
+    team_subparsers = team_parser.add_subparsers(
+        dest="team_command",
+        help="team 하위 명령",
+    )
+    team_save_parser = team_subparsers.add_parser(
+        "save",
+        help="현재 active agent 조합을 team preset으로 저장",
+        parents=[common_parser],
+    )
+    team_save_parser.add_argument("name", help="team name")
+    team_save_parser.add_argument("--description", default=None, help="team description")
+    team_save_parser.add_argument("--tag", action="append", default=[], dest="team_tags", help="team tag")
+    team_save_parser.add_argument("--json", action="store_true", dest="json_output", help="JSON output")
+    team_list_parser = team_subparsers.add_parser(
+        "list",
+        help="저장된 team preset 목록",
+        parents=[common_parser],
+    )
+    team_list_parser.add_argument("--json", action="store_true", dest="json_output", help="JSON output")
+    team_show_parser = team_subparsers.add_parser(
+        "show",
+        help="team preset 상세 보기",
+        parents=[common_parser],
+    )
+    team_show_parser.add_argument("name", help="team name or id")
+    team_show_parser.add_argument("--json", action="store_true", dest="json_output", help="JSON output")
+    team_apply_parser = team_subparsers.add_parser(
+        "apply",
+        help="team preset을 현재 active agent 조합으로 적용",
+        parents=[common_parser],
+    )
+    team_apply_parser.add_argument("name", help="team name or id")
+    team_apply_parser.add_argument("--json", action="store_true", dest="json_output", help="JSON output")
+    team_recommend_parser = team_subparsers.add_parser(
+        "recommend",
+        help="요청에 맞는 team preset 추천",
+        parents=[common_parser],
+    )
+    team_recommend_parser.add_argument("request", help="작업 요청")
+    team_recommend_parser.add_argument("--json", action="store_true", dest="json_output", help="JSON output")
+    team_trial_parser = team_subparsers.add_parser(
+        "trial",
+        help="저장된 team preset을 shadow로 시험 비교",
+        parents=[common_parser],
+    )
+    team_trial_parser.add_argument("name", help="shadow team name or id")
+    team_trial_parser.add_argument("request", help="작업 요청")
+    team_trial_parser.add_argument("--against", default=None, help="비교 기준 team name or id")
+    team_trial_parser.add_argument("--save", action="store_true", dest="save_report", help="trial report 저장")
+    team_trial_parser.add_argument("--json", action="store_true", dest="json_output", help="JSON output")
+    team_trial_show_parser = team_subparsers.add_parser(
+        "trial-show",
+        help="team trial report 상세 보기",
+        parents=[common_parser],
+    )
+    team_trial_show_parser.add_argument("trial_ref", help="trial id 또는 .cambrian/agents/team_trials/ 내부 경로")
+    team_trial_show_parser.add_argument("--json", action="store_true", dest="json_output", help="JSON output")
+    team_accept_parser = team_subparsers.add_parser(
+        "accept",
+        help="team 추천/시험근무 결과를 명시적으로 받아들임",
+        parents=[common_parser],
+    )
+    team_accept_parser.add_argument("name", help="team name or id")
+    team_accept_parser.add_argument("--decision", default="keep_team", help="apply_team|keep_team|keep_as_backup|watch_team")
+    team_accept_parser.add_argument("--from", dest="source_ref", default=None, help="source report path")
+    team_accept_parser.add_argument("--resolution", default=None, help="decision note")
+    team_accept_parser.add_argument("--json", action="store_true", dest="json_output", help="JSON output")
+    team_dismiss_parser = team_subparsers.add_parser(
+        "dismiss",
+        help="team 추천을 기각함",
+        parents=[common_parser],
+    )
+    team_dismiss_parser.add_argument("name", help="team name or id")
+    team_dismiss_parser.add_argument("--from", dest="source_ref", default=None, help="source report path")
+    team_dismiss_parser.add_argument("--resolution", default=None, help="decision note")
+    team_dismiss_parser.add_argument("--json", action="store_true", dest="json_output", help="JSON output")
+    team_decisions_parser = team_subparsers.add_parser(
+        "decisions",
+        help="team staffing decisions 목록",
+        parents=[common_parser],
+    )
+    team_decisions_parser.add_argument("--status", choices=["accepted", "dismissed"], default=None)
+    team_decisions_parser.add_argument("--json", action="store_true", dest="json_output", help="JSON output")
 
     history_parser = subparsers.add_parser(
         "history",
@@ -2318,10 +2734,16 @@ def main() -> None:
             _handle_harness(args)
         elif args.command == "workforce":
             _handle_workforce(args)
+        elif args.command == "lane":
+            _handle_lane(args)
         elif args.command == "agent":
             _handle_agent(args)
         elif args.command == "job":
             _handle_job(args)
+        elif args.command == "dispatch":
+            _handle_dispatch(args)
+        elif args.command == "team":
+            _handle_team(args)
         elif args.command == "history":
             _handle_history(args)
         elif args.command == "rollback":
@@ -7911,23 +8333,150 @@ def _handle_project(args: argparse.Namespace) -> None:
     _emit_cli_payload(payload, bool(getattr(args, "json_output", False)), f"Project profile saved: {payload['profile_ref']}")
 
 
-def _handle_harness(args: argparse.Namespace) -> None:
-    command = getattr(args, "harness_command", None)
+def _refresh_agent_history_artifacts(root: Path) -> tuple[dict[str, dict], dict]:
+    """현재 프로젝트의 agent passport history와 dispatch log를 갱신한다."""
+    from engine.project_agent_history import (
+        AgentDispatchLogStore,
+        AgentHistoryBuilder,
+        AgentPassportHistoryStore,
+        default_agent_passport_path,
+        default_dispatch_log_path,
+    )
+
+    builder = AgentHistoryBuilder()
+    passport_store = AgentPassportHistoryStore()
+    dispatch_store = AgentDispatchLogStore()
+    history_by_agent: dict[str, dict] = {}
+    for history in builder.build_all_passports(root):
+        passport_store.save(history, default_agent_passport_path(root, history.agent_id))
+        history_by_agent[history.agent_id] = history.to_dict()
+    dispatch_log = builder.build_dispatch_log(root)
+    dispatch_store.save(dispatch_log, default_dispatch_log_path(root))
+    return history_by_agent, dispatch_log.to_dict()
+
+def _handle_lane(args: argparse.Namespace) -> None:
+    """cambrian lane 처리."""
+    from engine.project_win_lane import build_and_save_lane_profile, render_lane_profile
+
     root = Path.cwd()
-    if command == "interview":
-        _handle_harness_interview(args, root)
+    command = getattr(args, "lane_command", None) or "show"
+    if command != "show":
+        print("lane 하위 명령이 필요합니다. 예: cambrian lane show", file=sys.stderr)
+        sys.exit(1)
+    if not (root / ".cambrian" / "project.yaml").exists():
+        print("Cambrian project mode is not initialized. Run `cambrian init --wizard` first.", file=sys.stderr)
+        sys.exit(1)
+
+    profile, profile_path = build_and_save_lane_profile(root)
+    try:
+        saved_path = str(profile_path.relative_to(root)).replace("\\", "/")
+    except ValueError:
+        saved_path = str(profile_path)
+    payload = {
+        "profile": profile.to_dict(),
+        "saved_path": saved_path,
+    }
+    if getattr(args, "json_output", False):
+        print(json.dumps(payload, indent=2, ensure_ascii=False))
         return
+    print(render_lane_profile(profile))
+    print()
+    print("Saved:")
+    print(f"  {saved_path}")
+
+def _handle_harness(args: argparse.Namespace) -> None:
+    """cambrian harness 처리."""
+    root = Path.cwd().resolve()
+    command = getattr(args, "harness_command", None)
+    if command == "engineer":
+        from engine.project_harness_engineering import (
+            design_harness_candidate,
+            dry_run_harness_candidate,
+            render_engineering_result,
+            review_harness_candidate,
+        )
+
+        engineer_command = getattr(args, "harness_engineer_command", None)
+        if engineer_command == "design":
+            result = design_harness_candidate(root, seed_preset=getattr(args, "seed_preset", None))
+        elif engineer_command == "review":
+            result = review_harness_candidate(root)
+        elif engineer_command == "dry-run":
+            result = dry_run_harness_candidate(root, str(getattr(args, "request", "")))
+        else:
+            print("engineer 하위 명령이 필요합니다. 예: cambrian harness engineer design", file=sys.stderr)
+            sys.exit(1)
+        payload = result.to_dict()
+        if getattr(args, "json_output", False):
+            print(json.dumps(payload, indent=2, ensure_ascii=False))
+            if not payload.get("ok"):
+                sys.exit(1)
+            return
+        print(render_engineering_result(payload))
+        if not payload.get("ok"):
+            sys.exit(1)
+        return
+    if command == "interview":
+        interview_command = getattr(args, "harness_interview_command", None)
+        if interview_command == "start":
+            from engine.project_harness_interview import (
+                HarnessInterviewBuilder,
+                render_harness_interview_session,
+            )
+
+            session = HarnessInterviewBuilder().start(root)
+            if getattr(args, "json_output", False):
+                print(json.dumps(session.to_dict(), indent=2, ensure_ascii=False))
+                return
+            print(render_harness_interview_session(session))
+            return
+        if interview_command == "answer":
+            from engine.project_harness_interview import (
+                HarnessInterviewAnswerHandler,
+                render_harness_interview_answer_result,
+            )
+
+            try:
+                result = HarnessInterviewAnswerHandler().answer(root, Path(str(getattr(args, "answers"))))
+            except (FileNotFoundError, ValueError) as exc:
+                print(f"Harness interview answer blocked: {exc}", file=sys.stderr)
+                sys.exit(1)
+            if getattr(args, "json_output", False):
+                print(json.dumps(result.to_dict(), indent=2, ensure_ascii=False))
+                if result.status != "ready_for_plan":
+                    sys.exit(1)
+                return
+            print(render_harness_interview_answer_result(result))
+            if result.status != "ready_for_plan":
+                sys.exit(1)
+            return
+        print("interview 하위 명령이 필요합니다. 예: cambrian harness interview start", file=sys.stderr)
+        sys.exit(1)
     if command in {"plan", "design"}:
         from engine.project_harness_plan import build_and_save_harness_plan, render_harness_plan
 
         plan, saved = build_and_save_harness_plan(root, seed_preset=getattr(args, "seed_preset", None))
-        payload = plan.to_dict()
-        payload["plan_ref"] = str(saved.relative_to(root)).replace("\\", "/")
-        _emit_cli_payload(payload, bool(getattr(args, "json_output", False)), render_harness_plan(plan, saved))
-        _exit_if_blocked(payload)
-        return
-    if command == "engineer":
-        _handle_harness_engineer(args, root)
+        payload = {
+            "ok": plan.status in {"draft", "planned"},
+            "plan_type": plan.plan_type,
+            "harness_id": plan.harness_id,
+            "status": plan.status,
+            "seed_preset": plan.seed_preset,
+            "agents": plan.agent_specs or plan.agents,
+            "validation": plan.validation,
+            "install_preview": plan.install_preview,
+            "next_commands": plan.next_commands,
+            "plan": plan.to_dict(),
+            "saved_path": str(saved.relative_to(root)).replace("\\", "/") if saved.is_relative_to(root) else str(saved),
+        }
+        if getattr(args, "json_output", False):
+            print(json.dumps(payload, indent=2, ensure_ascii=False))
+            if plan.status not in {"draft", "planned"}:
+                sys.exit(1)
+            return
+        print(render_harness_plan(plan, saved))
+        if plan.status not in {"draft", "planned"}:
+            sys.exit(1)
         return
     if command == "install":
         from engine.project_harness_plan import HarnessInstaller, render_harness_install_result
@@ -7937,91 +8486,1273 @@ def _handle_harness(args: argparse.Namespace) -> None:
             confirm=bool(getattr(args, "confirm", False)),
             seed_preset=getattr(args, "seed_preset", None),
         )
-        payload = result.to_dict()
-        _emit_cli_payload(payload, bool(getattr(args, "json_output", False)), render_harness_install_result(result))
-        _exit_if_blocked(payload)
+        if getattr(args, "json_output", False):
+            print(json.dumps(result.to_dict(), indent=2, ensure_ascii=False))
+            if result.status != "installed":
+                sys.exit(1)
+            return
+        print(render_harness_install_result(result))
+        if result.status != "installed":
+            sys.exit(1)
         return
-    print("harness subcommand is required", file=sys.stderr)
-    sys.exit(2)
 
+    from engine.project_agents import (
+        AgentRegistryBuilder,
+        AgentRegistryStore,
+        default_agent_registry_path,
+    )
+    from engine.project_harness import (
+        HarnessProfileBuilder,
+        HarnessProfileStore,
+        default_harness_profile_path,
+        render_harness_doctor,
+        render_harness_profile,
+    )
+    from engine.project_harness_decisions import (
+        HarnessDecisionStore,
+        build_harness_decision,
+        default_harness_decisions_path,
+        load_latest_harness_suggestion,
+        render_harness_decision_summary,
+        render_harness_decisions,
+        summarize_harness_decisions,
+    )
+    from engine.project_harness_policy import (
+        build_and_save_policy_overlay,
+        render_harness_policy_summary,
+    )
+    from engine.project_win_lane import build_and_save_lane_profile, render_lane_profile
 
-def _handle_harness_interview(args: argparse.Namespace, root: Path) -> None:
-    command = getattr(args, "interview_command", None)
-    if command == "start":
-        from engine.project_harness_interview import HarnessInterviewBuilder, render_harness_interview_session
+    root = Path.cwd()
+    command = getattr(args, "harness_command", None)
+    if not command:
+        print("harness 하위 명령이 필요합니다. 예: cambrian harness fit", file=sys.stderr)
+        sys.exit(1)
+    if not (root / ".cambrian" / "project.yaml").exists():
+        print("Cambrian project mode is not initialized. Run `cambrian init --wizard` first.", file=sys.stderr)
+        sys.exit(1)
 
-        session = HarnessInterviewBuilder().start(root)
-        _emit_cli_payload(session.to_dict(), bool(getattr(args, "json_output", False)), render_harness_interview_session(session))
+    if command == "hire":
+        command = "equip"
+    elif command == "fire":
+        command = "unequip"
+
+    profile_path = default_harness_profile_path(root)
+    registry_path = default_agent_registry_path(root)
+    decisions_path = default_harness_decisions_path(root)
+    profile_store = HarnessProfileStore()
+    registry_store = AgentRegistryStore()
+    decision_store = HarnessDecisionStore()
+
+    if command == "fit":
+        profile = HarnessProfileBuilder().build(root)
+        profile_store.save(profile, profile_path)
+        registry = AgentRegistryBuilder().build(root, harness=profile)
+        registry_store.save(registry, registry_path)
+        history_by_agent, dispatch_log = _refresh_agent_history_artifacts(root)
+        payload = {
+            "status": "fitted",
+            "profile_path": str(profile_path.relative_to(root)).replace("\\", "/"),
+            "registry_path": str(registry_path.relative_to(root)).replace("\\", "/"),
+            "profile": profile.to_dict(),
+            "registry": registry.to_dict(),
+            "passport_histories": len(history_by_agent),
+            "dispatch_log": dispatch_log,
+        }
+        if getattr(args, "json_output", False):
+            print(json.dumps(payload, indent=2, ensure_ascii=False))
+            return
+        print(render_harness_profile(profile))
+        print()
+        print("Saved:")
+        print(f"  {payload['profile_path']}")
+        print(f"  {payload['registry_path']}")
         return
-    if command == "answer":
-        from engine.project_harness_interview import HarnessInterviewAnswerHandler, render_harness_interview_answer_result
 
-        result = HarnessInterviewAnswerHandler().answer(root, Path(getattr(args, "answers")))
-        payload = result.to_dict()
-        _emit_cli_payload(payload, bool(getattr(args, "json_output", False)), render_harness_interview_answer_result(result))
-        _exit_if_blocked(payload)
+    if not profile_path.exists():
+        print("Harness profile not found.\n\nRun:\n  cambrian harness fit", file=sys.stderr)
+        sys.exit(1)
+
+    profile = profile_store.load(profile_path)
+    if command == "show":
+        decisions_model = decision_store.load(decisions_path)
+        policy_overlay, policy_path = build_and_save_policy_overlay(root)
+        try:
+            from engine.project_templates import load_current_template, render_current_template_summary
+
+            current_template = load_current_template(root)
+        except Exception:
+            current_template = {}
+        try:
+            from engine.project_template_bootstrap import (
+                load_template_bootstrap,
+                render_template_bootstrap_summary,
+            )
+
+            template_bootstrap = load_template_bootstrap(root)
+        except Exception:
+            template_bootstrap = {}
+        try:
+            from engine.project_template_bootstrap_select import (
+                load_template_bootstrap_choice,
+                render_bootstrap_choice_result,
+            )
+
+            template_bootstrap_choice = load_template_bootstrap_choice(root)
+        except Exception:
+            template_bootstrap_choice = {}
+        try:
+            from engine.project_template_recommend import (
+                load_template_recommendation_summary,
+                render_template_recommendation_hint,
+            )
+
+            template_recommendation = load_template_recommendation_summary(root) if not current_template else {}
+        except Exception:
+            template_recommendation = {}
+        try:
+            from engine.project_template_decisions import (
+                load_template_decision_summary,
+                render_template_decision_summary,
+            )
+
+            template_decision_summary = load_template_decision_summary(root)
+        except Exception:
+            template_decision_summary = {}
+        try:
+            from engine.project_template_history import (
+                load_template_history_summary,
+                render_template_history_summary,
+            )
+
+            template_history_summary = (
+                load_template_history_summary(root, str(current_template.get("name")))
+                if current_template and current_template.get("name")
+                else {}
+            )
+        except Exception:
+            template_history_summary = {}
+        try:
+            from engine.project_template_library import (
+                load_template_library_board_summary,
+                render_template_library_summary,
+            )
+
+            template_library_summary = load_template_library_board_summary(root)
+        except Exception:
+            template_library_summary = {}
+        try:
+            from engine.project_template_library_decisions import (
+                load_template_library_decision_summary,
+                render_template_library_decision_summary,
+            )
+
+            template_library_decision_summary = load_template_library_decision_summary(root)
+        except Exception:
+            template_library_decision_summary = {}
+        try:
+            from engine.project_template_library_policy import (
+                load_template_library_policy_summary,
+                render_template_library_policy_summary,
+            )
+
+            template_library_policy_summary = load_template_library_policy_summary(root)
+        except Exception:
+            template_library_policy_summary = {}
+        try:
+            from engine.project_template_apply_guardrails import (
+                load_template_apply_guardrail_summary,
+                render_template_apply_guardrail_summary,
+            )
+
+            template_guardrail_summary = load_template_apply_guardrail_summary(root)
+        except Exception:
+            template_guardrail_summary = {}
+        try:
+            lane_profile, lane_path = build_and_save_lane_profile(root)
+        except Exception as exc:
+            logging.getLogger(__name__).warning("win lane profile build failed: %s", exc)
+            lane_profile = None
+            lane_path = None
+        try:
+            from engine.project_template_qualification_decisions import (
+                load_lane_playbook_summary,
+                load_qualification_decision_summary,
+                render_lane_playbook_summary,
+            )
+            from engine.project_template_qualification_rollback import (
+                load_qualification_adoption_summary,
+                render_qualification_adoption_summary,
+            )
+            from engine.project_template_canary import (
+                load_template_canary_summary,
+                render_template_canary_summary,
+            )
+            from engine.project_template_canary_report import (
+                load_latest_canary_report_summary,
+                render_canary_report_summary,
+            )
+            from engine.project_template_canary_ledger import (
+                load_canary_ledger_summary,
+                render_canary_ledger_summary,
+            )
+            from engine.project_template_canary_outcomes import (
+                load_canary_outcome_summary,
+                render_canary_outcome_summary,
+            )
+            from engine.project_template_canary_review import (
+                load_canary_review_summary,
+                render_canary_review_summary,
+            )
+            from engine.project_template_challenge_matrix import (
+                load_challenge_matrix_summary,
+                render_challenge_matrix_summary,
+            )
+
+            lane_playbook_summary = load_lane_playbook_summary(root)
+            qualification_decision_summary = load_qualification_decision_summary(root)
+            qualification_adoption_summary = load_qualification_adoption_summary(root)
+            template_canary_summary = load_template_canary_summary(root)
+            canary_report_summary = load_latest_canary_report_summary(root)
+            canary_ledger_summary = load_canary_ledger_summary(root)
+            canary_outcome_summary = load_canary_outcome_summary(root)
+            canary_review_summary = load_canary_review_summary(root)
+            challenge_matrix_summary = load_challenge_matrix_summary(root)
+        except Exception as exc:
+            logging.getLogger(__name__).warning("qualification decision summary load failed: %s", exc)
+            lane_playbook_summary = {}
+            qualification_decision_summary = {}
+            qualification_adoption_summary = {}
+            template_canary_summary = {}
+            canary_report_summary = {}
+            canary_ledger_summary = {}
+            canary_outcome_summary = {}
+            canary_review_summary = {}
+            challenge_matrix_summary = {}
+        if getattr(args, "json_output", False):
+            payload = profile.to_dict()
+            payload["decisions"] = decisions_model.to_dict()
+            payload["policy_overlay"] = policy_overlay.to_dict()
+            payload["policy_overlay_path"] = str(policy_path.relative_to(root)).replace("\\", "/")
+            payload["template_origin"] = current_template
+            payload["template_bootstrap"] = template_bootstrap
+            payload["template_bootstrap_choice"] = template_bootstrap_choice
+            payload["template_recommendation"] = template_recommendation
+            payload["template_decisions"] = template_decision_summary
+            payload["template_history"] = template_history_summary
+            payload["template_library"] = template_library_summary
+            payload["template_library_decisions"] = template_library_decision_summary
+            payload["template_library_policy"] = template_library_policy_summary
+            payload["template_apply_guardrail"] = template_guardrail_summary
+            payload["lane_playbook"] = lane_playbook_summary
+            payload["template_qualification_decisions"] = qualification_decision_summary
+            payload["template_qualification_adoptions"] = qualification_adoption_summary
+            payload["template_canary_summary"] = template_canary_summary
+            payload["canary_report_summary"] = canary_report_summary
+            payload["canary_ledger_summary"] = canary_ledger_summary
+            payload["canary_outcome_summary"] = canary_outcome_summary
+            payload["canary_review_summary"] = canary_review_summary
+            payload["challenge_matrix_summary"] = challenge_matrix_summary
+            if lane_profile is not None:
+                payload["win_lane"] = lane_profile.to_dict()
+                if lane_path is not None:
+                    payload["win_lane_path"] = str(lane_path.relative_to(root)).replace("\\", "/")
+            print(json.dumps(payload, indent=2, ensure_ascii=False))
+            return
+        print(render_harness_profile(profile))
+        if lane_profile is not None:
+            print()
+            print(render_lane_profile(lane_profile))
+        if lane_playbook_summary:
+            print()
+            print(render_lane_playbook_summary(lane_playbook_summary))
+        if qualification_decision_summary and qualification_decision_summary.get("latest_status"):
+            print()
+            print("Template qualification decision:")
+            print(f"  latest   : {qualification_decision_summary.get('latest_candidate')} {qualification_decision_summary.get('latest_status')}")
+            if qualification_decision_summary.get("latest_reference"):
+                print(f"  against  : {qualification_decision_summary.get('latest_reference')}")
+        if qualification_adoption_summary:
+            print()
+            print(render_qualification_adoption_summary(qualification_adoption_summary))
+        if template_canary_summary:
+            print()
+            print(render_template_canary_summary(template_canary_summary))
+        if canary_report_summary:
+            print()
+            print(render_canary_report_summary(canary_report_summary))
+        if canary_ledger_summary:
+            print()
+            print(render_canary_ledger_summary(canary_ledger_summary))
+        if canary_outcome_summary:
+            print()
+            print(render_canary_outcome_summary(canary_outcome_summary))
+        if canary_review_summary:
+            print()
+            print(render_canary_review_summary(canary_review_summary))
+        if challenge_matrix_summary:
+            print()
+            print(render_challenge_matrix_summary(challenge_matrix_summary))
+        if current_template:
+            print()
+            print(render_current_template_summary(current_template))
+            if template_history_summary and template_history_summary.get("template_name"):
+                print()
+                print(render_template_history_summary(template_history_summary))
+            if template_bootstrap:
+                print()
+                print(render_template_bootstrap_summary(template_bootstrap))
+        elif template_bootstrap_choice and template_bootstrap_choice.get("selection_mode") == "skipped":
+            print()
+            print(render_bootstrap_choice_result(template_bootstrap_choice))
+        elif template_recommendation and template_recommendation.get("best_template_name"):
+            print()
+            print(render_template_recommendation_hint(template_recommendation))
+        if template_library_summary and (
+            template_library_summary.get("preferred_templates")
+            or template_library_summary.get("watch_templates")
+            or template_library_summary.get("retire_candidates")
+        ):
+            print()
+            print(render_template_library_summary(template_library_summary))
+        if template_library_decision_summary and template_library_decision_summary.get("total"):
+            print()
+            print(render_template_library_decision_summary(template_library_decision_summary))
+        if template_library_policy_summary and template_library_policy_summary.get("decision_count"):
+            print()
+            print(render_template_library_policy_summary(template_library_policy_summary))
+        if template_decision_summary and (
+            int(template_decision_summary.get("accepted", 0) or 0) > 0
+            or int(template_decision_summary.get("dismissed", 0) or 0) > 0
+        ):
+            print()
+            print(render_template_decision_summary(template_decision_summary))
+        if template_guardrail_summary and template_guardrail_summary.get("template_name"):
+            print()
+            print(render_template_apply_guardrail_summary(template_guardrail_summary))
+        if decisions_model.decisions:
+            print()
+            print(render_harness_decision_summary(decisions_model))
+        if policy_overlay.accepted_decisions:
+            print()
+            print(render_harness_policy_summary(policy_overlay))
+        try:
+            from engine.project_team_decisions import (
+                TeamDecisionStore,
+                default_team_decisions_path,
+                render_team_decisions,
+            )
+
+            team_decisions_model = TeamDecisionStore().load(default_team_decisions_path(root))
+        except Exception:
+            team_decisions_model = None
+        if team_decisions_model is not None and team_decisions_model.decisions:
+            print()
+            print(render_team_decisions(team_decisions_model))
+        try:
+            from engine.project_team_policy import build_and_save_team_policy_overlay, render_team_policy_summary
+
+            team_policy_overlay, _team_policy_path = build_and_save_team_policy_overlay(root)
+        except Exception:
+            team_policy_overlay = None
+        if team_policy_overlay is not None and team_policy_overlay.accepted_decisions:
+            print()
+            print(render_team_policy_summary(team_policy_overlay))
         return
-    print("harness interview subcommand is required", file=sys.stderr)
-    sys.exit(2)
 
+    if command == "doctor":
+        from engine.project_agent_history import (
+            default_agent_passports_dir,
+            default_dispatch_log_path,
+        )
 
-def _handle_harness_engineer(args: argparse.Namespace, root: Path) -> None:
-    command = getattr(args, "engineer_command", None)
-    from engine.project_harness_engineering import design_harness_candidate, dry_run_harness_candidate, review_harness_candidate
+        warnings: list[str] = []
+        sources: list[str] = []
+        for _, ref in profile.source_refs.items():
+            candidate = root / ref
+            if candidate.exists():
+                sources.append(f"✓ {ref}")
+            else:
+                sources.append(f"! {ref}")
+                warnings.append(f"missing source ref: {ref}")
+        equipped_count = len(profile.active_agents)
+        missing_agents = 0
+        imported_count = 0
+        blocked_compatibility_equipped = 0
+        if registry_path.exists():
+            registry = registry_store.load(registry_path)
+            registry_ids = {agent.agent_id for agent in registry.agents}
+            missing_agents = sum(1 for agent_id in profile.active_agents if agent_id not in registry_ids)
+            imported_count = sum(1 for agent in registry.agents if agent.source_kind == "imported")
+            blocked_compatibility_equipped = sum(
+                1
+                for agent in registry.agents
+                if agent.source_kind == "imported"
+                and agent.status == "equipped"
+                and isinstance(agent.stats, dict)
+                and str(agent.stats.get("compatibility_status", "")) == "blocked"
+            )
+            if missing_agents:
+                warnings.append("some equipped agents are missing from registry")
+        else:
+            warnings.append("agent registry is missing")
+            missing_agents = equipped_count
+        passports_dir = default_agent_passports_dir(root)
+        passport_histories_present = len(list(passports_dir.glob("*.yaml"))) if passports_dir.exists() else 0
+        dispatch_log_present = default_dispatch_log_path(root).exists()
+        if equipped_count and passport_histories_present == 0:
+            warnings.append("agent passport histories are missing")
+        status = "healthy" if not warnings else "warning"
+        payload = {
+            "status": status,
+            "present": True,
+            "sources": sources,
+            "equipped_count": equipped_count,
+            "missing_agents": missing_agents,
+            "imported_count": imported_count,
+            "blocked_compatibility_equipped": blocked_compatibility_equipped,
+            "passport_histories_present": passport_histories_present,
+            "dispatch_log_present": dispatch_log_present,
+            "warnings": warnings,
+        }
+        if getattr(args, "json_output", False):
+            print(json.dumps(payload, indent=2, ensure_ascii=False))
+            return
+        print(render_harness_doctor(payload))
+        return
 
-    if command == "design":
-        result = design_harness_candidate(root)
-    elif command == "review":
-        result = review_harness_candidate(root)
-    elif command == "dry-run":
-        result = dry_run_harness_candidate(root, str(getattr(args, "request", "")))
-    else:
-        print("harness engineer subcommand is required", file=sys.stderr)
-        sys.exit(2)
-    payload = _payload_from_result(result)
-    _emit_cli_payload(payload, bool(getattr(args, "json_output", False)))
-    _exit_if_blocked(payload)
+    if command == "accept":
+        suggestion_id = str(getattr(args, "suggestion_id"))
+        try:
+            _report, suggestion, report_path = load_latest_harness_suggestion(root, suggestion_id)
+        except KeyError:
+            print(f"Suggestion not found: {suggestion_id}\n\nRun:\n  cambrian harness suggest", file=sys.stderr)
+            sys.exit(1)
+        try:
+            decision = build_harness_decision(
+                root,
+                suggestion,
+                status="accepted",
+                resolution=getattr(args, "resolution", None),
+                source_report_ref=str(report_path.relative_to(root)).replace("\\", "/"),
+            )
+        except (ValueError, FileNotFoundError) as exc:
+            print(f"Harness accept blocked: {exc}", file=sys.stderr)
+            sys.exit(1)
+        decision_store.add(decisions_path, decision)
+        payload = {
+            "status": "accepted",
+            "decision": decision.to_dict(),
+            "recorded_path": str(decisions_path.relative_to(root)).replace("\\", "/"),
+        }
+        if getattr(args, "json_output", False):
+            print(json.dumps(payload, indent=2, ensure_ascii=False))
+            return
+        print("Harness suggestion accepted.")
+        print()
+        print("Suggestion:")
+        print(f"  {decision.summary}")
+        if decision.resolution:
+            print()
+            print("Resolution:")
+            print(f"  {decision.resolution}")
+        if bool(decision.operational_effect.get("applied", False)):
+            print()
+            print("Operational effect:")
+            print(f"  {decision.operational_effect.get('type')} applied")
+        print()
+        print("Recorded:")
+        print(f"  {payload['recorded_path']}")
+        return
 
+    if command == "dismiss":
+        suggestion_id = str(getattr(args, "suggestion_id"))
+        try:
+            _report, suggestion, report_path = load_latest_harness_suggestion(root, suggestion_id)
+        except KeyError:
+            print(f"Suggestion not found: {suggestion_id}\n\nRun:\n  cambrian harness suggest", file=sys.stderr)
+            sys.exit(1)
+        decision = build_harness_decision(
+            root,
+            suggestion,
+            status="dismissed",
+            resolution=getattr(args, "resolution", None),
+            source_report_ref=str(report_path.relative_to(root)).replace("\\", "/"),
+        )
+        decision_store.add(decisions_path, decision)
+        payload = {
+            "status": "dismissed",
+            "decision": decision.to_dict(),
+            "recorded_path": str(decisions_path.relative_to(root)).replace("\\", "/"),
+        }
+        if getattr(args, "json_output", False):
+            print(json.dumps(payload, indent=2, ensure_ascii=False))
+            return
+        print("Harness suggestion dismissed.")
+        if decision.resolution:
+            print()
+            print("Reason:")
+            print(f"  {decision.resolution}")
+        print()
+        print("Recorded:")
+        print(f"  {payload['recorded_path']}")
+        return
 
-def _handle_workforce(args: argparse.Namespace) -> None:
-    if getattr(args, "workforce_command", None) != "generate":
-        print("workforce subcommand is required", file=sys.stderr)
-        sys.exit(2)
-    from engine.project_workforce_builder import build_workforce, render_workforce_generate_result
+    if command == "decisions":
+        model = decision_store.load(decisions_path)
+        filtered = [
+            item.to_dict()
+            for item in model.decisions
+            if getattr(args, "status", None) is None or item.status == getattr(args, "status", None)
+        ]
+        if getattr(args, "json_output", False):
+            print(
+                json.dumps(
+                    {
+                        "schema_version": model.schema_version,
+                        "updated_at": model.updated_at,
+                        "decisions": filtered,
+                        "summary": summarize_harness_decisions(model),
+                    },
+                    indent=2,
+                    ensure_ascii=False,
+                )
+            )
+            return
+        print(render_harness_decisions(model, status=getattr(args, "status", None)))
+        return
 
-    result = build_workforce(Path.cwd())
-    payload = result.to_dict()
-    _emit_cli_payload(payload, bool(getattr(args, "json_output", False)), render_workforce_generate_result(result))
-    _exit_if_blocked(payload)
+    if command == "suggest":
+        from engine.project_harness_evolution import (
+            HarnessEvolutionBuilder,
+            HarnessEvolutionStore,
+            default_harness_evolution_path,
+            default_request_harness_evolution_path,
+            render_harness_evolution,
+        )
 
+        report = HarnessEvolutionBuilder().build(root, request=getattr(args, "request", None))
+        saved_path: Path | None = None
+        if bool(getattr(args, "save", False)):
+            target = (
+                default_request_harness_evolution_path(root)
+                if getattr(args, "request", None)
+                else default_harness_evolution_path(root)
+            )
+            saved_path = HarnessEvolutionStore().save(report, target)
+        payload = report.to_dict()
+        decisions_model = decision_store.load(decisions_path)
+        payload["decisions"] = decisions_model.to_dict()
+        if saved_path is not None:
+            payload["saved_path"] = str(saved_path)
+        if getattr(args, "json_output", False):
+            print(json.dumps(payload, indent=2, ensure_ascii=False))
+            return
+        print(render_harness_evolution(report))
+        if decisions_model.decisions:
+            print()
+            print(render_harness_decision_summary(decisions_model))
+        if saved_path is not None:
+            print()
+            print(f"Saved:\n  {saved_path}")
+        return
 
-def _handle_skill_generate(args: argparse.Namespace) -> None:
-    from engine.project_skill_builder import build_skillset, render_skill_generate_result
-
-    result = build_skillset(Path.cwd())
-    payload = result.to_dict()
-    _emit_cli_payload(payload, bool(getattr(args, "json_output", False)), render_skill_generate_result(result))
-    _exit_if_blocked(payload)
-
+    print("harness 하위 명령이 필요합니다. 예: cambrian harness show", file=sys.stderr)
+    sys.exit(1)
 
 def _handle_agent(args: argparse.Namespace) -> None:
+    """cambrian agent 처리."""
+    root = Path.cwd().resolve()
     command = getattr(args, "agent_command", None)
     if command == "dispatch":
         from engine.project_agent_dispatch import AgentDispatcher, render_agent_dispatch_result
 
-        result = AgentDispatcher().dispatch(Path.cwd(), str(getattr(args, "request", "")))
-        payload = result.to_dict()
-        _emit_cli_payload(payload, bool(getattr(args, "json_output", False)), render_agent_dispatch_result(result))
-        _exit_if_blocked(payload)
+        result = AgentDispatcher().dispatch(root, str(getattr(args, "request", "")))
+        if getattr(args, "json_output", False):
+            print(json.dumps(result.to_dict(), indent=2, ensure_ascii=False))
+            if result.status != "created":
+                sys.exit(1)
+            return
+        print(render_agent_dispatch_result(result))
+        if result.status != "created":
+            sys.exit(1)
         return
     if command == "run":
-        payload = _start_custom_job(str(getattr(args, "request", "")), selected_agent_id=str(getattr(args, "agent_id", "")), entry_mode="agent_run")
-        _emit_cli_payload(payload, bool(getattr(args, "json_output", False)))
-        _exit_if_blocked(payload)
-        return
-    print("agent subcommand is required", file=sys.stderr)
-    sys.exit(2)
+        from engine.project_custom_harness import create_custom_harness_job
 
+        try:
+            job_payload, pack_job_payload = create_custom_harness_job(
+                root,
+                str(getattr(args, "request", "")),
+                selected_agent_id=str(getattr(args, "agent_id", "")),
+                entry_mode="agent_run",
+            )
+        except (FileNotFoundError, ValueError) as exc:
+            print(f"Agent run blocked: {exc}", file=sys.stderr)
+            sys.exit(1)
+        payload = _job_start_payload(job_payload, pack_job_payload)
+        if getattr(args, "json_output", False):
+            print(json.dumps(payload, indent=2, ensure_ascii=False))
+            if not payload.get("ok"):
+                sys.exit(1)
+            return
+        print(_render_job_start_payload(payload))
+        if not payload.get("ok"):
+            sys.exit(1)
+        return
+
+    from engine.project_agents import (
+        AgentRegistryBuilder,
+        AgentRegistryStore,
+        default_agent_registry_path,
+        render_agent_list,
+        render_agent_recommendation,
+        render_agent_show,
+    )
+    from engine.project_agent_history import (
+        AgentPassportHistoryStore,
+        default_agent_passport_path,
+        render_agent_history,
+    )
+    from engine.project_agent_reviews import (
+        AgentReviewBuilder,
+        AgentReviewStore,
+        default_agent_reviews_dir,
+        load_agent_review_summary,
+        render_agent_review_add_summary,
+        render_agent_reviews,
+    )
+    from engine.project_agent_transfer import (
+        AgentPassportExporter,
+        AgentPassportImporter,
+        default_imported_agent_path,
+        load_exported_agent_passport,
+        render_agent_export_result,
+        render_agent_import_result,
+        update_imported_agent_local_status,
+    )
+    from engine.project_agent_trials import (
+        AgentTrialRunner,
+        AgentTrialStore,
+        default_agent_trial_path,
+        render_agent_trial,
+        report_to_json,
+        resolve_agent_trial_path,
+    )
+    from engine.project_dispatch_decisions import load_staffing_decision_summary
+    from engine.project_harness import HarnessProfileStore, default_harness_profile_path
+
+    root = Path.cwd()
+    command = getattr(args, "agent_command", None)
+    if not command:
+        print("agent 하위 명령이 필요합니다. 예: cambrian agent list", file=sys.stderr)
+        sys.exit(1)
+
+    profile_path = default_harness_profile_path(root)
+    registry_path = default_agent_registry_path(root)
+    if not profile_path.exists() or not registry_path.exists():
+        print("Harness or agent registry not found.\n\nRun:\n  cambrian harness fit", file=sys.stderr)
+        sys.exit(1)
+
+    profile_store = HarnessProfileStore()
+    registry_store = AgentRegistryStore()
+    profile = profile_store.load(profile_path)
+    registry = AgentRegistryBuilder().build(root, harness=profile)
+    registry_store.save(registry, registry_path)
+    history_by_agent, dispatch_log = _refresh_agent_history_artifacts(root)
+    history_store = AgentPassportHistoryStore()
+    review_store = AgentReviewStore()
+
+    def _find_agent(agent_id: str):
+        for agent in registry.agents:
+            if agent.agent_id == agent_id:
+                return agent
+        return None
+
+    def _review_summary(agent_id: str) -> dict:
+        return load_agent_review_summary(root, agent_id).to_dict()
+
+    if command == "list":
+        payload = registry.to_dict()
+        payload["history"] = history_by_agent
+        payload["dispatch_log"] = dispatch_log
+        if getattr(args, "json_output", False):
+            print(json.dumps(payload, indent=2, ensure_ascii=False))
+            return
+        print(render_agent_list(registry, history_by_agent))
+        return
+
+    if command == "show":
+        agent = _find_agent(str(getattr(args, "agent_id")))
+        if agent is None:
+            print(f"Agent not found: {getattr(args, 'agent_id')}\n\nRun:\n  cambrian agent list", file=sys.stderr)
+            sys.exit(1)
+        history = history_by_agent.get(agent.agent_id, {})
+        review_summary = _review_summary(agent.agent_id)
+        staffing_summary = load_staffing_decision_summary(root, agent.agent_id)
+        if getattr(args, "json_output", False):
+            print(json.dumps({"agent": agent.to_dict(), "history": history, "reviews": review_summary, "staffing": staffing_summary}, indent=2, ensure_ascii=False))
+            return
+        print(render_agent_show(agent, history, review_summary, staffing_summary))
+        return
+
+    if command == "review":
+        agent_id = str(getattr(args, "agent_id"))
+        agent = _find_agent(agent_id)
+        if agent is None:
+            print(f"Agent not found: {agent_id}\n\nRun:\n  cambrian agent list", file=sys.stderr)
+            sys.exit(1)
+        try:
+            review = AgentReviewBuilder().build(
+                root,
+                agent_id,
+                str(getattr(args, "text")),
+                rating=str(getattr(args, "rating", "good")),
+                review_kind=str(getattr(args, "review_kind", "performance")),
+                tags=list(getattr(args, "review_tags", []) or []),
+                session_ref=getattr(args, "session", None),
+                artifact_refs=list(getattr(args, "review_artifacts", []) or []),
+            )
+        except ValueError as exc:
+            print(f"Agent review blocked: {exc}", file=sys.stderr)
+            sys.exit(1)
+        saved_path = review_store.add(review, default_agent_reviews_dir(root))
+        payload = {"status": "saved", "review": review.to_dict(), "saved_path": str(saved_path)}
+        if getattr(args, "json_output", False):
+            print(json.dumps(payload, indent=2, ensure_ascii=False))
+            return
+        print(render_agent_review_add_summary(review, str(saved_path.relative_to(root)).replace("\\", "/")))
+        return
+
+    if command == "reviews":
+        agent_id = str(getattr(args, "agent_id"))
+        agent = _find_agent(agent_id)
+        if agent is None:
+            print(f"Agent not found: {agent_id}\n\nRun:\n  cambrian agent list", file=sys.stderr)
+            sys.exit(1)
+        reviews = review_store.list(
+            default_agent_reviews_dir(root),
+            agent_id=agent_id,
+            rating=getattr(args, "rating", None),
+            status=getattr(args, "status", None),
+        )
+        limit = max(0, int(getattr(args, "limit", 5) or 0))
+        summary = _review_summary(agent_id)
+        payload = {
+            "agent_id": agent_id,
+            "summary": summary,
+            "reviews": [item.to_dict() for item in reviews[:limit] if limit > 0] if limit != 0 else [item.to_dict() for item in reviews],
+        }
+        if getattr(args, "json_output", False):
+            print(json.dumps(payload, indent=2, ensure_ascii=False))
+            return
+        visible = reviews[:limit] if limit > 0 else reviews
+        print(render_agent_reviews(agent_id, visible))
+        return
+
+    if command == "trial":
+        agent_id = str(getattr(args, "agent_id"))
+        request_text = str(getattr(args, "request"))
+        report = AgentTrialRunner().run(
+            root,
+            agent_id,
+            request_text,
+            current_lead_agent_id=getattr(args, "lead_agent_id", None),
+        )
+        saved_path = default_agent_trial_path(root, report)
+        AgentTrialStore().save(report, saved_path)
+        if getattr(args, "json_output", False):
+            print(report_to_json(report))
+            return
+        print(render_agent_trial(report))
+        return
+
+    if command == "trial-show":
+        try:
+            trial_path = resolve_agent_trial_path(root, str(getattr(args, "trial_ref")))
+            report = AgentTrialStore().load(trial_path)
+        except (FileNotFoundError, ValueError) as exc:
+            print(f"Agent trial not found: {exc}", file=sys.stderr)
+            sys.exit(1)
+        if getattr(args, "json_output", False):
+            print(report_to_json(report))
+            return
+        print(render_agent_trial(report))
+        return
+
+    if command == "export":
+        agent_id = str(getattr(args, "agent_id"))
+        agent = _find_agent(agent_id)
+        if agent is None:
+            print(f"Agent not found: {agent_id}\n\nRun:\n  cambrian agent list", file=sys.stderr)
+            sys.exit(1)
+        out_path = Path(str(getattr(args, "out"))) if getattr(args, "out", None) else None
+        saved_path = AgentPassportExporter().export(root, agent_id, out_path=out_path)
+        exported = load_exported_agent_passport(saved_path)
+        payload = {
+            "status": "exported",
+            "saved_path": str(saved_path),
+            "passport": exported.to_dict(),
+        }
+        if getattr(args, "json_output", False):
+            print(json.dumps(payload, indent=2, ensure_ascii=False))
+            return
+        print(render_agent_export_result(exported, saved_path))
+        return
+
+    if command == "import":
+        passport_path = Path(str(getattr(args, "passport_path")))
+        try:
+            record = AgentPassportImporter().import_passport(root, passport_path, equip=False)
+        except ValueError as exc:
+            print(f"Agent import blocked: {exc}", file=sys.stderr)
+            sys.exit(1)
+        saved_path = default_imported_agent_path(root, record.agent_id)
+        profile = profile_store.load(profile_path)
+        registry = AgentRegistryBuilder().build(root, harness=profile)
+        import_warning: str | None = None
+        if bool(getattr(args, "equip", False)):
+            if str(record.compatibility.get("status", "")) == "blocked":
+                import_warning = "compatibility is blocked, so the imported agent was not equipped"
+            else:
+                registry, profile = AgentRegistryBuilder.equip(registry, profile, record.agent_id)
+                update_imported_agent_local_status(root, record.agent_id, "equipped")
+                record.local_status = "equipped"
+        registry = AgentRegistryBuilder().build(root, harness=profile)
+        registry_store.save(registry, registry_path)
+        profile_store.save(profile, profile_path)
+        history_by_agent, dispatch_log = _refresh_agent_history_artifacts(root)
+        payload = {
+            "status": "imported",
+            "record": record.to_dict(),
+            "saved_path": str(saved_path),
+            "warning": import_warning,
+        }
+        if getattr(args, "json_output", False):
+            print(json.dumps(payload, indent=2, ensure_ascii=False))
+            return
+        print(render_agent_import_result(record, saved_path))
+        if import_warning:
+            print()
+            print(f"Warning:\n  {import_warning}")
+        return
+
+    if command == "recommend":
+        recommendations = AgentRegistryBuilder.recommend(
+            str(getattr(args, "request")),
+            project_root=root,
+            harness=profile,
+            registry=registry,
+        )
+        payload = {
+            "request": str(getattr(args, "request")),
+            "recommendations": recommendations[:3],
+            "harness_id": profile.harness_id,
+        }
+        if getattr(args, "json_output", False):
+            print(json.dumps(payload, indent=2, ensure_ascii=False))
+            return
+        print(render_agent_recommendation(payload["request"], payload["recommendations"]))
+        return
+
+    if command == "history":
+        agent_id = str(getattr(args, "agent_id"))
+        agent = _find_agent(agent_id)
+        if agent is None:
+            print(f"Agent not found: {agent_id}\n\nRun:\n  cambrian agent list", file=sys.stderr)
+            sys.exit(1)
+        history_path = default_agent_passport_path(root, agent_id)
+        if not history_path.exists():
+            history_by_agent, dispatch_log = _refresh_agent_history_artifacts(root)
+        if not history_path.exists():
+            print(f"Agent history not found: {agent_id}\n\nRun:\n  cambrian harness fit", file=sys.stderr)
+            sys.exit(1)
+        history = history_store.load(history_path)
+        review_summary = _review_summary(agent_id)
+        payload = history.to_dict()
+        payload["reviews"] = review_summary
+        if getattr(args, "json_output", False):
+            print(json.dumps(payload, indent=2, ensure_ascii=False))
+            return
+        print(render_agent_history(history, limit=max(0, int(getattr(args, "limit", 5) or 0)), review_summary=review_summary))
+        return
+
+    if command == "equip":
+        agent_id = str(getattr(args, "agent_id"))
+        agent = _find_agent(agent_id)
+        if agent is None:
+            print(f"Agent not found: {agent_id}\n\nRun:\n  cambrian agent list", file=sys.stderr)
+            sys.exit(1)
+        if agent.status == "equipped":
+            payload = {"status": "unchanged", "agent_id": agent_id, "active_agents": list(profile.active_agents)}
+        else:
+            try:
+                registry, profile = AgentRegistryBuilder.equip(registry, profile, agent_id)
+            except ValueError as exc:
+                print(f"Agent equip blocked: {exc}", file=sys.stderr)
+                sys.exit(1)
+            update_imported_agent_local_status(root, agent_id, "equipped")
+            registry_store.save(registry, registry_path)
+            profile_store.save(profile, profile_path)
+            history_by_agent, dispatch_log = _refresh_agent_history_artifacts(root)
+            payload = {"status": "equipped", "agent_id": agent_id, "active_agents": list(profile.active_agents)}
+        if getattr(args, "json_output", False):
+            print(json.dumps(payload, indent=2, ensure_ascii=False))
+            return
+        print(f"Equipped:\n  {agent_id}\n\nActive agents:")
+        for item in profile.active_agents:
+            print(f"  - {item}")
+        return
+
+    if command == "unequip":
+        agent_id = str(getattr(args, "agent_id"))
+        agent = _find_agent(agent_id)
+        if agent is None:
+            print(f"Agent not found: {agent_id}\n\nRun:\n  cambrian agent list", file=sys.stderr)
+            sys.exit(1)
+        if agent.status != "equipped":
+            payload = {"status": "unchanged", "agent_id": agent_id, "active_agents": list(profile.active_agents)}
+        else:
+            registry, profile = AgentRegistryBuilder.unequip(registry, profile, agent_id)
+            update_imported_agent_local_status(root, agent_id, "imported")
+            registry_store.save(registry, registry_path)
+            profile_store.save(profile, profile_path)
+            history_by_agent, dispatch_log = _refresh_agent_history_artifacts(root)
+            payload = {"status": "unequipped", "agent_id": agent_id, "active_agents": list(profile.active_agents)}
+        if getattr(args, "json_output", False):
+            print(json.dumps(payload, indent=2, ensure_ascii=False))
+            return
+        print(f"Unequipped:\n  {agent_id}\n\nActive agents:")
+        if profile.active_agents:
+            for item in profile.active_agents:
+                print(f"  - {item}")
+        else:
+            print("  - none")
+        return
+
+    print("agent 하위 명령이 필요합니다. 예: cambrian agent recommend \"fix the login bug\"", file=sys.stderr)
+    sys.exit(1)
+
+def _handle_dispatch(args: argparse.Namespace) -> None:
+    """cambrian dispatch 처리."""
+    from engine.project_dispatch import (
+        DispatchBoardBuilder,
+        DispatchBoardStore,
+        default_dispatch_board_path,
+        render_dispatch_board,
+    )
+    from engine.project_dispatch_decisions import (
+        StaffingDecisionStore,
+        build_staffing_decision,
+        default_staffing_decisions_path,
+        render_staffing_decision_result,
+        render_staffing_decisions,
+    )
+
+    root = Path.cwd()
+    command = getattr(args, "dispatch_command", None)
+    if not command:
+        print("dispatch 하위 명령이 필요합니다. 예: cambrian dispatch board", file=sys.stderr)
+        sys.exit(1)
+
+    builder = DispatchBoardBuilder()
+    if command in {"accept", "dismiss"}:
+        try:
+            decision = build_staffing_decision(
+                root,
+                str(getattr(args, "agent_id")),
+                status="accepted" if command == "accept" else "dismissed",
+                decision_kind=str(getattr(args, "decision", "hire")),
+                resolution=getattr(args, "resolution", None),
+                source_ref=getattr(args, "source_ref", None),
+            )
+        except FileNotFoundError:
+            print("Staffing decision requires a fitted harness.\n\nRun:\n  cambrian harness fit", file=sys.stderr)
+            sys.exit(1)
+        except KeyError as exc:
+            print(f"Agent not found: {exc.args[0]}\n\nRun:\n  cambrian agent list", file=sys.stderr)
+            sys.exit(1)
+        except ValueError as exc:
+            print(f"Staffing decision blocked: {exc}", file=sys.stderr)
+            sys.exit(1)
+        saved_path = StaffingDecisionStore().add(default_staffing_decisions_path(root), decision)
+        payload = {"status": decision.status, "decision": decision.to_dict(), "saved_path": str(saved_path)}
+        if getattr(args, "json_output", False):
+            print(json.dumps(payload, indent=2, ensure_ascii=False))
+            return
+        print(render_staffing_decision_result(decision, saved_path))
+        return
+
+    if command == "decisions":
+        model = StaffingDecisionStore().load(default_staffing_decisions_path(root))
+        status_filter = getattr(args, "status", None)
+        payload = model.to_dict()
+        if status_filter:
+            payload["decisions"] = [
+                item
+                for item in payload.get("decisions", [])
+                if isinstance(item, dict) and item.get("status") == status_filter
+            ]
+        if getattr(args, "json_output", False):
+            print(json.dumps(payload, indent=2, ensure_ascii=False))
+            return
+        print(render_staffing_decisions(model, status=status_filter))
+        return
+
+    if command == "board":
+        try:
+            board = builder.build(root)
+        except FileNotFoundError:
+            print("Dispatch board를 만들려면 먼저 프로젝트를 초기화해야 합니다.\n\nRun:\n  cambrian init --wizard\n  cambrian harness fit", file=sys.stderr)
+            sys.exit(1)
+        saved_path: Path | None = None
+        if bool(getattr(args, "save", False)):
+            saved_path = DispatchBoardStore().save(board, default_dispatch_board_path(root))
+        payload = board.to_dict()
+        if saved_path is not None:
+            payload["saved_path"] = str(saved_path)
+        if getattr(args, "json_output", False):
+            print(json.dumps(payload, indent=2, ensure_ascii=False))
+            return
+        print(render_dispatch_board(board))
+        if saved_path is not None:
+            print()
+            print(f"Saved:\n  {saved_path}")
+        return
+
+    if command == "recommend":
+        try:
+            board = builder.build(root, request=str(getattr(args, "request")))
+        except FileNotFoundError:
+            print("Dispatch recommendation을 만들려면 먼저 프로젝트를 초기화해야 합니다.\n\nRun:\n  cambrian init --wizard\n  cambrian harness fit", file=sys.stderr)
+            sys.exit(1)
+        payload = board.to_dict()
+        if getattr(args, "json_output", False):
+            print(json.dumps(payload, indent=2, ensure_ascii=False))
+            return
+        print(render_dispatch_board(board))
+        return
+
+    print("dispatch 하위 명령이 필요합니다. 예: cambrian dispatch recommend \"fix the login bug\"", file=sys.stderr)
+    sys.exit(1)
+
+def _handle_team(args: argparse.Namespace) -> None:
+    """cambrian team 처리."""
+    from engine.project_teams import (
+        TeamPresetBuilder,
+        TeamPresetStore,
+        TeamRecommendationBuilder,
+        apply_team_preset,
+        default_team_presets_path,
+        render_team_list,
+        render_team_recommendation,
+        render_team_show,
+    )
+    from engine.project_team_trials import (
+        TeamTrialRunner,
+        TeamTrialStore,
+        default_team_trial_path,
+        render_team_trial,
+        resolve_team_trial_path,
+        team_trial_to_json,
+    )
+    from engine.project_team_decisions import (
+        TeamDecisionManager,
+        TeamDecisionStore,
+        default_team_decisions_path,
+        load_team_decision_summary,
+        render_team_decision_result,
+        render_team_decisions,
+    )
+
+    root = Path.cwd()
+    command = getattr(args, "team_command", None)
+    if not command:
+        print("team 하위 명령이 필요합니다. 예: cambrian team list", file=sys.stderr)
+        sys.exit(1)
+    teams_path = default_team_presets_path(root)
+    store = TeamPresetStore()
+
+    if command == "trial":
+        try:
+            report = TeamTrialRunner().run(
+                root,
+                str(getattr(args, "name")),
+                str(getattr(args, "request")),
+                current_team_name=getattr(args, "against", None),
+            )
+            saved_path = TeamTrialStore().save(report, default_team_trial_path(root, report))
+            report.saved_path = str(saved_path)
+        except KeyError as exc:
+            print(f"Team trial blocked: team not found {exc.args[0]}\n\nRun:\n  cambrian team list", file=sys.stderr)
+            sys.exit(1)
+        payload = team_trial_to_json(report)
+        if getattr(args, "json_output", False):
+            print(json.dumps(payload, indent=2, ensure_ascii=False))
+            return
+        print(render_team_trial(report))
+        if report.status in {"blocked", "failed"}:
+            sys.exit(1)
+        return
+
+    if command == "trial-show":
+        try:
+            report_path = resolve_team_trial_path(root, str(getattr(args, "trial_ref")))
+            report = TeamTrialStore().load(report_path)
+            report.saved_path = str(report_path)
+        except FileNotFoundError as exc:
+            print(f"Team trial not found: {exc.args[0]}\n\nRun:\n  cambrian team trial <team-name> \"request\"", file=sys.stderr)
+            sys.exit(1)
+        payload = team_trial_to_json(report)
+        if getattr(args, "json_output", False):
+            print(json.dumps(payload, indent=2, ensure_ascii=False))
+            return
+        print(render_team_trial(report))
+        return
+
+    if command == "accept":
+        try:
+            decision, decision_path = TeamDecisionManager().accept(
+                root,
+                str(getattr(args, "name")),
+                str(getattr(args, "decision")),
+                source_ref=getattr(args, "source_ref", None),
+                resolution=getattr(args, "resolution", None),
+            )
+        except KeyError as exc:
+            print(f"Team accept blocked: team not found {exc.args[0]}\n\nRun:\n  cambrian team list", file=sys.stderr)
+            sys.exit(1)
+        except ValueError as exc:
+            print(f"Team accept blocked: {exc}", file=sys.stderr)
+            sys.exit(1)
+        payload = {"decision": decision.to_dict(), "path": str(decision_path)}
+        if getattr(args, "json_output", False):
+            print(json.dumps(payload, indent=2, ensure_ascii=False))
+            return
+        print(render_team_decision_result(decision, decision_path))
+        return
+
+    if command == "dismiss":
+        try:
+            decision, decision_path = TeamDecisionManager().dismiss(
+                root,
+                str(getattr(args, "name")),
+                source_ref=getattr(args, "source_ref", None),
+                resolution=getattr(args, "resolution", None),
+            )
+        except KeyError as exc:
+            print(f"Team dismiss blocked: team not found {exc.args[0]}\n\nRun:\n  cambrian team list", file=sys.stderr)
+            sys.exit(1)
+        payload = {"decision": decision.to_dict(), "path": str(decision_path)}
+        if getattr(args, "json_output", False):
+            print(json.dumps(payload, indent=2, ensure_ascii=False))
+            return
+        print(render_team_decision_result(decision, decision_path))
+        return
+
+    if command == "decisions":
+        model = TeamDecisionStore().load(default_team_decisions_path(root))
+        status_filter = getattr(args, "status", None)
+        if getattr(args, "json_output", False):
+            payload = model.to_dict()
+            if status_filter:
+                payload["decisions"] = [
+                    item for item in payload.get("decisions", []) if item.get("status") == status_filter
+                ]
+            print(json.dumps(payload, indent=2, ensure_ascii=False))
+            return
+        print(render_team_decisions(model, status_filter=status_filter))
+        return
+
+    if command == "save":
+        try:
+            preset = TeamPresetBuilder().from_current_harness(
+                root,
+                str(getattr(args, "name")),
+                description=getattr(args, "description", None),
+                tags=list(getattr(args, "team_tags", []) or []),
+            )
+            saved_path = store.add(teams_path, preset)
+        except FileNotFoundError:
+            print("Team save requires a fitted harness.\n\nRun:\n  cambrian harness fit", file=sys.stderr)
+            sys.exit(1)
+        except ValueError as exc:
+            print(f"Team save blocked: {exc}", file=sys.stderr)
+            sys.exit(1)
+        payload = {"status": "saved", "team": preset.to_dict(), "saved_path": str(saved_path)}
+        if getattr(args, "json_output", False):
+            print(json.dumps(payload, indent=2, ensure_ascii=False))
+            return
+        print("Team saved.")
+        print()
+        print(render_team_show(preset))
+        print()
+        print(f"Saved:\n  {saved_path}")
+        return
+
+    if command == "list":
+        model = store.load(teams_path)
+        if getattr(args, "json_output", False):
+            print(json.dumps(model.to_dict(), indent=2, ensure_ascii=False))
+            return
+        print(render_team_list(model))
+        return
+
+    if command == "show":
+        model = store.load(teams_path)
+        try:
+            team = store.find(model, str(getattr(args, "name")))
+        except KeyError as exc:
+            print(f"Team not found: {exc.args[0]}\n\nRun:\n  cambrian team list", file=sys.stderr)
+            sys.exit(1)
+        if getattr(args, "json_output", False):
+            print(json.dumps(team.to_dict(), indent=2, ensure_ascii=False))
+            return
+        try:
+            from engine.project_team_policy import load_or_build_team_policy_overlay, team_policy_role
+
+            policy_role = team_policy_role(team, load_or_build_team_policy_overlay(root))
+        except Exception:
+            policy_role = None
+        print(render_team_show(team, load_team_decision_summary(root, team.team_id), policy_role=policy_role))
+        return
+
+    if command == "apply":
+        try:
+            team, model, warnings = apply_team_preset(root, str(getattr(args, "name")))
+        except FileNotFoundError:
+            print("Team apply requires a fitted harness and registry.\n\nRun:\n  cambrian harness fit", file=sys.stderr)
+            sys.exit(1)
+        except KeyError as exc:
+            print(f"Team apply blocked: missing agent {exc.args[0]}", file=sys.stderr)
+            sys.exit(1)
+        except ValueError as exc:
+            print(f"Team apply blocked: {exc}", file=sys.stderr)
+            sys.exit(1)
+        payload = {"status": "applied", "team": team.to_dict(), "active_team_id": model.active_team_id, "warnings": warnings}
+        if getattr(args, "json_output", False):
+            print(json.dumps(payload, indent=2, ensure_ascii=False))
+            return
+        print("Team applied.")
+        print()
+        print(render_team_show(team))
+        if warnings:
+            print()
+            print("Warnings:")
+            for warning in warnings:
+                print(f"  - {warning}")
+        return
+
+    if command == "recommend":
+        result = TeamRecommendationBuilder().recommend(root, request=str(getattr(args, "request")))
+        if getattr(args, "json_output", False):
+            print(json.dumps(result, indent=2, ensure_ascii=False))
+            return
+        print(render_team_recommendation(result))
+        return
+
+    print("team 하위 명령이 필요합니다. 예: cambrian team recommend \"fix the login bug\"", file=sys.stderr)
+    sys.exit(1)
 
 def _handle_job(args: argparse.Namespace) -> None:
     command = getattr(args, "job_command", None)
