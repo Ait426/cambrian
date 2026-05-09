@@ -753,6 +753,8 @@ def _validation_evidence_claim(validation_evidence: dict[str, Any] | None) -> Pa
     evidence_ref = str(validation_evidence.get("_evidence_ref") or validation_evidence.get("evidence_ref") or "")
     if status == "satisfied":
         verdict = "proven"
+    elif status == "failed":
+        verdict = "failed"
     elif criteria:
         verdict = "manual_review_required"
     else:

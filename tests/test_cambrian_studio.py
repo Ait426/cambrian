@@ -453,6 +453,8 @@ def test_studio_agent_validation_evidence_includes_contract_criteria(tmp_path: P
     assert payload["validation_criteria_status"] == "manual_review_required"
     assert payload["forbidden_actions"] == safety["forbidden_actions"]
     assert payload["approval_required_actions"] == safety["approval_required_actions"]
+    assert any("--criteria-status satisfied" in command for command in payload["next_commands"])
+    assert any("--criteria-status failed" in command for command in payload["next_commands"])
     assert "Contract validation criteria require manual review" in payload["unchecked_items"]
     assert evidence["validation_criteria"] == criteria
     assert evidence["validation_criteria_status"] == "manual_review_required"
@@ -524,6 +526,7 @@ def test_studio_agent_manual_contract_review_satisfies_latest_proof(tmp_path: Pa
         "studio-owner",
         "--json",
     )
+    show = _cli(tmp_path, "pack", "job-show", "latest")
     payload = json.loads(validate.stdout)
     evidence = yaml.safe_load((tmp_path / payload["evidence_ref"]).read_text(encoding="utf-8"))
     latest = latest_pack_proof_card(tmp_path, "document-organizer-agent")
@@ -534,6 +537,7 @@ def test_studio_agent_manual_contract_review_satisfies_latest_proof(tmp_path: Pa
 
     assert start.returncode == 0, start.stderr
     assert validate.returncode == 0, validate.stderr
+    assert show.returncode == 0, show.stderr
     assert payload["ok"] is True
     assert payload["validation_status"] == "validated"
     assert payload["validation_criteria"] == criteria
@@ -543,6 +547,10 @@ def test_studio_agent_manual_contract_review_satisfies_latest_proof(tmp_path: Pa
     assert payload["manual_contract_review"]["notes"] == "local criteria reviewed"
     assert payload["next_commands"][0] == "cambrian pack proof document-organizer-agent"
     assert "Contract validation criteria require manual review" not in payload["unchecked_items"]
+    assert "Contract criteria:" in show.stdout
+    assert "status: satisfied" in show.stdout
+    assert "reviewer: studio-owner" in show.stdout
+    assert "notes: local criteria reviewed" in show.stdout
     assert evidence["validation_criteria_status"] == "satisfied"
     assert evidence["manual_contract_review"]["reviewer"] == "studio-owner"
     assert latest is not None
@@ -551,6 +559,52 @@ def test_studio_agent_manual_contract_review_satisfies_latest_proof(tmp_path: Pa
     assert claims["agent_contract_validation"].verdict == "proven"
     assert latest.source_refs["latest_validation_evidence_ref"] == payload["evidence_ref"]
     assert "contract_validation_review_gap" not in source_signals
+
+
+def test_studio_agent_manual_contract_review_failure_blocks_latest_proof(tmp_path: Path) -> None:
+    manifest_path = tmp_path / "document-organizer-agent.cambrian-pack.yaml"
+    _write_yaml(manifest_path, _studio_agent_manifest())
+    PackInstaller().install(tmp_path, manifest_path)
+
+    start = _cli(
+        tmp_path,
+        "job",
+        "start",
+        "--pack",
+        "document-organizer-agent",
+        "organize my documents by topic",
+        "--json",
+    )
+    validate = _cli(
+        tmp_path,
+        "pack",
+        "job-validate",
+        "latest",
+        "--criteria-status",
+        "failed",
+        "--criteria-notes",
+        "output missed required exception list",
+        "--json",
+    )
+    payload = json.loads(validate.stdout)
+    latest = latest_pack_proof_card(tmp_path, "document-organizer-agent")
+    metrics = {metric.key: metric.value for metric in latest.key_metrics} if latest is not None else {}
+    claims = {claim.claim_id: claim for claim in latest.claims} if latest is not None else {}
+    queue = PackImprovementQueueBuilder().build(tmp_path, "document-organizer-agent")
+    item = next(candidate for candidate in queue.items if candidate.kind == "improve_validation_support")
+
+    assert start.returncode == 0, start.stderr
+    assert validate.returncode != 0
+    assert payload["ok"] is False
+    assert payload["validation_status"] == "failed"
+    assert payload["validation_criteria_status"] == "failed"
+    assert payload["manual_contract_review"]["status"] == "failed"
+    assert "Contract validation criteria failed manual review" in payload["unchecked_items"]
+    assert latest is not None
+    assert metrics["contract_validation_status"] == "failed"
+    assert claims["agent_contract_validation"].verdict == "failed"
+    assert "contract_validation_review_gap" in item.source_signal_kinds
+    assert payload["evidence_ref"] in item.evidence_refs
 
 
 def test_studio_agent_contract_validation_gap_feeds_improvement_and_derivative_plan(tmp_path: Path) -> None:

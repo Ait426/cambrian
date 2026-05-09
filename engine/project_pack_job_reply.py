@@ -748,6 +748,8 @@ def _manual_contract_review_result(
     reviewer: str | None,
 ) -> PackJobValidationResult:
     normalized_status = _manual_contract_review_status(criteria_status)
+    if job.pack_kind != "agent":
+        raise ValueError("manual contract criteria review is only supported for agent pack jobs")
     validation_criteria = _validation_criteria_for_job(root, job)
     if not validation_criteria:
         raise ValueError("contract validation criteria are not available for this pack job")
@@ -839,7 +841,10 @@ def _validation_result(
     merged_warnings = _dedupe([*warnings, *job.warnings])
     errors = list(job.errors)
     review_payload = dict(manual_contract_review or {})
-    next_actions = list(next_actions_override) if next_actions_override is not None else PackJobNextBuilder().build(root, job)
+    if next_actions_override is not None:
+        next_actions = list(next_actions_override)
+    else:
+        next_actions = PackJobNextBuilder().build(root, job)
     next_actions = _validation_next_actions(job, next_actions)
     validation_commands = _validation_commands(job, next_actions)
     execution_contract = _job_execution_contract(root, job)
@@ -938,6 +943,16 @@ def _validation_next_actions(job: PackJob, next_actions: list[str]) -> list[str]
     actions = list(next_actions)
     if _manual_validation_required(job, job.validation_status or "not_ready", _validation_commands(job, actions)):
         actions.append(f'cambrian job complete {job.job_id} --outcome partial --notes "manual validation result"')
+    snapshot = job.outcome_snapshot if isinstance(job.outcome_snapshot, dict) else {}
+    criteria = _as_list(snapshot.get("validation_criteria"))
+    criteria_status = str(snapshot.get("validation_criteria_status") or "").strip()
+    if criteria and job.validation_status != "validated" and criteria_status not in {"satisfied", "failed"}:
+        actions.append(
+            f'cambrian pack job-validate {job.job_id} --criteria-status satisfied --criteria-notes "criteria reviewed"'
+        )
+        actions.append(
+            f'cambrian pack job-validate {job.job_id} --criteria-status failed --criteria-notes "criteria failed"'
+        )
     return _dedupe(actions)
 
 

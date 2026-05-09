@@ -527,6 +527,24 @@ def render_pack_job(job: PackJob) -> str:
         ]:
             if key in job.outcome_snapshot:
                 lines.append(f"  {key}: {job.outcome_snapshot.get(key)}")
+        validation_criteria = _as_list(job.outcome_snapshot.get("validation_criteria"))
+        validation_criteria_status = str(job.outcome_snapshot.get("validation_criteria_status") or "").strip()
+        manual_contract_review = (
+            dict(job.outcome_snapshot.get("manual_contract_review"))
+            if isinstance(job.outcome_snapshot.get("manual_contract_review"), dict)
+            else {}
+        )
+        if validation_criteria or validation_criteria_status or manual_contract_review:
+            lines.extend(["", "Contract criteria:"])
+            lines.append(f"  status: {validation_criteria_status or 'pending_review'}")
+            lines.append(f"  count: {len(validation_criteria)}")
+            if manual_contract_review:
+                reviewer = str(manual_contract_review.get("reviewer") or "").strip()
+                notes = str(manual_contract_review.get("notes") or "").strip()
+                if reviewer:
+                    lines.append(f"  reviewer: {reviewer}")
+                if notes:
+                    lines.append(f"  notes: {notes}")
     if job.final_outcome_snapshot:
         lines.extend(["", "Final outcome snapshot:"])
         for key in [

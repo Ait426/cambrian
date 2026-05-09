@@ -43,8 +43,15 @@ The current source of truth is:
 32. `04_SYSTEM_ARCHITECTURE.md`
 33. `11_CONVERSATIONAL_HARNESS_BUILDER.md`
 34. `12_HARNESS_ENGINEERING_SYSTEM.md`
+35. `44_CAMBRIAN_STUDIO.md`
 
 All older AI worker, pack, lane, and preset language is compatibility vocabulary unless a section explicitly marks it as current product identity.
+
+Current Studio surface:
+
+1. `44_CAMBRIAN_STUDIO.md`
+
+Studio is the browser creation surface for local agent contracts. It does not replace the local Cambrian Runtime; it creates installable manifests that the runtime installs, validates, proves, and evolves.
 
 Long-term future branch:
 
@@ -89,6 +96,7 @@ It frames a possible proof-backed agent marketplace after Cambrian has strong ru
 32. `04_SYSTEM_ARCHITECTURE.md`
 33. `11_CONVERSATIONAL_HARNESS_BUILDER.md`
 34. `12_HARNESS_ENGINEERING_SYSTEM.md`
+35. `44_CAMBRIAN_STUDIO.md`
 
 ## 1. 문서 목적
 

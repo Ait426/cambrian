@@ -16,6 +16,15 @@
 cambrian job start "로그인 세션 만료 문제 확인해" --json
 ```
 
+Installed pack 또는 Studio-generated agent pack을 직접 고를 때는 `--pack`을 쓴다.
+
+```bash
+cambrian job start --pack document-organizer-agent "문서 폴더를 주제별로 정리해줘" --json
+```
+
+이 경로도 AI provider를 호출하지 않고, source code를 수정하지 않는다.
+차이는 `request_packet`의 active pack context와 execution contract에 선택된 pack worker가 `selected_agents`로 들어간다는 점이다.
+
 ## 필수 JSON 계약
 
 `--json` 출력은 상위 레벨에 아래 필드를 포함해야 한다.
@@ -33,6 +42,9 @@ cambrian job start "로그인 세션 만료 문제 확인해" --json
   "dispatch_reason": "...",
   "change_policy": "proposal_only",
   "validation_commands": [],
+  "validation_criteria": [],
+  "forbidden_actions": [],
+  "approval_required_actions": [],
   "request_packet": ".cambrian/bridge/packets/....yaml",
   "request_packet_ref": ".cambrian/bridge/packets/....yaml",
   "job_ref": ".cambrian/packs/jobs/....yaml",
@@ -47,6 +59,9 @@ cambrian job start "로그인 세션 만료 문제 확인해" --json
 
 `pack_job` 필드는 기존 pack job 호환성을 위해 유지한다.
 새 제품 spine에서는 상위 필드를 우선 사용한다.
+
+Studio-generated agent pack은 agent contract의 `validation_criteria`, `forbidden_actions`, `approval_required_actions`를 request packet의 execution contract와 이후 validation evidence에 남긴다.
+사람이 기준 충족 여부를 검토한 뒤 `cambrian pack job-validate latest --criteria-status satisfied` 또는 `--criteria-status failed`로 판정을 남기면, validation evidence와 proof card가 같은 상태로 갱신된다.
 
 ## 생성 파일
 
