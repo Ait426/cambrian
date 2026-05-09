@@ -46,3 +46,22 @@ def test_evolve_review_uses_validation_evidence_signals(tmp_path: Path) -> None:
     assert "Patch proposal was not applied to source code" in signals["unchecked_items"]
     assert signals["outcome_counts"]["partial"] == 1
     assert signals["evidence_gaps"] == []
+
+
+def test_evolution_review_signal_contract_doc_is_linked() -> None:
+    doc = ROOT / "docs" / "product" / "21_EVOLUTION_REVIEW_SIGNAL_CONTRACT.md"
+    readme = (ROOT / "README.md").read_text(encoding="utf-8")
+    index = (ROOT / "docs" / "product" / "00_INDEX.md").read_text(encoding="utf-8")
+
+    assert doc.exists()
+    text = doc.read_text(encoding="utf-8")
+    for phrase in [
+        "cambrian evolve review",
+        "validation_commands_needing_manual_run",
+        "trust_gate_status_counts",
+        "manual_validation_required_jobs",
+        "evidence_gaps",
+    ]:
+        assert phrase in text
+    assert "docs/product/21_EVOLUTION_REVIEW_SIGNAL_CONTRACT.md" in readme
+    assert "21_EVOLUTION_REVIEW_SIGNAL_CONTRACT.md" in index

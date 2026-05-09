@@ -1,9 +1,47 @@
 # Cambrian Alpha Install
 
-Cambrian 알파는 로컬 전용 설치 흐름을 기준으로 안내합니다.
-외부 telemetry, cloud login, PyPI publish는 이번 범위에 포함되지 않습니다.
+160R 기준 Cambrian은 project-specific harness installer + agent dispatch runtime이다.
 
-## 1. Local Editable Install
+기본 설치/작업 흐름:
+
+```bash
+cambrian project scan
+cambrian harness plan
+cambrian harness install
+cambrian agent dispatch "로그인 에러 수정해"
+```
+
+`auth-bug-core`는 첫 built-in harness preset으로 유지한다.
+
+Cambrian은 AI Worker Installer다. 설치 후 로컬 Cambrian runtime이 프로젝트에 worker/team/template/lane pack을 입히고, 실제 작업과 검증은 로컬에서 수행한다.
+
+웹은 control plane이고, 로컬 Cambrian이 runtime이다. 이 alpha install 문서는 로컬 실행 기준만 다룬다.
+
+## Current strongest lane
+
+```text
+Python + pytest + auth/login narrow bug fix
+test-first
+narrow-scope
+review-support
+```
+
+기본값:
+
+- Default team: `auth-bug-team`
+- Default template: `auth-bug-template`
+- Default workset: `auth-bug-workset`
+
+## 1. Local editable install
+
+```bash
+python -m venv .venv
+.venv\Scripts\Activate.ps1
+pip install -U pip
+pip install -e .[dev]
+```
+
+macOS/Linux:
 
 ```bash
 python -m venv .venv
@@ -12,60 +50,38 @@ pip install -U pip
 pip install -e .[dev]
 ```
 
-Windows PowerShell:
-
-```powershell
-.venv\Scripts\Activate.ps1
-```
-
 ## 2. Doctor
-
-설치가 끝나면 먼저 환경을 점검합니다.
 
 ```bash
 cambrian doctor
 ```
 
-`cambrian doctor`는 아래를 확인합니다.
+`doctor`는 Python, dependency, CLI import, pytest, workspace write, project mode 상태를 확인한다.
 
-- Python 3.11+
-- CLI import 가능 여부
-- 필수 의존성 `yaml`, `jsonschema`
-- `pytest` 사용 가능 여부
-- workspace 쓰기 가능 여부
-- project mode 초기화 상태
-- demo create 사용 가능 여부
-
-## 3. Demo Smoke
+## 3. Demo smoke
 
 ```bash
-cambrian demo create login-bug --out ./demo
-cd ./demo
+cambrian demo create login-bug --out ./cambrian-login-demo
+cd ./cambrian-login-demo
 cambrian init --wizard --answers-file demo_answers.yaml
 cambrian do "로그인 정규화 버그 수정해"
-```
-
-길을 잃으면 언제든 아래 명령으로 현재 상태를 다시 확인합니다.
-
-```bash
 cambrian status
 ```
 
-## 4. Notes
+데모는 source를 바로 바꾸지 않는다. diagnose, proposal, validation을 먼저 만들고, explicit apply/adoption 단계에서만 실제 source 변경이 일어난다.
 
-- Cambrian은 local-only 흐름을 기준으로 합니다.
-- automatic adoption은 기본으로 꺼져 있습니다.
-- 실제 source 수정은 explicit apply 단계에서만 일어납니다.
-- apply에는 반드시 사람이 적은 `--reason`이 필요합니다.
-- project mode의 기본 경로는 `cambrian do`와 `cambrian do --continue`입니다.
+## 4. local-only safety
 
-## 5. Optional Build Smoke
+- cloud telemetry 없음
+- cloud source execution 없음
+- automatic adoption 없음
+- source 변경 전 file-first evidence 생성
+- apply/adoption에는 사람의 명시적 이유 필요
 
-로컬 빌드 sanity를 보고 싶다면:
+## 5. Optional build smoke
 
 ```bash
 python -m build
-# 또는
 python -m pip wheel . --no-deps -w ./dist
 python scripts/alpha_smoke_install.py
 ```

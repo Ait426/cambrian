@@ -16,6 +16,8 @@ from engine.exceptions import (
 )
 from engine.loop import CambrianEngine
 
+CURRENT_STRONGEST_LANE = "Python + pytest + auth/login narrow bug fix"
+
 
 def _attach_recovery_payload(payload: dict, hint) -> dict:
     """JSON 출력 payload에 recovery hint를 붙인다."""

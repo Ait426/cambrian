@@ -1,135 +1,124 @@
 # Cambrian Project Mode Quickstart
 
-이 문서는 Cambrian을 프로젝트에 맞추고, `do`와 `do --continue` 중심으로 작업을 이어가는 가장 짧은 기본 흐름을 설명합니다.
+## 0. 160R 기본 흐름
 
-Cambrian이 해주는 일:
+Project mode의 기본 spine은 이제 project-first다.
 
-- 프로젝트 규칙과 test command를 file-first artifact로 기록합니다.
-- 자연어 요청에서 관련 source/test 후보를 찾습니다.
-- source를 바로 바꾸지 않고 먼저 diagnose와 validation을 수행합니다.
-- explicit apply 이유가 있을 때만 실제 source를 수정합니다.
-- 작업 결과와 project memory를 status에 남깁니다.
+```bash
+cambrian doctor
+cambrian project scan
+cambrian harness plan
+cambrian harness install
+cambrian agent dispatch "로그인 에러 수정해"
+```
 
-중요한 안전 원칙:
+AI 응답을 받은 뒤에는 다음 경로를 사용한다.
 
-- Cambrian은 automatic adoption을 하지 않습니다.
-- project source 수정은 explicit apply 단계에서만 일어납니다.
-- apply 이전에는 diagnose, intent, proposal, validation artifact만 쌓입니다.
+```bash
+cambrian job ingest latest ai_reply_patch_candidate.yaml
+cambrian job validate latest
+```
+
+`auth-bug-core`는 첫 built-in harness preset이며, Cambrian 제품 본체가 아니다.
+
+Project mode는 로컬 Cambrian runtime이 현재 프로젝트에 AI 일꾼, 작업반, template, lane playbook을 입히는 흐름이다.
+
+Cambrian은 AI Worker Installer / AI 인력 설치기다. 내부적으로는 harness engineering runtime이며, 작업 결과를 evidence-based evolution engine으로 개선한다.
+
+## Current strongest lane
+
+```text
+Python + pytest + auth/login narrow bug fix
+test-first
+narrow-scope
+review-support
+```
+
+기본값:
+
+- Default team: `auth-bug-team`
+- Default template: `auth-bug-template`
+- Default workset: `auth-bug-workset`
+
+이 lane 밖에서는 warning과 추가 evidence를 더 중요하게 본다.
 
 ## 기본 흐름
 
 ```bash
 cambrian init --wizard
+cambrian run -d coding -t auth bug -i '{"request":"fix login bug"}'
 cambrian do "fix the login bug"
 cambrian do --continue
 cambrian status
 ```
 
-## 1. 프로젝트 초기화
+Legacy command compatibility:
+
+```bash
+cambrian patch propose
+cambrian patch apply
+```
+
+## 1. Install loop
 
 ```bash
 cambrian init --wizard
 ```
 
-생성되는 주요 파일:
+생성되는 주요 로컬 상태:
 
 - `.cambrian/project.yaml`
 - `.cambrian/rules.yaml`
-- `.cambrian/skills.yaml`
 - `.cambrian/profile.yaml`
+- `.cambrian/templates/`
 
-다음 기본 명령:
+install은 source code를 바꾸지 않는다.
 
-```bash
-cambrian do "fix the login bug"
-```
-
-## 2. 자연어 요청 시작
+## 2. Work loop
 
 ```bash
 cambrian do "로그인 정규화 버그 수정해"
-```
-
-여기서 Cambrian은:
-
-- project memory를 읽고
-- 관련 source/test 후보를 찾고
-- 필요하면 clarification을 만들고
-- 다음 명령을 제안합니다
-
-예상되는 다음 명령:
-
-```bash
 cambrian do --continue --use-suggestion 1 --execute
 ```
 
-## 3. 추천 context로 진단
+Cambrian은 project memory, context scan, diagnosis, related tests를 사용한다. source 변경 전에는 evidence artifact만 만든다.
 
-```bash
-cambrian do --continue --use-suggestion 1 --execute
-```
-
-여기서 Cambrian은:
-
-- source를 inspect하고
-- 관련 test를 실행하고
-- diagnosis report를 남깁니다
-
-이 단계에서는 source를 수정하지 않습니다.
-
-## 4. 한 줄로 validation까지 진행
+## 3. Validation loop
 
 ```bash
 cambrian do --continue --old-choice old-1 --new-text "return username.strip().lower()" --validate
 ```
 
-여기서 Cambrian은:
+patch intent, proposal, isolated validation을 만든다. source는 아직 변경되지 않는다.
 
-- patch intent를 만들고
-- intent를 채우고
-- patch proposal을 만들고
-- isolated validation까지 수행합니다
-
-이 단계에서도 source를 수정하지 않습니다.
-
-## 5. 명시적으로 apply
+## 4. Explicit apply/adoption
 
 ```bash
 cambrian do --continue --apply --reason "normalize username before login"
 ```
 
-여기서 Cambrian은:
+검증된 proposal만 적용하고, post-apply test와 adoption record를 남긴다.
 
-- validated proposal만 적용하고
-- post-apply tests를 다시 돌리고
-- adoption record와 latest pointer를 남깁니다
-
-이 단계에서만 source가 수정됩니다.
-
-## 6. 현재 상태 확인
+## 5. Proof and evolution
 
 ```bash
-cambrian status
+cambrian metrics week
+cambrian benchmark replay-workset auth-bug-workset
+cambrian benchmark proof auth-bug-workset
+cambrian template canary-report
 ```
 
-status에서 볼 수 있는 것:
+metrics/proof/canary는 자동 승격이 아니라 운영 판단 근거다.
 
-- active work 또는 latest completed work
-- recent journey
-- latest adoption
-- project memory
-- next action
+## Source-of-truth reminder
 
-## Advanced / Manual Path
+- Web control plane: catalog, recommendation, install manifest
+- Local runtime: 실제 install/work/validation/replay/canary/rollback
+- `.cambrian/`: file-first state와 derived evidence
+- source code: explicit apply/adoption 전에는 변경하지 않음
 
-아래 명령은 수동 제어가 필요할 때 쓰는 고급 경로입니다.
+## 다음 문서
 
-```bash
-cambrian run "fix the login bug"
-cambrian patch intent ...
-cambrian patch intent-fill ...
-cambrian patch propose ...
-cambrian patch apply ...
-```
-
-처음에는 이 문서보다 [FIRST_RUN_DEMO](C:/Users/user/Desktop/cambrain/cambrian/docs/FIRST_RUN_DEMO.md) 흐름을 그대로 따라가는 편이 가장 빠릅니다.
+- [Product doctrine](product/00_INDEX.md)
+- [First-run demo](FIRST_RUN_DEMO.md)
+- [Alpha install](ALPHA_INSTALL.md)

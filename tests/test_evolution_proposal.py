@@ -84,3 +84,24 @@ def test_evolve_preview_shows_apply_plan_without_modifying_metadata(tmp_path: Pa
     assert payload["next_command"] == f"cambrian evolve apply {proposal_id} --confirm --json"
     assert (tmp_path / payload["preview_ref"]).exists()
     assert (tmp_path / ".cambrian" / "harness.yaml").read_text(encoding="utf-8") == harness_before
+
+
+def test_evolution_proposal_preview_contract_doc_is_linked() -> None:
+    doc = ROOT / "docs" / "product" / "22_EVOLUTION_PROPOSAL_PREVIEW_CONTRACT.md"
+    readme = (ROOT / "README.md").read_text(encoding="utf-8")
+    index = (ROOT / "docs" / "product" / "00_INDEX.md").read_text(encoding="utf-8")
+
+    assert doc.exists()
+    text = doc.read_text(encoding="utf-8")
+    for phrase in [
+        "cambrian evolve propose",
+        "cambrian evolve preview",
+        "quality_score",
+        "risk_score",
+        "changed_files_preview",
+        "change_preview",
+        "source_code_modified",
+    ]:
+        assert phrase in text
+    assert "docs/product/22_EVOLUTION_PROPOSAL_PREVIEW_CONTRACT.md" in readme
+    assert "22_EVOLUTION_PROPOSAL_PREVIEW_CONTRACT.md" in index

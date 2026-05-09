@@ -11,6 +11,46 @@ from tests.test_harness_engineer_design import pass_engineering_gate, prepare_en
 ROOT = Path(__file__).resolve().parents[1]
 
 
+def test_job_start_runtime_contract_doc_is_linked() -> None:
+    doc = ROOT / "docs" / "product" / "16_JOB_START_RUNTIME_CONTRACT.md"
+    packet_doc = ROOT / "docs" / "product" / "17_CODEX_CLAUDE_REQUEST_PACKET.md"
+    ingest_doc = ROOT / "docs" / "product" / "18_AI_REPLY_INGEST_CONTRACT.md"
+    validate_doc = ROOT / "docs" / "product" / "19_JOB_VALIDATE_TRUST_GATE.md"
+    readme = (ROOT / "README.md").read_text(encoding="utf-8")
+    index = (ROOT / "docs" / "product" / "00_INDEX.md").read_text(encoding="utf-8")
+
+    assert doc.exists()
+    assert packet_doc.exists()
+    assert ingest_doc.exists()
+    assert validate_doc.exists()
+    text = doc.read_text(encoding="utf-8")
+    packet_text = packet_doc.read_text(encoding="utf-8")
+    ingest_text = ingest_doc.read_text(encoding="utf-8")
+    validate_text = validate_doc.read_text(encoding="utf-8")
+    for phrase in [
+        "cambrian job start",
+        "waiting_for_ai_reply",
+        "request_packet_ref",
+        "execution_contract",
+        "codex_claude_instruction",
+        "ai_provider_called",
+        "source_code_modified",
+        ".cambrian/bridge/packets/",
+        ".cambrian/packs/jobs/",
+        "manual_validation_required",
+        "trust_gate_status",
+        ".cambrian/evidence/validation/",
+    ]:
+        assert phrase in f"{text}\n{packet_text}\n{ingest_text}\n{validate_text}"
+    assert "docs/product/16_JOB_START_RUNTIME_CONTRACT.md" in readme
+    assert "docs/product/17_CODEX_CLAUDE_REQUEST_PACKET.md" in readme
+    assert "docs/product/18_AI_REPLY_INGEST_CONTRACT.md" in readme
+    assert "docs/product/19_JOB_VALIDATE_TRUST_GATE.md" in readme
+    assert "16_JOB_START_RUNTIME_CONTRACT.md" in index
+    assert "17_CODEX_CLAUDE_REQUEST_PACKET.md" in index
+    assert "18_AI_REPLY_INGEST_CONTRACT.md" in index
+    assert "19_JOB_VALIDATE_TRUST_GATE.md" in index
+
 
 def test_job_start_json_exposes_runtime_contract(tmp_path: Path) -> None:
     prepare_engineering_project(tmp_path)

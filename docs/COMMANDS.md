@@ -1,5 +1,30 @@
 # Cambrian Commands
 
+Cambrian is a project-specific harness installer and agent dispatch runtime.
+
+Primary project-first commands:
+
+```bash
+cambrian project scan
+cambrian harness plan
+cambrian harness install
+cambrian agent dispatch "로그인 에러 수정해"
+cambrian job ingest latest ai_reply_patch_candidate.yaml
+cambrian job validate latest
+```
+
+`auth-bug-core` is the first built-in harness preset. Pack commands remain available as compatibility/internal distribution commands.
+
+Cambrian is an AI Worker Installer and local evidence-based harness runtime.
+
+Cambrian은 사용자가 이미 쓰는 AI에 검증된 AI 일꾼과 작업반을 설치하고,
+그 결과를 benchmark와 proof로 검증해 계속 진화시키는 local runtime이다.
+
+Web control plane은 catalog, hiring, install manifest를 담당한다.
+Local Cambrian runtime은 install, bridge, validate, benchmark, proof, canary, rollback을 담당한다.
+
+모든 source 변경은 explicit apply/adoption 경계 뒤에서만 일어난다.
+
 Cambrian?멸? ?꾩쟾?섍쾶 怨꾩냽?섏? 紐삵븷 ???곷떒?쒕? 蹂댁뿬二쇨퀬, `Problem / Why / Try` ?뺤떇?쇰줈 ?ㅼ쓬 紐낅졊??안내?⑸땲??.
 
 이 문서는 현재 사용자 중심 CLI와 고급 내부 CLI를 함께 정리합니다.

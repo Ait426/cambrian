@@ -93,3 +93,44 @@ def test_evolve_rollback_requires_confirm_and_restores_metadata(tmp_path: Path) 
     assert rollback_record["restored_files"] == payload["restored_files"]
     assert history["rollbacks"][-1]["proposal_id"] == proposal_id
     assert history["rollbacks"][-1]["rollback_applied_ref"] == payload["rollback_applied_ref"]
+
+
+def test_evolution_apply_audit_contract_doc_is_linked() -> None:
+    doc = ROOT / "docs" / "product" / "23_EVOLUTION_APPLY_AUDIT_CONTRACT.md"
+    readme = (ROOT / "README.md").read_text(encoding="utf-8")
+    index = (ROOT / "docs" / "product" / "00_INDEX.md").read_text(encoding="utf-8")
+
+    assert doc.exists()
+    text = doc.read_text(encoding="utf-8")
+    for phrase in [
+        "cambrian evolve apply",
+        "audit_ref",
+        "rollback_ref",
+        "backup_refs",
+        ".cambrian/evolution/audit",
+        ".cambrian/evolution/rollback",
+        "source code를 수정하지 않는다",
+    ]:
+        assert phrase in text
+    assert "docs/product/23_EVOLUTION_APPLY_AUDIT_CONTRACT.md" in readme
+    assert "23_EVOLUTION_APPLY_AUDIT_CONTRACT.md" in index
+
+
+def test_evolution_rollback_contract_doc_is_linked() -> None:
+    doc = ROOT / "docs" / "product" / "24_EVOLUTION_ROLLBACK_CONTRACT.md"
+    readme = (ROOT / "README.md").read_text(encoding="utf-8")
+    index = (ROOT / "docs" / "product" / "00_INDEX.md").read_text(encoding="utf-8")
+
+    assert doc.exists()
+    text = doc.read_text(encoding="utf-8")
+    for phrase in [
+        "cambrian evolve rollback",
+        "rollback_applied_ref",
+        "restored_files",
+        ".cambrian/evolution/rollback/applied",
+        "source code를 수정하지 않는다",
+        "`--confirm` 없이는 복원하지 않는다",
+    ]:
+        assert phrase in text
+    assert "docs/product/24_EVOLUTION_ROLLBACK_CONTRACT.md" in readme
+    assert "24_EVOLUTION_ROLLBACK_CONTRACT.md" in index

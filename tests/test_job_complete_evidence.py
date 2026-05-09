@@ -134,6 +134,24 @@ def test_job_complete_records_outcome_and_evidence(tmp_path: Path) -> None:
     assert "trace-auth-token-flow" in evidence["outcomes"][0]["selected_skills"]
 
 
+def test_job_complete_outcome_contract_doc_is_linked() -> None:
+    doc = ROOT / "docs" / "product" / "20_JOB_COMPLETE_OUTCOME_CONTRACT.md"
+    readme = (ROOT / "README.md").read_text(encoding="utf-8")
+    index = (ROOT / "docs" / "product" / "00_INDEX.md").read_text(encoding="utf-8")
+
+    assert doc.exists()
+    text = doc.read_text(encoding="utf-8")
+    for phrase in [
+        "cambrian job complete",
+        "validation_evidence_ref",
+        "ready_for_evolution",
+        ".cambrian/evidence/outcomes.yaml",
+        "source_code_modified_by_cambrian",
+    ]:
+        assert phrase in text
+    assert "docs/product/20_JOB_COMPLETE_OUTCOME_CONTRACT.md" in readme
+    assert "20_JOB_COMPLETE_OUTCOME_CONTRACT.md" in index
+
 
 def test_job_complete_links_validation_evidence_for_evolution(tmp_path: Path) -> None:
     prepare_custom_harness_project(tmp_path)

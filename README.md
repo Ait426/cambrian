@@ -1,308 +1,308 @@
 # Cambrian
 
-**Evolutionary trust harness for AI work.**
+Cambrian is an installable AI company runtime.
+Every project becomes an AI company.
 
-Cambrian은 AI 위에 입히는 프로젝트용 진화형 신뢰 하네스입니다.
+It turns each project into an AI company that can plan, build, validate, and evolve a product using Claude, Codex, or other AI execution engines.
 
-프로젝트 기억, 실행 규칙, 검증, 명시적 채택, 학습 기록을 AI 작업 위에 덧씌워 더 일관되고 안전하게 일하게 만듭니다.
+Cambrian은 인간의 외주를 받아 제품을 만드는 AI 회사다.
+Cambrian을 설치하는 순간 매 프로젝트는 하나의 AI 회사가 된다.
 
-Cambrian은 project memory와 explicit adoption 흐름을 통해 AI 출력을 바로 밀어 넣지 않고, 진단과 검증을 거쳐 안전하게 이어지게 돕습니다.
+사용자가 제품 목표를 맡기면 Cambrian은 그 프로젝트 안에 AI 회사를 세웁니다. 그 회사는 CEO, CTO, COO, PM, 엔지니어, QA, 릴리즈 매니저 역할을 만들고, 하네스·인력·스킬·권한·검증·진화 루프를 통해 제품을 끝까지 만듭니다.
 
-## Quick Start
+## Install from local wheel
 
-```bash
-pip install -e ".[anthropic,dev]"
-export ANTHROPIC_API_KEY=sk-ant-...
-
-# 프로젝트 하네스 맞추기
-cambrian init --wizard
-
-# 자연어 요청 시작
-cambrian init --wizard
-
-cambrian do "fix the login bug"
-
-cambrian do --continue
-
-# 현재 프로젝트 기억과 최근 여정 확인
-cambrian status
-
-# 지금까지 Cambrian이 로컬에서 무엇을 도왔는지 요약 확인
-cambrian summary
-```
-
-Cambrian은 AI 결과를 자동으로 곧바로 적용하지 않습니다.
-먼저 diagnose, validation, patch proposal, explicit apply/adoption 흐름을 거칩니다.
-
-문서:
-
-- [첫 실행 demo](docs/FIRST_RUN_DEMO.md)
-- [알파 설치 / doctor / smoke](docs/ALPHA_INSTALL.md)
-- [프로젝트 모드 빠른 시작](docs/PROJECT_MODE_QUICKSTART.md)
-- [명령어 안내](docs/COMMANDS.md)
-- [아티팩트 안내](docs/ARTIFACTS.md)
-
-## Installation
+PyPI 배포 전 RC는 로컬 wheel로 설치합니다.
 
 ```bash
-pip install cambrian
+python -m pip install build
+python -m build
+python -m pip install dist/*.whl
 ```
 
-### LLM Provider (하나만 선택)
+## Quickstart
+
+Core flow:
 
 ```bash
-# Anthropic Claude (기본)
-pip install cambrian[anthropic]
-export ANTHROPIC_API_KEY=sk-ant-...
-
-# OpenAI GPT
-pip install cambrian[openai]
-export OPENAI_API_KEY=sk-...
-export CAMBRIAN_LLM_PROVIDER=openai
-
-# Google Gemini
-pip install cambrian[google]
-export GOOGLE_API_KEY=...
-export CAMBRIAN_LLM_PROVIDER=google
-
-# 전부 설치
-pip install cambrian[all]
+cambrian doctor
+cambrian project scan
+cambrian harness interview start
+cambrian harness interview answer --answers .cambrian/interview/answers.yaml
+cambrian harness engineer design
+cambrian harness engineer review
+cambrian harness engineer dry-run "로그인 문제 봐줘"
+cambrian workforce generate
+cambrian skill generate
+cambrian harness install --confirm
+cambrian authority grant --mode full-authority
+cambrian auto init --goal "Build this product"
+cambrian auto boardroom
+cambrian auto plan
+cambrian auto run --max-steps 5
 ```
 
-CLI에서 프로바이더 지정:
-```bash
-cambrian run -d utility -t greeting -i '...' --provider openai --llm-model gpt-4o
-```
+`project scan`과 `harness interview`는 프로젝트의 목적, 구조, 금지 범위, 검증 기준을 모읍니다. `harness engineer design/review/dry-run`은 설치 전 하네스·인력·스킬 설계를 검수합니다. `authority`는 AI 회사에 부여할 실행 권한을 정의하고, `auto`는 boardroom decision, plan, bounded run, evidence를 기록합니다.
 
-## 핵심 루프
+설치 직후에는 어떤 agent도 자동 파견하지 않습니다. 오토 모드도 V1에서는 source code를 자동 수정하지 않고 실행 계획과 evidence를 남깁니다.
 
-```
-태스크 → 경쟁 실행 → 최적 결과 반환 → fitness 갱신
-              │
-          전원 실패 → 부검(Autopsy) → 스킬 검색 → 흡수 → 재시도
-```
+AI company bootstrap details are documented in [AI Company Bootstrap](docs/product/15_AI_COMPANY_BOOTSTRAP.md).
 
-## 아키텍처
-
-```
-┌──────────────────────────────────────────┐
-│           Main Loop (loop.py)            │
-│                                          │
-│  Task → 후보 검색                         │
-│           │                              │
-│     후보 1개 → 즉시 실행                   │
-│     후보 2개+ → 경쟁 실행 (최적 선택)       │
-│           │                              │
-│       성공 → fitness 갱신 → 결과 반환      │
-│       실패 → Autopsy → Absorber → 재시도   │
-│                                          │
-│  피드백 3채널:                               │
-│  [AUTO]   실패 분석 자동 (rating 1)         │
-│  [CRITIC] 비판적 분석 수동 (rating 2)       │
-│  (수동)   사용자 피드백 (rating 1~5)        │
-│                                          │
-│  진화 루프 (피드백 기반):                   │
-│  feedback → mutate(LLM) → 3회 실행        │
-│  → Judge(LLM) 블라인드 채점 → 채택/폐기    │
-│                                          │
-│  생명주기 자동 관리:                        │
-│  30일 미사용 → dormant / 90일 → fossil     │
-└──────────────────────────────────────────┘
-```
-
-## 부품
-
-| 부품 | 파일 | 역할 |
-|------|------|------|
-| LLM | engine/llm.py | 프로바이더 추상화 (Anthropic / OpenAI / Google) |
-| Validator | engine/validator.py | 스킬 포맷 검증 (JSON Schema) |
-| Loader | engine/loader.py | 스킬 파일 → Skill 객체 |
-| Executor | engine/executor.py | 스킬 실행 (Mode A: LLM / Mode B: subprocess) |
-| Registry | engine/registry.py | SQLite 스킬 DB + 검색 + fitness + 퇴화 |
-| Autopsy | engine/autopsy.py | 실패 분석 + 필요 스킬 진단 |
-| Absorber | engine/absorber.py | 외부 스킬 흡수 + 보안 검사 |
-| Security | engine/security.py | AST 기반 정적 코드 분석 |
-| Benchmark | engine/benchmark.py | 동일 입력으로 다수 스킬 비교 실행 |
-| Evolution | engine/evolution.py | LLM 기반 SKILL.md 변이 + 다중 시행 비교 |
-| Judge | engine/judge.py | 두 출력을 익명화(A/B)하여 LLM 비교 채점 |
-| Portability | engine/portability.py | 스킬 export/import (.cambrian 패키지) |
-| Critic | engine/critic.py | LLM 기반 SKILL.md 비판적 분석 |
-| Loop | engine/loop.py | 전체 루프 오케스트레이션 + 경쟁 실행 + 자가 진화 제안 |
-| CLI | engine/cli.py | argparse CLI (16개 명령어) |
-
-## 시드 스킬 (14개)
-
-| Skill | Mode | Domain | 용도 |
-|-------|------|--------|------|
-| hello_world | B | utility | 기본 동작 테스트 |
-| slow_skill | B | testing | 타임아웃 테스트 |
-| crash_skill | B | testing | 오류 처리 테스트 |
-| csv_to_chart | A | data_visualization | CSV → HTML 차트 |
-| json_to_dashboard | A | data_visualization | JSON → 대시보드 |
-| landing_page | A | design | 랜딩 페이지 생성 |
-| inventory_anomaly_report | A | hotel_analytics | OTA 재고 불일치 분석 |
-| email_draft | A | writing | 상황 → 이메일 초안 |
-| meeting_summary | A | writing | 회의록 → 요약 |
-| code_review | A | coding | 코드 → 리뷰 피드백 |
-| data_cleaner | A | data | CSV 정제 |
-| seo_meta | A | marketing | SEO 메타태그 생성 |
-| api_doc | A | coding | API 문서 생성 |
-| expense_report | A | analytics | 지출 분석 리포트 |
-
-## 경쟁 실행
-
-같은 도메인+태그에 후보가 2개 이상이면 자동으로 경쟁 실행:
-
-- **Mode B 후보**: 전원 실행 (subprocess라 빠름)
-- **Mode A 후보**: fitness 상위 2개만 실행 (API 비용 제한)
-- 성공한 결과 중 fitness가 가장 높은 스킬의 결과를 반환
-
-## 진화 시스템
-
-### 흐름
-
-```
-1. feedback(skill_id, rating, comment) 저장
-2. evolve(skill_id, test_input) 호출
-3. mutate(): LLM이 SKILL.md + 피드백(입력/출력 이력 포함)으로 개선
-   - Input/Output Format 섹션은 원본 그대로 보존
-   - 변경 이력을 Changelog 섹션에 추가
-4. 원본 3회 + variant 3회 실행
-5. 각 시행마다 LLM Judge가 블라인드 채점 (0~10점)
-6. variant 평균 > original 평균 → 채택
-```
-
-### LLM Judge
-
-- A/B 익명화 (순서 랜덤), 채점 근거(reasoning) 기록
-- 채점: 정확성(0~3) + 피드백 반영도(0~4) + 품질(0~3)
-
-### Fitness 공식
-
-```
-fitness = execution_fitness x 0.5 + judge_fitness x 0.5
-execution_fitness = 성공률 x min(실행횟수/10, 1.0)
-judge_fitness = avg_judge_score / 10.0  (EMA 갱신)
-```
-
-## 퇴화와 멸종
-
-엔진 시작 시 자동 정리:
-
-| 조건 | 변경 |
-|------|------|
-| active + 30일 미사용 | → dormant |
-| newborn + 등록 30일 후 미사용 | → dormant |
-| dormant + 90일 미사용 | → fossil |
-
-fossil은 기본 검색에서 자동 제외.
-
-## 스킬 포맷
-
-```
-skill/
-├── meta.yaml        # 신원 정보 (id, version, domain, tags, mode, runtime)
-├── interface.yaml   # 입출력 계약 (JSON Schema)
-├── SKILL.md         # LLM용 지시서 (Mode A)
-└── execute/
-    └── main.py      # 실행 코드 (Mode B만)
-```
-
-## CLI Reference
+## Manual Job Mode
 
 ```bash
-# 프로젝트 초기화
-cambrian init [--dir ./path]
-
-# 태스크 실행
-cambrian run -d <domain> -t <tags...> -i '<json>' [--auto-evolve] [--provider anthropic] [--llm-model claude-sonnet-4-6]
-
-# 스킬 관리
-cambrian skills                          # 목록
-cambrian skill <id>                      # 상세
-cambrian absorb <path>                   # 외부 흡수
-cambrian remove <id>                     # 제거
-cambrian stats                           # 통계
-
-# 진화
-cambrian feedback <id> <rating> <comment>
-cambrian evolve <id> -i '<json>'
-cambrian history <id> [--detail <record_id>]
-cambrian rollback <id> <record_id>
-cambrian benchmark -d <domain> -t <tags...> -i '<json>'
-cambrian critique <id>                   # 비판적 분석
-
-# 패키지
-cambrian export <id> [-o ./output]       # .cambrian 패키지 내보내기
-cambrian import <path.cambrian>          # 패키지 가져오기
+cambrian job start "로그인 세션 만료 문제 확인해" --json
 ```
 
-## 테스트
+`job start`는 설치된 AI 회사의 `.cambrian/workforce.yaml`과 `.cambrian/skills/*.yaml`을 읽고 필요한 agent와 skill을 선택합니다. 이 단계는 AI provider를 호출하지 않고 source code를 수정하지 않습니다. 대신 request packet과 job record를 만들고, AI 답변을 저장한 뒤 실행할 `job ingest` / `job validate` 명령을 보여줍니다.
+
+런타임 계약은 [Job Start Runtime Contract](docs/product/16_JOB_START_RUNTIME_CONTRACT.md)에 고정되어 있습니다.
+Codex/Claude에 넘기는 request packet 계약은 [Codex / Claude Request Packet Contract](docs/product/17_CODEX_CLAUDE_REQUEST_PACKET.md)에 고정되어 있습니다.
+AI 응답을 다시 받아들이는 계약은 [AI Reply Ingest Contract](docs/product/18_AI_REPLY_INGEST_CONTRACT.md)에 고정되어 있습니다.
+AI 응답 검증과 evidence/trust gate 계약은 [Job Validate Trust Gate](docs/product/19_JOB_VALIDATE_TRUST_GATE.md)에 고정되어 있습니다.
+사람이 검증 결과를 기록하고 evolution 입력으로 넘기는 계약은 [Job Complete Outcome Contract](docs/product/20_JOB_COMPLETE_OUTCOME_CONTRACT.md)에 고정되어 있습니다.
+outcome evidence를 진화 신호로 요약하는 계약은 [Evolution Review Signal Contract](docs/product/21_EVOLUTION_REVIEW_SIGNAL_CONTRACT.md)에 고정되어 있습니다.
+진화 제안을 적용 전에 검토하는 계약은 [Evolution Proposal Preview Contract](docs/product/22_EVOLUTION_PROPOSAL_PREVIEW_CONTRACT.md)에 고정되어 있습니다.
+진화 적용의 감사 manifest와 rollback hint 계약은 [Evolution Apply Audit Contract](docs/product/23_EVOLUTION_APPLY_AUDIT_CONTRACT.md)에 고정되어 있습니다.
+진화 적용을 되돌리는 metadata rollback 계약은 [Evolution Rollback Contract](docs/product/24_EVOLUTION_ROLLBACK_CONTRACT.md)에 고정되어 있습니다.
+
+## AI Company Pieces
+
+- A project-specific harness is the operating system inside the installed AI company.
+- AI Company: Cambrian이 프로젝트 안에 설치하는 실행 조직
+- Harness: AI 회사가 일하는 운영 체계
+- Workforce: 프로젝트를 위해 생성된 AI 인력 조직
+- Agent: 회사 내 역할을 가진 AI 인력
+- Skill: 인력이 사용하는 반복 가능한 작업 능력
+- Boardroom: CEO/CTO/COO/PM 등 의사결정 회의 구조
+- Authority Mode: 사용자가 AI 회사에 부여한 실행 권한 범위
+- Auto Mode: AI 회사가 제품 제작 전 과정을 자동 운영하는 모드
+- Claude / Codex: Cambrian이 사용하는 실행 엔진
+- Preset: 선택 가능한 참고 템플릿. 기본 설치물이 아님.
+
+Compatibility aliases remain available but are not the default AI company runtime flow:
 
 ```bash
-pytest tests/ -v --tb=short -k "not Api"
-# 180 passed, 12 skipped
+cambrian harness plan
+cambrian agent dispatch "로그인 에러 수정해"
 ```
 
-## 기술 스택
+## Validate a canned AI reply
 
-- Python 3.11+
-- pyyaml, jsonschema (필수)
-- anthropic / openai / google-generativeai (선택, LLM 프로바이더)
-- SQLite (ORM 없이 직접)
-- pytest
-
-## Security Model
-
-Cambrian applies a layered security model for Mode B skill execution:
-
-**Layer 1 — AST Static Scanner** (`engine/security.py`)
-Blocks known dangerous patterns (eval, exec, subprocess, os imports) at
-skill load time. This is a basic defense line and cannot detect all evasion.
-
-**Layer 2 — Environment Isolation** (`engine/executor.py`)
-Subprocess execution uses a minimal environment variable whitelist.
-Parent process secrets are not forwarded to child processes.
-
-**Layer 3 — Container Isolation** (`engine/sandbox.py`, opt-in)
-When `sandbox.enabled = true` in policy, Mode B skills run inside a
-Docker container with:
-- Network disabled by default (`--network none`)
-- Read-only root filesystem (`--read-only`)
-- Memory, CPU, and PID limits
-- Skill directory mounted read-only
-- Writable tmpfs for /tmp only
-
-**Current limitations:**
-- Container isolation is Mode B only. Mode A (LLM) is not sandboxed.
-- Docker-based isolation is not a complete security guarantee.
-- Linux + Docker is the primary supported environment.
-- Sandbox is opt-in; default is subprocess execution.
-- nsjail, rootless hardening, and cross-platform support are future work.
-
-**Recommendation:** Enable sandbox for any skill from untrusted sources.
-
-## Fitness Scoring
-
-Skill fitness is calculated as:
-
-```
-raw = successful_executions / total_executions
-confidence = min(total_executions / 10, 1.0)
-fitness = raw * confidence
+```bash
+cambrian demo create login-bug --out ./auth-bug-demo
+cd ./auth-bug-demo
+cambrian job ingest latest fixtures/ai_reply_patch_candidate.yaml
+cambrian job validate latest
 ```
 
-This means skills with fewer than 10 executions are penalized by a confidence
-factor. A skill with 100% success rate and 5 executions will have
-fitness = 1.0 × 0.5 = 0.5. This is intentional cold-start protection but
-creates a structural disadvantage for newborn skills in competitive execution.
+이 검증은 실제 AI provider를 호출하지 않고 준비된 AI 답변 fixture를 사용합니다. `job validate`는 검증 handoff를 확인하지만 source code를 자동 적용하지 않습니다.
 
-When LLM Judge scores are available, fitness combines execution success (50%)
-and judge score (50%).
+## Evidence-based evolution
 
-## Mode A vs Mode B in Competitive Execution
+작업 결과는 사람이 명시적으로 기록하고, Cambrian은 그 evidence를 바탕으로 하네스/인력/스킬 진화 제안만 만듭니다. 적용은 항상 사용자 승인 후 로컬 `.cambrian/` metadata에만 반영됩니다.
 
-Mode A (LLM-based) skills report actual execution time but are sorted with
-a fixed latency of 999999ms in competitive runs. This means Mode B (code-based)
-skills are always preferred when both succeed. This is a deliberate design
-choice favoring deterministic execution.
+```bash
+cambrian job complete latest --outcome partial --notes "test command가 틀렸고 refresh token 경로를 놓쳤음"
+cambrian evolve review --recent 5
+cambrian evolve propose
+cambrian evolve apply <proposal-id> --confirm
+```
+
+`evolve apply`는 source code, preset 원본, provider API를 건드리지 않습니다.
+
+## Authority and auto mode
+
+Cambrian은 기본적으로 `proposal_only` 권한으로 동작합니다. 오토 제품 제작 모드는 명시 권한 프로파일 안에서만 상태, 회의, 계획, 실행 제안을 기록합니다.
+
+```bash
+cambrian authority status
+cambrian authority grant --mode full-authority
+cambrian auto init --goal "제품을 설치형 RC로 완성"
+cambrian auto boardroom
+cambrian auto plan
+cambrian auto run --max-steps 5
+```
+
+V1 auto mode는 무한 자동 실행기가 아닙니다. CEO/CTO/COO/PM/Engineering/QA/Release 역할의 boardroom decision, bounded plan, execution log를 `.cambrian/auto/`와 `.cambrian/evidence/`에 남기며 source code, secret, deploy, payment는 자동 처리하지 않습니다.
+`auto run`이 Codex/Claude 작업지시서를 만들고 결과 대기 상태로 남기는 계약은 [Auto Task Directive Bridge](docs/product/25_AUTO_TASK_DIRECTIVE_BRIDGE.md)에 고정되어 있습니다.
+Codex/Claude 결과 파일을 다시 받아 auto task와 execution log에 반영하는 계약은 [Auto Step Result Intake](docs/product/26_AUTO_STEP_RESULT_INTAKE.md)에 고정되어 있습니다.
+수집된 결과를 다음 boardroom/plan/release 판단으로 넘기는 보고 계약은 [Auto Result Report Handoff](docs/product/27_AUTO_RESULT_REPORT_HANDOFF.md)에 고정되어 있습니다.
+boardroom이 auto report evidence를 읽고 다음 회의 agenda와 role decision을 만드는 계약은 [Auto Boardroom Report Review](docs/product/28_AUTO_BOARDROOM_REPORT_REVIEW.md)에 고정되어 있습니다.
+boardroom handoff를 recovery/validation/release/next plan step으로 바꾸는 계약은 [Auto Plan From Handoff](docs/product/29_AUTO_PLAN_FROM_HANDOFF.md)에 고정되어 있습니다.
+`report → boardroom → plan → run`을 안전한 한 사이클로 묶는 계약은 [Auto Cycle Command](docs/product/30_AUTO_CYCLE_COMMAND.md)에 고정되어 있습니다.
+Codex/Claude result 파일의 필수 필드와 타입 검증 계약은 [Codex Result Contract Hardening](docs/product/31_CODEX_RESULT_CONTRACT_HARDENING.md)에 고정되어 있습니다.
+
+Auto loop completion gate is fixed in [Auto Loop Done Gate](docs/product/32_AUTO_LOOP_DONE_GATE.md).
+Next iteration startup after `DONE` is fixed in [Auto Next Iteration Gate](docs/product/33_AUTO_NEXT_ITERATION_GATE.md).
+Role-specific auto task directives are fixed in [Role-Specific Auto Directives](docs/product/34_ROLE_SPECIFIC_AUTO_DIRECTIVES.md).
+Role-specific result compliance is fixed in [Role-Specific Result Compliance](docs/product/35_ROLE_SPECIFIC_RESULT_COMPLIANCE.md).
+Auto result quality scoring is fixed in [Auto Result Quality Scoring](docs/product/36_AUTO_RESULT_QUALITY_SCORING.md).
+Quality-aware auto plan selection is fixed in [Quality-Aware Auto Plan Selection](docs/product/37_QUALITY_AWARE_AUTO_PLAN_SELECTION.md).
+Release gate evidence packaging is fixed in [Release Gate Evidence Package](docs/product/38_RELEASE_GATE_EVIDENCE_PACKAGE.md).
+Release gate verdict routing is fixed in [Release Gate Decision Loop](docs/product/39_RELEASE_GATE_DECISION_LOOP.md).
+Auto iteration archive and fresh-start boundaries are fixed in [Auto Iteration Archive Fresh Start Contract](docs/product/40_AUTO_ITERATION_ARCHIVE_FRESH_START.md).
+Explicit next goal selection is fixed in [Explicit Next Goal Contract](docs/product/41_EXPLICIT_NEXT_GOAL_CONTRACT.md).
+
+## Fresh install RC verification
+
+```bash
+python scripts/smoke_installed_wheel.py
+```
+
+이 smoke는 fresh venv에 wheel을 설치한 뒤 built-in harness preset 경로를 실행합니다. 자세한 설치 가이드는 [RC Install Guide](docs/release/RC_INSTALL_GUIDE.md)를 보세요.
+
+## Built-in preset seeds
+
+## Built-in preset compatibility
+
+Cambrian shows compatible preset options during the interview, but it does not install a preset automatically.
+For Python + pytest auth projects, `auth-bug-core` can be used as a seed.
+For TypeScript + Jest auth/API projects, `typescript-jest-auth-core` can be used as a seed.
+
+`auth-bug-core`는 Cambrian의 제품 중심이 아니라 Python + pytest auth/login 계열을 위한 built-in seed preset입니다.
+
+기존 pack 명령은 계속 지원됩니다. 단, 기본 제품 흐름은 pack 설치가 아니라 `project scan → harness interview → harness engineering → workforce/skill generation → authority → auto mode`입니다.
+
+```bash
+cambrian pack list
+cambrian pack show auth-bug-core
+cambrian install pack auth-bug-core
+cambrian pack activate auth-bug-core
+cambrian pack start "로그인 에러 수정해"
+```
+
+이 경로는 호환/내부 distribution 경로입니다. 새 제품 spine은 `AI company runtime, custom harness first, preset optional seed`입니다.
+
+## Product run docs
+
+- First run runbook: [docs/launch/DEMO_RUNBOOK.md](docs/launch/DEMO_RUNBOOK.md)
+- Public demo kit: [docs/launch/PUBLIC_DEMO_KIT.md](docs/launch/PUBLIC_DEMO_KIT.md)
+- Public product assets: [docs/launch/DEMO_ASSETS.md](docs/launch/DEMO_ASSETS.md)
+- RC checklist: [docs/release/RC_CHECKLIST.md](docs/release/RC_CHECKLIST.md)
+- RC verification: [docs/release/RC_VERIFICATION.md](docs/release/RC_VERIFICATION.md)
+- Dogfood runbook: [docs/release/DOGFOOD_RUNBOOK.md](docs/release/DOGFOOD_RUNBOOK.md)
+- Pilot outreach kit: [docs/launch/PILOT_OUTREACH_KIT.md](docs/launch/PILOT_OUTREACH_KIT.md)
+- Pilot learning board: [docs/launch/PILOT_LEARNING_BOARD.md](docs/launch/PILOT_LEARNING_BOARD.md)
+
+Reproducible product run:
+
+```bash
+python tools/run_launch_demo.py
+```
+
+### Private pilot
+
+For invite messages, interview guide, and feedback templates, see [Pilot Outreach Kit](docs/launch/PILOT_OUTREACH_KIT.md).
+
+## What The Product Run Shows
+
+- `project scan`: 현재 프로젝트를 AI company 설치 대상으로 분석
+- `harness interview start`: AI-mediated Q&A용 질문 세트 생성
+- `harness engineer design`: AI 회사의 하네스/인력/스킬 설계 후보 생성
+- `harness engineer review`: 초기 회사 설계 품질 검수
+- `harness engineer dry-run`: 실제 job 생성 없이 투입 인력과 스킬 시뮬레이션
+- `workforce generate`: 프로젝트별 AI 인력 조직 생성
+- `skill generate`: 인력이 사용할 프로젝트별 스킬 생성
+- `authority grant`: AI 회사의 실행 권한 범위 정의
+- `auto boardroom`: CEO/CTO/COO/PM 등 의사결정 회의 기록
+- `auto plan`: 의사결정을 실행 계획으로 변환
+- `auto run`: 제한된 step 안에서 실행 제안과 evidence 기록
+
+Compatibility/history terms:
+
+- `project scan`: 현재 프로젝트 profile 생성
+- `harness interview start`: AI-mediated Q&A용 질문 세트 생성
+- `harness interview answer`: 사용자 답변 검증
+- `harness plan`: 답변 기반 custom harness draft 생성
+- `harness install --confirm`: 승인 후 `.cambrian/`에 custom harness 설치
+- `agent dispatch`: 설치된 custom harness에 에이전트/작업반 파견
+- `auth-bug-core`: Python + pytest + auth/login narrow bug fix에 맞춘 첫 built-in harness preset
+- 포함 worker: `bug-fix-agent`, `regression-test-agent`, `review-agent`
+- 포함 team/template/workset: `auth-bug-team`, `auth-bug-template`, `auth-bug-workset`
+- 로컬 runtime: scan, plan, install, dispatch, ingest, validate 실행
+
+## Safety Boundary
+
+- AI provider API를 직접 호출하지 않습니다.
+- source code execution이나 cloud patch/apply를 하지 않습니다.
+- `pack start`와 `pack job-paste`는 source code를 mutate하지 않습니다.
+- source 변경은 explicit apply/adoption 흐름에서만 다룹니다.
+- `cambrian pack job-apply <job-id>`는 preview이고, 실제 apply는 `cambrian pack job-apply <job-id> --confirm`이 필요합니다.
+- adoption은 `cambrian pack job-adopt <job-id> --accepted|--rejected|--skipped`로 명시적으로 기록합니다.
+
+## Web Pack Catalog MVP
+
+정적 웹 catalog는 Cambrian의 첫 control plane입니다.
+
+- `web/`
+- `web/assets/catalog.json`
+- `web/assets/auth-bug-core.cambrian-pack.yaml`
+- `python tools/generate_web_catalog.py`
+- `packs/catalog.yaml`
+
+The web catalog is the hiring desk. Your local Cambrian runtime does the actual install, job handoff, validation, and proof. This page does not execute code or mutate `.cambrian/` state.
+
+## Product Docs
+
+긴 제품 정의와 고급 lifecycle은 launch run 밖으로 뺐습니다.
+
+- [Alpha install](docs/ALPHA_INSTALL.md)
+- [Product index](docs/product/00_INDEX.md)
+- [AI company runtime](docs/product/13_AI_COMPANY_RUNTIME.md)
+- [Packs and install](docs/product/06_PACKS_AND_INSTALL.md)
+- [Execution loops](docs/product/07_EXECUTION_LOOPS.md)
+- [Metrics and proof](docs/product/08_METRICS_AND_PROOF.md)
+- [Harness engineering system](docs/product/12_HARNESS_ENGINEERING_SYSTEM.md)
+- [Launch golden path](docs/launch/LAUNCH_GOLDEN_PATH.md)
+- [Product walkthrough script](docs/launch/DEMO_SCRIPT.md)
+- [First run runbook](docs/launch/DEMO_RUNBOOK.md)
+- [Launch checklist](docs/launch/LAUNCH_CHECKLIST.md)
+
+## Current strongest lane
+
+Current strongest lane:
+
+```text
+Python + pytest + auth/login narrow bug fix
+```
+
+- Default team: `auth-bug-team`
+- Default template: `auth-bug-template`
+- Default workset: `auth-bug-workset`
+- Outside this lane, Cambrian should warn instead of pretending confidence.
+
+## Compatibility Reference
+
+Cambrian is also described in the product docs as an AI workforce runtime, harness engineering runtime, and evidence-based evolution engine. The launch surface keeps those terms below the fold because the first message is simpler: install AI workers into the AI you already use.
+
+The Web control plane is the hiring desk. The Local Cambrian runtime performs local install, job handoff, validation, and proof. Broader lifecycle commands stay below the launch path.
+
+Security note: Mode B skill execution can use an optional Docker container sandbox. The container sandbox disables network access by default, mounts the skill read-only, applies memory/CPU/PID limits, and uses a read-only root filesystem when enabled. The launch run does not require the sandbox path, but the safety boundary remains documented for local execution.
+
+## Implemented Reference Commands Outside The Launch Path
+
+아래 명령은 제품 문서와 호환되는 구현 참고입니다. 출시 데모의 첫 화면에서는 사용하지 않습니다.
+
+```bash
+cambrian pack next
+cambrian install diff auth-bug-core
+cambrian install update auth-bug-core
+cambrian uninstall pack auth-bug-core
+cambrian pack verify auth-bug-core
+cambrian install verify
+cambrian install verify auth-bug-core
+cambrian pack draft auth-bug-core-local
+cambrian pack build
+cambrian pack publish-local
+cambrian pack release-check --require-proof
+cambrian pack web-sync
+cambrian registry add local-web web/assets/catalog.json
+cambrian registry sync local-web
+cambrian pack search auth --registry local-web
+cambrian install pack auth-bug-core --registry local-web
+cambrian install plan cambrian/auth-bug-core@0.2.0 --registry official
+cambrian install pack cambrian/auth-bug-core@0.2.0 --registry official --confirm-deps
+```
+
+Remote/web registry update is still planned for broader distribution. Static pull, manifest digest checks, no login, no payment, no cloud execution, and no source upload are the current boundary. Namespace, version, dependencies, `.cambrian/install/pack_lock.yaml`, `.cambrian/install/graphs/`, complex npm-style semver, dependency auto-update cascade, SHA-256, `--require-trusted`, and cryptographic signing are tracked in product docs.
