@@ -105,8 +105,10 @@ class DemoProjectCreator:
             created_files=created_files,
             next_actions=[
                 f"cd {target}",
-                "cambrian init --wizard --answers-file demo_answers.yaml",
-                'cambrian do "로그인 정규화 버그 수정해"',
+                "cambrian pack show auth-bug-core",
+                "cambrian install pack auth-bug-core",
+                "cambrian pack activate auth-bug-core",
+                'cambrian pack start "로그인 에러 수정해"',
             ],
         )
 
@@ -129,6 +131,29 @@ class DemoProjectCreator:
                 "from src.auth import normalize_username\n\n"
                 "def test_normalize_username_lowercases_email() -> None:\n"
                 "    assert normalize_username(\"USER@EXAMPLE.COM\") == \"user@example.com\"\n"
+            ),
+            "fixtures/request.txt": "로그인 에러 수정해\n",
+            "fixtures/ai_reply_patch_candidate.yaml": (
+                "response_kind: patch_candidate\n"
+                "summary: Normalize username before login lookup.\n"
+                "target_path: src/auth.py\n"
+                "old_text: \"return username\"\n"
+                "new_text: \"return username.strip().lower()\"\n"
+                "reason: The login guard compares usernames against normalized records, so incoming usernames should be stripped and lowercased before lookup.\n"
+                "related_tests:\n"
+                "  - tests/test_auth.py\n"
+            ),
+            "fixtures/expected_demo_output.md": (
+                "# Cambrian Auth Bug Core First Run\n\n"
+                "Expected flow:\n\n"
+                "```bash\n"
+                "cambrian pack show auth-bug-core\n"
+                "cambrian install pack auth-bug-core\n"
+                "cambrian pack activate auth-bug-core\n"
+                "cambrian pack start \"로그인 에러 수정해\"\n"
+                "cambrian pack job-ingest latest fixtures/ai_reply_patch_candidate.yaml\n"
+                "cambrian pack job-validate latest\n"
+                "```\n"
             ),
             "demo_answers.yaml": (
                 "project_name: cambrian-login-demo\n"
@@ -160,7 +185,8 @@ class DemoProjectCreator:
             ),
             "README_DEMO.md": (
                 "# Cambrian Login Bug Demo\n\n"
-                "이 demo는 Cambrian의 첫 성공 경험을 빠르게 따라가기 위한 작은 샘플 프로젝트입니다.\n\n"
+                "이 demo는 Cambrian의 strongest lane인 Python + pytest + auth/login narrow bug fix를 빠르게 체험하기 위한 샘플 프로젝트입니다.\n\n"
+                "Cambrian은 AI Worker Installer입니다. 이 프로젝트에 로컬 AI 일꾼과 작업반을 설치하고, source 변경 전 diagnosis와 validation evidence를 먼저 만듭니다.\n\n"
                 "## Start here\n\n"
                 "```bash\n"
                 "cambrian init --wizard --answers-file demo_answers.yaml\n"
@@ -170,7 +196,12 @@ class DemoProjectCreator:
                 "cambrian do --continue --apply --reason \"normalize username before login\"\n"
                 "cambrian status\n"
                 "```\n\n"
-                "Cambrian은 먼저 진단과 검증을 안전하게 진행하고, 실제 source 수정은 explicit apply 단계에서만 수행합니다.\n\n"
+                "실제 source 수정은 explicit apply 단계에서만 수행됩니다.\n\n"
+                "## What this proves\n\n"
+                "- local Cambrian runtime이 프로젝트 상태를 읽습니다.\n"
+                "- AI bridge와 work loop가 source 변경 전 evidence를 만듭니다.\n"
+                "- `validated_proposal_rate`가 Cambrian의 north star metric인 이유를 체감할 수 있습니다.\n"
+                "- strongest lane 밖에서는 더 많은 evidence가 필요하다는 원칙을 유지합니다.\n\n"
                 "## Advanced / manual path\n\n"
                 "직접 patch artifact를 제어하고 싶다면 아래 manual path를 사용할 수 있습니다.\n\n"
                 "```bash\n"

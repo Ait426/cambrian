@@ -39,6 +39,7 @@ include = ["engine*"]
 "engine._data" = [
     "schemas/*.json",
     "skills/**/*",
+    "packs/*.yaml",
     "cambrian_policy.json",
 ]
 

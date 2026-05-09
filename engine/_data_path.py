@@ -26,6 +26,16 @@ def get_bundled_skills_dir() -> Path:
     return get_bundled_data_dir() / "skills"
 
 
+def get_bundled_packs_dir() -> Path:
+    """번들 seed pack 디렉터리 경로."""
+    return get_bundled_data_dir() / "packs"
+
+
+def get_bundled_pack_catalog_path() -> Path:
+    """번들 seed pack catalog 경로."""
+    return get_bundled_packs_dir() / "catalog.yaml"
+
+
 def get_bundled_policy_path() -> Path:
     """번들 정책 파일 경로."""
     return get_bundled_data_dir() / "cambrian_policy.json"

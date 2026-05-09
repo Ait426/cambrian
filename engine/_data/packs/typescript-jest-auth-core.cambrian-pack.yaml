@@ -1,0 +1,147 @@
+schema_version: "1.0"
+pack_id: typescript-jest-auth-core
+pack_name: TypeScript Jest Auth Core
+pack_kind: lane
+version: "0.1.0"
+
+description: >
+  A lane pack for TypeScript + Jest + auth/API bug fixes.
+
+source:
+  kind: local_seed
+  registry: local
+  origin_ref: packs/typescript-jest-auth-core.cambrian-pack.yaml
+
+compatibility:
+  stacks:
+    - typescript
+  test_frameworks:
+    - jest
+  lane_ids:
+    - typescript-jest-auth-core
+  request_classes:
+    - bug_fix
+    - regression_test
+  domains:
+    - auth
+    - api
+    - tests
+
+workers:
+  - id: ts-bug-fix-agent
+    name: TypeScript Bug Fix Agent
+    capabilities:
+      - narrow TypeScript bug fix
+      - patch candidate generation
+    tags:
+      - typescript
+      - bug_fix
+      - patch
+
+  - id: jest-regression-test-agent
+    name: Jest Regression Test Agent
+    capabilities:
+      - Jest regression check
+      - auth/API test planning
+    tags:
+      - jest
+      - validation
+      - regression_test
+
+  - id: review-agent
+    name: Review Agent
+    capabilities:
+      - review support
+      - risk/caution detection
+    tags:
+      - review
+      - safety
+
+teams:
+  - name: typescript-jest-auth-team
+    lead_agent_id: ts-bug-fix-agent
+    supporting_agent_ids:
+      - jest-regression-test-agent
+      - review-agent
+    tags:
+      - typescript
+      - jest
+      - auth
+      - api
+      - bug_fix
+
+templates:
+  - name: typescript-jest-auth-template
+    template_kind: lane_template
+    description: TypeScript + Jest + auth/API narrow bug fix template
+    tags:
+      - typescript
+      - jest
+      - auth
+      - api
+      - bug_fix
+    project_defaults:
+      stack:
+        - typescript
+      test_command: npm test
+      primary_use_cases:
+        - bug_fix
+        - regression_test
+    safety_defaults:
+      explicit_adoption_only: true
+      preserve_source_artifacts: true
+    agent_defaults:
+      preferred_lead_agents:
+        - ts-bug-fix-agent
+      preferred_support_agents:
+        - jest-regression-test-agent
+        - review-agent
+    team_defaults:
+      active_team_id: typescript-jest-auth-team
+    policy_defaults:
+      test_first_practice: true
+      narrow_change_scope: true
+      increase_review_support: true
+    context_defaults:
+      preferred_context_paths:
+        - backend/src/middleware
+        - backend/src/auth
+        - src/middleware
+        - src/auth
+      preferred_test_paths:
+        - backend/tests
+        - tests
+    fit_hints:
+      - strongest for TypeScript + Jest + auth/API bug fixes
+
+benchmarks:
+  - name: typescript-jest-auth-workset
+    description: Canonical workset for TypeScript/Jest auth/API narrow bug fixes
+    tags:
+      - typescript
+      - jest
+      - auth
+      - api
+
+lane:
+  lane_id: typescript-jest-auth-core
+  label: TypeScript + Jest auth/API bug fixes
+  default_team: typescript-jest-auth-team
+  default_template: typescript-jest-auth-template
+  default_workset: typescript-jest-auth-workset
+
+validation:
+  test_commands:
+    - npm test
+    - npm run test
+    - npx jest
+
+install:
+  install_as_library: true
+  auto_apply: false
+  auto_bootstrap: false
+  auto_promote: false
+  auto_canary: false
+
+warnings:
+  - This pack is strongest for TypeScript + Jest auth/API bug fixes, not broad frontend rewrites.

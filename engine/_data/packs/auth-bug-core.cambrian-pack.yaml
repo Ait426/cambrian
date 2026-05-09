@@ -1,0 +1,127 @@
+schema_version: "1.0"
+pack_id: auth-bug-core
+pack_name: Auth Bug Core
+pack_kind: lane
+version: "0.1.0"
+
+description: >
+  A lane pack for Python + pytest + narrow auth/login bug fixes.
+
+source:
+  kind: local_seed
+  registry: local
+  origin_ref: packs/auth-bug-core.cambrian-pack.yaml
+
+compatibility:
+  stacks:
+    - python
+  test_frameworks:
+    - pytest
+  lane_ids:
+    - python-pytest-auth-bug-core
+  request_classes:
+    - bug_fix
+    - regression_test
+
+workers:
+  - id: bug-fix-agent
+    name: Bug Fix Agent
+    capabilities:
+      - narrow bug fix
+      - patch candidate generation
+    tags:
+      - bug_fix
+      - patch
+
+  - id: regression-test-agent
+    name: Regression Test Agent
+    capabilities:
+      - pytest validation
+      - regression check
+    tags:
+      - pytest
+      - validation
+
+  - id: review-agent
+    name: Review Agent
+    capabilities:
+      - review support
+      - risk/caution detection
+    tags:
+      - review
+      - safety
+
+teams:
+  - name: auth-bug-team
+    lead_agent_id: bug-fix-agent
+    supporting_agent_ids:
+      - regression-test-agent
+      - review-agent
+    tags:
+      - auth
+      - login
+      - bug_fix
+
+templates:
+  - name: auth-bug-template
+    template_kind: lane_template
+    description: Python + pytest + auth/login narrow bug fix template
+    tags:
+      - auth
+      - login
+      - pytest
+      - bug_fix
+    project_defaults:
+      stack:
+        - python
+      test_command: pytest -q
+      primary_use_cases:
+        - bug_fix
+        - regression_test
+    safety_defaults:
+      explicit_adoption_only: true
+      preserve_source_artifacts: true
+    agent_defaults:
+      preferred_lead_agents:
+        - bug-fix-agent
+      preferred_support_agents:
+        - regression-test-agent
+        - review-agent
+    team_defaults:
+      active_team_id: auth-bug-team
+    policy_defaults:
+      test_first_practice: true
+      narrow_change_scope: true
+      increase_review_support: true
+    context_defaults:
+      preferred_context_paths:
+        - src/auth.py
+      preferred_test_paths:
+        - tests/test_auth.py
+    fit_hints:
+      - strongest for Python + pytest + auth/login bug fixes
+
+benchmarks:
+  - name: auth-bug-workset
+    description: Canonical workset for auth/login narrow bug fixes
+    tags:
+      - auth
+      - login
+      - pytest
+
+lane:
+  lane_id: python-pytest-auth-bug-core
+  label: Python + pytest + auth/login bug fixes
+  default_team: auth-bug-team
+  default_template: auth-bug-template
+  default_workset: auth-bug-workset
+
+install:
+  install_as_library: true
+  auto_apply: false
+  auto_bootstrap: false
+  auto_promote: false
+  auto_canary: false
+
+warnings:
+  - This pack is strongest for narrow auth/login bug fixes, not broad refactors.

@@ -1,0 +1,63 @@
+schema_version: "1.0"
+updated_at: "2026-05-04T00:00:00Z"
+source_kind: local_seed
+entries:
+  - pack_id: auth-bug-core
+    pack_name: Auth Bug Core
+    pack_kind: lane
+    version: "0.1.0"
+    manifest_path: auth-bug-core.cambrian-pack.yaml
+    description: Python + pytest + narrow auth/login bug fix lane pack
+    tags:
+      - auth
+      - login
+      - pytest
+      - bug_fix
+    maturity: seed
+    manifest_sha256: 72332265cbe86c7d7992032ff163b8755bf7e489c13d34362c55bf69880e037b
+    trust_level: trusted
+    compatibility:
+      stacks:
+        - python
+      test_frameworks:
+        - pytest
+      lane_ids:
+        - python-pytest-auth-bug-core
+      request_classes:
+        - bug_fix
+        - regression_test
+    warnings:
+      - Strongest for narrow auth/login bug fixes, not broad refactors.
+  - pack_id: typescript-jest-auth-core
+    pack_name: TypeScript Jest Auth Core
+    pack_kind: lane
+    version: "0.1.0"
+    manifest_path: typescript-jest-auth-core.cambrian-pack.yaml
+    description: TypeScript + Jest + auth/API bug fix lane pack
+    tags:
+      - typescript
+      - jest
+      - auth
+      - api
+      - bug_fix
+    maturity: seed
+    manifest_sha256: d0a683377951a77045b2fe0ae2632b1bca6d111235c895e42b73286c90302de4
+    trust_level: trusted
+    compatibility:
+      stacks:
+        - typescript
+      test_frameworks:
+        - jest
+      lane_ids:
+        - typescript-jest-auth-core
+      request_classes:
+        - bug_fix
+        - regression_test
+      domains:
+        - auth
+        - api
+        - tests
+    warnings:
+      - Strongest for TypeScript + Jest auth/API bug fixes, not broad frontend rewrites.
+warnings: []
+errors: []

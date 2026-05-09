@@ -102,6 +102,8 @@ def test_build_wheel_includes_project_mode_packages(tmp_path: Path) -> None:
     assert "engine/project_doctor.py" in names
     assert "engine/brain/__init__.py" in names
     assert "engine/brain/adapters/__init__.py" in names
+    assert "engine/_data/packs/catalog.yaml" in names
+    assert "engine/_data/packs/auth-bug-core.cambrian-pack.yaml" in names
 
 
 def test_doctor_basic_for_non_initialized_workspace(tmp_path: Path) -> None:
@@ -189,6 +191,7 @@ def test_demo_create_cli_smoke(tmp_path: Path) -> None:
     assert proc.returncode == 0, proc.stderr
     assert (demo_dir / "src" / "auth.py").exists()
     assert (demo_dir / "tests" / "test_auth.py").exists()
+    assert (demo_dir / "fixtures" / "ai_reply_patch_candidate.yaml").exists()
     assert (demo_dir / "demo_answers.yaml").exists()
     assert (demo_dir / "README_DEMO.md").exists()
 
