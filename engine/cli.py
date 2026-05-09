@@ -353,6 +353,74 @@ def main() -> None:
         help="벤치마크용 테스트 입력 (JSON 문자열)",
     )
 
+    authority_parser = subparsers.add_parser(
+        "authority",
+        help="프로젝트 권한 프로파일 관리",
+        parents=[common_parser],
+    )
+    authority_subparsers = authority_parser.add_subparsers(dest="authority_command", help="authority 하위 명령")
+    authority_status_parser = authority_subparsers.add_parser("status", help="현재 권한 상태 보기", parents=[common_parser])
+    authority_status_parser.add_argument("--json", action="store_true", dest="json_output", help="JSON 출력")
+    authority_init_parser = authority_subparsers.add_parser("init", help="proposal-only 권한 프로파일 생성", parents=[common_parser])
+    authority_init_parser.add_argument("--json", action="store_true", dest="json_output", help="JSON 출력")
+    authority_grant_parser = authority_subparsers.add_parser("grant", help="명시 권한 부여", parents=[common_parser])
+    authority_grant_parser.add_argument("--mode", required=True, choices=["full-authority", "full_authority", "proposal-only", "proposal_only"], help="부여할 권한 모드")
+    authority_grant_parser.add_argument("--json", action="store_true", dest="json_output", help="JSON 출력")
+    authority_revoke_parser = authority_subparsers.add_parser("revoke", help="proposal-only로 권한 회수", parents=[common_parser])
+    authority_revoke_parser.add_argument("--json", action="store_true", dest="json_output", help="JSON 출력")
+
+    auto_parser = subparsers.add_parser(
+        "auto",
+        help="오토 제품 제작 상태 모델",
+        parents=[common_parser],
+    )
+    auto_subparsers = auto_parser.add_subparsers(dest="auto_command", help="auto 하위 명령")
+    auto_init_parser = auto_subparsers.add_parser("init", help="오토 모드 초기화", parents=[common_parser])
+    auto_init_parser.add_argument("--goal", required=True, help="오토 모드 목표")
+    auto_init_parser.add_argument("--json", action="store_true", dest="json_output", help="JSON 출력")
+    auto_next_parser = auto_subparsers.add_parser("next", help="DONE 이후 새 auto iteration 시작", parents=[common_parser])
+    auto_next_parser.add_argument("--goal", required=True, help="새 auto iteration 목표")
+    auto_next_parser.add_argument("--json", action="store_true", dest="json_output", help="JSON 출력")
+    auto_boardroom_parser = auto_subparsers.add_parser("boardroom", help="CEO/CTO/COO/PM 회의 기록 생성", parents=[common_parser])
+    auto_boardroom_parser.add_argument("--json", action="store_true", dest="json_output", help="JSON 출력")
+    auto_plan_parser = auto_subparsers.add_parser("plan", help="회의 결정을 실행 계획으로 변환", parents=[common_parser])
+    auto_plan_parser.add_argument("--json", action="store_true", dest="json_output", help="JSON 출력")
+    auto_run_parser = auto_subparsers.add_parser("run", help="bounded auto run 상태 기록", parents=[common_parser])
+    auto_run_parser.add_argument("--max-steps", type=int, default=5, dest="max_steps", help="이번 run에서 처리할 최대 step 수")
+    auto_run_parser.add_argument("--json", action="store_true", dest="json_output", help="JSON 출력")
+    auto_cycle_parser = auto_subparsers.add_parser("cycle", help="report-boardroom-plan-run 1 cycle 실행", parents=[common_parser])
+    auto_cycle_parser.add_argument("--max-steps", type=int, default=1, dest="max_steps", help="cycle run에서 처리할 최대 step 수")
+    auto_cycle_parser.add_argument("--json", action="store_true", dest="json_output", help="JSON 출력")
+    auto_step_parser = auto_subparsers.add_parser("step", help="auto task 결과 수집", parents=[common_parser])
+    auto_step_subparsers = auto_step_parser.add_subparsers(dest="auto_step_command", help="auto step 하위 명령")
+    auto_step_ingest_parser = auto_step_subparsers.add_parser("ingest", help="Codex/Claude step 결과 수집", parents=[common_parser])
+    auto_step_ingest_parser.add_argument("task_ref", help="task id 또는 .cambrian/auto/tasks/*.yaml")
+    auto_step_ingest_parser.add_argument("--result", required=True, dest="result_path", help="step 결과 YAML/JSON 파일")
+    auto_step_ingest_parser.add_argument("--json", action="store_true", dest="json_output", help="JSON 출력")
+    auto_input_parser = auto_subparsers.add_parser("input", help="auto 입력 요청 처리", parents=[common_parser])
+    auto_input_subparsers = auto_input_parser.add_subparsers(dest="auto_input_command", help="auto input 하위 명령")
+    auto_input_list_parser = auto_input_subparsers.add_parser("list", help="현재 필요한 human input 목록 보기", parents=[common_parser])
+    auto_input_list_parser.add_argument("--json", action="store_true", dest="json_output", help="JSON 출력")
+    auto_input_answer_parser = auto_input_subparsers.add_parser("answer", help="필수 human input 값 기록", parents=[common_parser])
+    auto_input_answer_parser.add_argument("--field", required=True, help="입력 필드명")
+    auto_input_answer_parser.add_argument("--value", required=True, help="입력 값")
+    auto_input_answer_parser.add_argument("--json", action="store_true", dest="json_output", help="JSON 출력")
+    auto_input_defer_parser = auto_input_subparsers.add_parser("defer", help="검증이 어려운 human input을 보류", parents=[common_parser])
+    auto_input_defer_parser.add_argument("--field", required=True, help="입력 필드명")
+    auto_input_defer_parser.add_argument("--reason", required=True, help="보류 사유")
+    auto_input_defer_parser.add_argument("--json", action="store_true", dest="json_output", help="JSON 출력")
+    auto_status_parser = auto_subparsers.add_parser("status", help="오토 상태 보기", parents=[common_parser])
+    auto_status_parser.add_argument("--json", action="store_true", dest="json_output", help="JSON 출력")
+    auto_pause_parser = auto_subparsers.add_parser("pause", help="오토 모드 일시정지", parents=[common_parser])
+    auto_pause_parser.add_argument("--json", action="store_true", dest="json_output", help="JSON 출력")
+    auto_resume_parser = auto_subparsers.add_parser("resume", help="오토 모드 재개", parents=[common_parser])
+    auto_resume_parser.add_argument("--json", action="store_true", dest="json_output", help="JSON 출력")
+    auto_report_parser = auto_subparsers.add_parser("report", help="오토 모드 보고서 생성", parents=[common_parser])
+    auto_report_parser.add_argument("--json", action="store_true", dest="json_output", help="JSON 출력")
+
+    auto_release_gate_parser = auto_subparsers.add_parser("release-gate", help="auto release gate evidence package 생성", parents=[common_parser])
+    auto_release_gate_parser.add_argument("--json", action="store_true", dest="json_output", help="JSON 출력")
+
     history_parser = subparsers.add_parser(
         "history",
         help="진화 이력 조회",
@@ -2140,6 +2208,10 @@ def main() -> None:
             _handle_feedback(args)
         elif args.command == "evolve":
             _handle_evolve(args)
+        elif args.command == "authority":
+            _handle_authority(args)
+        elif args.command == "auto":
+            _handle_auto(args)
         elif args.command == "history":
             _handle_history(args)
         elif args.command == "rollback":
@@ -2540,6 +2612,132 @@ def _handle_evolve(args: argparse.Namespace) -> None:
     print(f"  Parent fitness: {record.parent_fitness:.4f}")
     print(f"  Child fitness:  {record.child_fitness:.4f}")
     print(f"  Record ID: {record.id}")
+
+
+def _handle_authority(args: argparse.Namespace) -> None:
+    """cambrian authority 명령을 처리한다."""
+    from engine.project_authority import (
+        authority_status,
+        grant_authority,
+        init_authority,
+        render_authority_result,
+        revoke_authority,
+    )
+
+    root = Path.cwd().resolve()
+    command = getattr(args, "authority_command", None)
+    try:
+        if command == "status":
+            payload = authority_status(root)
+        elif command == "init":
+            payload = init_authority(root)
+        elif command == "grant":
+            payload = grant_authority(root, str(getattr(args, "mode", "")))
+        elif command == "revoke":
+            payload = revoke_authority(root)
+        else:
+            print("authority 하위 명령이 필요합니다. 예: cambrian authority status --json", file=sys.stderr)
+            sys.exit(1)
+    except ValueError as exc:
+        payload = {"ok": False, "errors": [str(exc)]}
+
+    if getattr(args, "json_output", False):
+        print(json.dumps(payload, indent=2, ensure_ascii=False))
+        if not payload.get("ok"):
+            sys.exit(1)
+        return
+    print(render_authority_result(payload))
+    if not payload.get("ok"):
+        sys.exit(1)
+
+
+def _handle_auto(args: argparse.Namespace) -> None:
+    """cambrian auto 명령을 처리한다."""
+    from engine.project_auto_mode import (
+        answer_auto_input,
+        auto_report,
+        auto_status,
+        create_auto_plan,
+        defer_auto_input,
+        init_auto_mode,
+        ingest_auto_step_result,
+        list_auto_inputs,
+        pause_auto,
+        render_auto_result,
+        resume_auto,
+        run_auto_cycle,
+        run_auto_plan,
+        run_boardroom,
+        run_release_gate,
+        start_next_auto_iteration,
+    )
+
+    root = Path.cwd().resolve()
+    command = getattr(args, "auto_command", None)
+    if command == "init":
+        payload = init_auto_mode(root, str(getattr(args, "goal", "")))
+    elif command == "next":
+        payload = start_next_auto_iteration(root, str(getattr(args, "goal", "")))
+    elif command == "boardroom":
+        payload = run_boardroom(root)
+    elif command == "plan":
+        payload = create_auto_plan(root)
+    elif command == "run":
+        payload = run_auto_plan(root, max_steps=int(getattr(args, "max_steps", 5) or 5))
+    elif command == "cycle":
+        payload = run_auto_cycle(root, max_steps=int(getattr(args, "max_steps", 1) or 1))
+    elif command == "step":
+        step_command = getattr(args, "auto_step_command", None)
+        if step_command == "ingest":
+            payload = ingest_auto_step_result(
+                root,
+                str(getattr(args, "task_ref", "")),
+                Path(str(getattr(args, "result_path", ""))),
+            )
+        else:
+            print("auto step 하위 명령이 필요합니다. 예: cambrian auto step ingest <task> --result result.yaml --json", file=sys.stderr)
+            sys.exit(1)
+    elif command == "input":
+        input_command = getattr(args, "auto_input_command", None)
+        if input_command == "list":
+            payload = list_auto_inputs(root)
+        elif input_command == "answer":
+            payload = answer_auto_input(
+                root,
+                str(getattr(args, "field", "")),
+                str(getattr(args, "value", "")),
+            )
+        elif input_command == "defer":
+            payload = defer_auto_input(
+                root,
+                str(getattr(args, "field", "")),
+                str(getattr(args, "reason", "")),
+            )
+        else:
+            print("auto input 하위 명령이 필요합니다. 예: cambrian auto input list --json", file=sys.stderr)
+            sys.exit(1)
+    elif command == "status":
+        payload = auto_status(root)
+    elif command == "pause":
+        payload = pause_auto(root)
+    elif command == "resume":
+        payload = resume_auto(root)
+    elif command == "report":
+        payload = auto_report(root)
+    elif command == "release-gate":
+        payload = run_release_gate(root)
+    else:
+        print("auto 하위 명령이 필요합니다. 예: cambrian auto init --goal \"제품 목표\" --json", file=sys.stderr)
+        sys.exit(1)
+
+    if getattr(args, "json_output", False):
+        print(json.dumps(payload, indent=2, ensure_ascii=False))
+        if not payload.get("ok"):
+            sys.exit(1)
+        return
+    print(render_auto_result(payload))
+    if not payload.get("ok"):
+        sys.exit(1)
 
 
 def _handle_history(args: argparse.Namespace) -> None:
