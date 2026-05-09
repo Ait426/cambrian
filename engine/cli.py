@@ -506,6 +506,11 @@ def main() -> None:
     job_validate_parser = job_subparsers.add_parser("validate", help="Validate job", parents=[common_parser])
     job_validate_parser.add_argument("job_ref", nargs="?", default="latest", help="Job ID or latest")
     job_validate_parser.add_argument("--json", action="store_true", dest="json_output", help="JSON output")
+    job_complete_parser = job_subparsers.add_parser("complete", help="Record job outcome", parents=[common_parser])
+    job_complete_parser.add_argument("job_ref", nargs="?", default="latest", help="Job ID or latest")
+    job_complete_parser.add_argument("--outcome", required=True, choices=["success", "partial", "failed", "rejected", "needs_more_info"], help="Human outcome")
+    job_complete_parser.add_argument("--notes", default="", help="Outcome notes")
+    job_complete_parser.add_argument("--json", action="store_true", dest="json_output", help="JSON output")
 
     history_parser = subparsers.add_parser(
         "history",
@@ -7995,10 +8000,41 @@ def _handle_job(args: argparse.Namespace) -> None:
         _emit_cli_payload(payload, bool(getattr(args, "json_output", False)))
         _exit_if_blocked(payload)
         return
-    if command in {"ingest", "validate"}:
-        payload = {"ok": False, "status": "not_implemented", "error": f"job {command} is reserved for the evidence slice"}
+    if command == "ingest":
+        from engine.project_custom_harness import ingest_custom_harness_job
+
+        try:
+            payload = ingest_custom_harness_job(Path.cwd(), str(getattr(args, "job_ref", "latest")), Path(str(getattr(args, "reply_path", ""))))
+        except (FileNotFoundError, ValueError) as exc:
+            payload = {"ok": False, "status": "blocked", "error": str(exc), "errors": [str(exc)]}
         _emit_cli_payload(payload, bool(getattr(args, "json_output", False)))
-        sys.exit(1)
+        _exit_if_blocked(payload)
+        return
+    if command == "validate":
+        from engine.project_custom_harness import validate_custom_harness_job
+
+        try:
+            payload = validate_custom_harness_job(Path.cwd(), str(getattr(args, "job_ref", "latest")))
+        except (FileNotFoundError, ValueError) as exc:
+            payload = {"ok": False, "status": "blocked", "error": str(exc), "errors": [str(exc)]}
+        _emit_cli_payload(payload, bool(getattr(args, "json_output", False)))
+        _exit_if_blocked(payload)
+        return
+    if command == "complete":
+        from engine.project_custom_harness import complete_custom_harness_job
+
+        try:
+            payload = complete_custom_harness_job(
+                Path.cwd(),
+                str(getattr(args, "job_ref", "latest")),
+                str(getattr(args, "outcome", "")),
+                str(getattr(args, "notes", "")),
+            )
+        except (FileNotFoundError, ValueError) as exc:
+            payload = {"ok": False, "status": "blocked", "error": str(exc), "errors": [str(exc)]}
+        _emit_cli_payload(payload, bool(getattr(args, "json_output", False)))
+        _exit_if_blocked(payload)
+        return
     print("job subcommand is required", file=sys.stderr)
     sys.exit(2)
 

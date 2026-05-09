@@ -76,6 +76,22 @@ def default_custom_job_path(project_root: Path, job_id: str) -> Path:
     return default_custom_jobs_dir(project_root) / f"{_slug(job_id, 'job')}.yaml"
 
 
+def default_custom_patch_intents_dir(project_root: Path) -> Path:
+    return Path(project_root).resolve() / ".cambrian" / "patch_intents"
+
+
+def default_custom_validation_evidence_dir(project_root: Path) -> Path:
+    return Path(project_root).resolve() / ".cambrian" / "evidence" / "validation"
+
+
+def default_custom_jobs_evidence_dir(project_root: Path) -> Path:
+    return Path(project_root).resolve() / ".cambrian" / "jobs"
+
+
+def default_custom_outcomes_path(project_root: Path) -> Path:
+    return Path(project_root).resolve() / ".cambrian" / "evidence" / "outcomes.yaml"
+
+
 @dataclass
 class CustomHarnessInstallResult:
     schema_version: str
@@ -428,6 +444,332 @@ def _save_custom_job(root: Path, job: dict[str, Any]) -> Path:
     _save_yaml(job_path, job)
     _save_yaml(default_custom_jobs_dir(root) / "latest.yaml", job)
     return job_path
+
+
+def ingest_custom_harness_job(project_root: Path, job_ref: str, reply_file: Path) -> dict[str, Any]:
+    from engine.project_bridge import ProjectBridgeReplyParser, ProjectBridgeStore, default_bridge_reply_path
+
+    root = Path(project_root).resolve()
+    job, _ = _load_custom_job(root, job_ref)
+    source = _resolve_root_path(root, reply_file)
+    reply = ProjectBridgeReplyParser().parse_reply(source.read_text(encoding="utf-8"))
+    reply.source_reply_path = _relative(source, root)
+    reply.linked_request_ref = _relative(default_custom_job_path(root, str(job.get("job_id") or "")), root)
+    errors = list(reply.errors)
+    if errors:
+        job["status"] = "blocked"
+        job["validation_status"] = "blocked"
+        job["reply_kind"] = reply.response_kind
+        job["errors"] = _dedupe([*list(job.get("errors", [])), *errors])
+        _save_custom_job(root, job)
+        return {
+            "ok": False,
+            "status": "blocked",
+            "job_id": job.get("job_id"),
+            "job_ref": _relative(default_custom_job_path(root, str(job.get("job_id") or "")), root),
+            "pack_id": job.get("pack_id"),
+            "reply_kind": reply.response_kind,
+            "reply_contract_status": "blocked",
+            "reply_file_ref": _relative(source, root),
+            "request_packet_ref": job.get("linked_bridge_packet_ref"),
+            "patch_candidate_accepted": False,
+            "patch_applied": False,
+            "source_code_modified": False,
+            "ai_provider_called": False,
+            "next_commands": ["cambrian job ingest latest ai_reply_patch_candidate.yaml"],
+            "errors": errors,
+            "warnings": list(reply.warnings),
+        }
+    reply_path = ProjectBridgeStore().save_reply(reply, default_bridge_reply_path(root, reply))
+    patch_intent_ref = None
+    patch_candidate_accepted = reply.response_kind == "patch_candidate"
+    if patch_candidate_accepted:
+        patch_intent_ref = _save_patch_intent(root, job, reply.content)
+    job["reply_kind"] = reply.response_kind
+    job["linked_bridge_reply_ref"] = _relative(reply_path, root)
+    job["linked_patch_intent_ref"] = patch_intent_ref
+    job["reply_file_ref"] = _relative(source, root)
+    job["status"] = "validation_ready"
+    job["validation_status"] = "ready"
+    job["updated_at"] = _now()
+    job["next_command"] = "cambrian job validate latest"
+    job["next_actions"] = ["cambrian job validate latest"]
+    _save_custom_job(root, job)
+    return {
+        "ok": True,
+        "status": "validation_ready",
+        "job_id": job.get("job_id"),
+        "job_ref": _relative(default_custom_job_path(root, str(job.get("job_id") or "")), root),
+        "pack_id": job.get("pack_id"),
+        "reply_kind": reply.response_kind,
+        "bridge_reply_ref": _relative(reply_path, root),
+        "patch_intent_ref": patch_intent_ref,
+        "reply_contract_status": "accepted_patch_candidate" if patch_candidate_accepted else "accepted",
+        "reply_file_ref": _relative(source, root),
+        "request_packet_ref": job.get("linked_bridge_packet_ref"),
+        "patch_candidate_accepted": patch_candidate_accepted,
+        "patch_applied": False,
+        "source_code_modified": False,
+        "ai_provider_called": False,
+        "next_commands": ["cambrian job validate latest"],
+        "warnings": list(reply.warnings),
+        "errors": [],
+    }
+
+
+def validate_custom_harness_job(project_root: Path, job_ref: str) -> dict[str, Any]:
+    root = Path(project_root).resolve()
+    job, _ = _load_custom_job(root, job_ref)
+    job_id = str(job.get("job_id") or "")
+    snapshot = dict(job.get("outcome_snapshot", {}) if isinstance(job.get("outcome_snapshot"), dict) else {})
+    validation_commands = _as_string_list(snapshot.get("validation_commands"))
+    checked_artifacts = _dedupe(
+        [
+            str(job.get("linked_bridge_packet_ref") or ""),
+            str(job.get("reply_file_ref") or ""),
+            str(job.get("linked_bridge_reply_ref") or ""),
+            str(job.get("linked_patch_intent_ref") or ""),
+        ]
+    )
+    unchecked_items = ["Patch proposal was not applied to source code", "Manual validation command must be run by the user"]
+    evidence = {
+        "schema_version": SCHEMA_VERSION,
+        "generated_at": _now(),
+        "evidence_kind": "job_validation",
+        "job_id": job_id,
+        "job_ref": _relative(default_custom_job_path(root, job_id), root),
+        "pack_id": job.get("pack_id"),
+        "request_packet_ref": job.get("linked_bridge_packet_ref"),
+        "reply_file_ref": job.get("reply_file_ref"),
+        "bridge_reply_ref": job.get("linked_bridge_reply_ref"),
+        "patch_intent_ref": job.get("linked_patch_intent_ref"),
+        "validation_status": "not_ready",
+        "validation_contract_status": "manual_validation_required",
+        "trust_gate_status": "manual_required",
+        "manual_validation_required": True,
+        "validation_commands": validation_commands,
+        "checked_artifacts": checked_artifacts,
+        "unchecked_items": unchecked_items,
+        "patch_applied": False,
+        "source_code_modified": False,
+        "ai_provider_called": False,
+        "outcome_snapshot": {
+            **snapshot,
+            "validation_lane": "custom harness",
+            "auto_apply": False,
+            "test_commands": validation_commands,
+        },
+    }
+    evidence_path = _save_yaml(default_custom_validation_evidence_dir(root) / f"{_slug(job_id, 'job')}.yaml", evidence)
+    job["status"] = "validation_ready"
+    job["validation_status"] = "not_ready"
+    job["linked_validation_evidence_ref"] = _relative(evidence_path, root)
+    job["updated_at"] = _now()
+    job["next_command"] = "cambrian job complete latest --outcome partial --notes \"manual validation result\""
+    job["next_actions"] = [job["next_command"]]
+    _save_custom_job(root, job)
+    return {
+        "ok": False,
+        "status": "validation_ready",
+        "job_id": job_id,
+        "job_ref": _relative(default_custom_job_path(root, job_id), root),
+        "pack_id": job.get("pack_id"),
+        "validation_status": "not_ready",
+        "validation_contract_status": "manual_validation_required",
+        "trust_gate_status": "manual_required",
+        "manual_validation_required": True,
+        "validation_commands": validation_commands,
+        "checked_artifacts": checked_artifacts,
+        "unchecked_items": unchecked_items,
+        "evidence_ref": _relative(evidence_path, root),
+        "request_packet_ref": job.get("linked_bridge_packet_ref"),
+        "reply_file_ref": job.get("reply_file_ref"),
+        "bridge_reply_ref": job.get("linked_bridge_reply_ref"),
+        "patch_intent_ref": job.get("linked_patch_intent_ref"),
+        "patch_applied": False,
+        "source_code_modified": False,
+        "ai_provider_called": False,
+        "outcome_snapshot": evidence["outcome_snapshot"],
+        "next_commands": list(job["next_actions"]),
+        "warnings": [],
+        "errors": [],
+    }
+
+
+def complete_custom_harness_job(project_root: Path, job_ref: str, outcome: str, notes: str | None = None) -> dict[str, Any]:
+    root = Path(project_root).resolve()
+    job, _ = _load_custom_job(root, job_ref)
+    job_id = str(job.get("job_id") or "")
+    outcome_value = str(outcome or "").strip()
+    allowed = {"success", "partial", "failed", "rejected", "needs_more_info"}
+    if outcome_value not in allowed:
+        return {
+            "ok": False,
+            "status": "blocked",
+            "job_id": job_id,
+            "outcome": outcome_value,
+            "errors": [f"outcome must be one of: {', '.join(sorted(allowed))}"],
+        }
+    validation_evidence, validation_ref = _latest_custom_validation_evidence(root, job_id)
+    snapshot = dict(job.get("outcome_snapshot", {}) if isinstance(job.get("outcome_snapshot"), dict) else {})
+    validation_commands = _as_string_list(validation_evidence.get("validation_commands") or snapshot.get("validation_commands"))
+    outcome_payload = {
+        "schema_version": SCHEMA_VERSION,
+        "recorded_at": _now(),
+        "evidence_kind": "job_outcome",
+        "job_id": job_id,
+        "job_ref": _relative(default_custom_job_path(root, job_id), root),
+        "request": job.get("request"),
+        "outcome": outcome_value,
+        "notes": str(notes or "").strip(),
+        "validation_evidence_ref": validation_ref,
+        "validation_contract_status": _text_or_none(validation_evidence.get("validation_contract_status")),
+        "trust_gate_status": _text_or_none(validation_evidence.get("trust_gate_status")),
+        "checked_artifacts": _as_string_list(validation_evidence.get("checked_artifacts")),
+        "unchecked_items": _as_string_list(validation_evidence.get("unchecked_items")),
+        "harness_id": snapshot.get("harness_id") or job.get("pack_id"),
+        "workforce_id": snapshot.get("workforce_id"),
+        "selected_agents": _as_string_list(snapshot.get("selected_agents")),
+        "selected_skills": _as_string_list(snapshot.get("selected_skills")),
+        "validation_commands": validation_commands,
+        "change_policy": snapshot.get("change_policy") or "proposal_only",
+        "source_code_modified_by_cambrian": False,
+        "patch_applied_by_cambrian": False,
+        "ai_provider_called_by_cambrian": False,
+        "ready_for_evolution": True,
+    }
+    outcome_path = _save_yaml(default_custom_jobs_evidence_dir(root) / _slug(job_id, "job") / "outcome.yaml", outcome_payload)
+    ledger_path = _append_custom_outcome(root, outcome_payload)
+    job["final_status"] = outcome_value
+    job["closed_at"] = _now()
+    job["linked_outcome_ref"] = _relative(outcome_path, root)
+    _save_custom_job(root, job)
+    return {
+        "ok": True,
+        "status": "recorded",
+        "job_id": job_id,
+        "outcome": outcome_value,
+        "notes": str(notes or "").strip(),
+        "outcome_ref": _relative(outcome_path, root),
+        "evidence_ref": _relative(ledger_path, root),
+        "validation_evidence_ref": validation_ref,
+        "validation_contract_status": outcome_payload["validation_contract_status"],
+        "trust_gate_status": outcome_payload["trust_gate_status"],
+        "validation_commands": validation_commands,
+        "checked_artifacts": outcome_payload["checked_artifacts"],
+        "unchecked_items": outcome_payload["unchecked_items"],
+        "ready_for_evolution": True,
+        "source_code_modified_by_cambrian": False,
+        "warnings": [] if validation_ref else ["No validation evidence was found for this job."],
+        "errors": [],
+    }
+
+
+def _load_custom_job(root: Path, job_ref: str) -> tuple[dict[str, Any], Path]:
+    ref = str(job_ref or "").strip()
+    if not ref:
+        raise FileNotFoundError("job ref is required")
+    if ref == "latest":
+        path = default_custom_jobs_dir(root) / "latest.yaml"
+        if path.exists():
+            return _load_yaml(path), path
+        raise FileNotFoundError("latest job not found")
+    candidate = Path(ref)
+    if not candidate.is_absolute():
+        candidate = root / candidate
+    if candidate.exists():
+        return _load_yaml(candidate), candidate.resolve()
+    jobs_dir = default_custom_jobs_dir(root)
+    candidates = [
+        jobs_dir / f"{ref}.yaml",
+        jobs_dir / f"{_slug(ref, 'job')}.yaml",
+        jobs_dir / ref,
+    ]
+    for path in candidates:
+        if path.exists():
+            return _load_yaml(path), path.resolve()
+    raise FileNotFoundError(f"job not found: {job_ref}")
+
+
+def _resolve_root_path(root: Path, path: Path) -> Path:
+    target = Path(path)
+    if not target.is_absolute():
+        target = root / target
+    return target.resolve()
+
+
+def _save_patch_intent(root: Path, job: dict[str, Any], reply_content: dict[str, Any]) -> str:
+    job_id = str(job.get("job_id") or "job-custom")
+    payload = {
+        "schema_version": SCHEMA_VERSION,
+        "created_at": _now(),
+        "job_id": job_id,
+        "job_ref": _relative(default_custom_job_path(root, job_id), root),
+        "response_kind": reply_content.get("response_kind"),
+        "summary": reply_content.get("summary"),
+        "target_path": reply_content.get("target_path"),
+        "old_text": reply_content.get("old_text"),
+        "new_text": reply_content.get("new_text"),
+        "reason": reply_content.get("reason"),
+        "related_tests": _as_string_list(reply_content.get("related_tests")),
+        "patch_applied": False,
+        "source_code_modified": False,
+    }
+    path = _save_yaml(default_custom_patch_intents_dir(root) / f"{_slug(job_id, 'job')}.yaml", payload)
+    return _relative(path, root)
+
+
+def _latest_custom_validation_evidence(root: Path, job_id: str) -> tuple[dict[str, Any], str | None]:
+    evidence_dir = default_custom_validation_evidence_dir(root)
+    direct = evidence_dir / f"{_slug(job_id, 'job')}.yaml"
+    candidates = [direct] if direct.exists() else []
+    if evidence_dir.exists():
+        candidates.extend(sorted(evidence_dir.glob("*.yaml"), reverse=True))
+    seen: set[Path] = set()
+    for path in candidates:
+        resolved = path.resolve()
+        if resolved in seen:
+            continue
+        seen.add(resolved)
+        try:
+            payload = _load_yaml(resolved)
+        except (OSError, ValueError, yaml.YAMLError):
+            continue
+        if str(payload.get("job_id") or "") == job_id:
+            return payload, _relative(resolved, root)
+    return {}, None
+
+
+def _append_custom_outcome(root: Path, outcome_payload: dict[str, Any]) -> Path:
+    path = default_custom_outcomes_path(root)
+    payload = _load_yaml(path) if path.exists() else {"schema_version": SCHEMA_VERSION, "outcomes": []}
+    outcomes = payload.get("outcomes", [])
+    if not isinstance(outcomes, list):
+        outcomes = []
+    job_id = str(outcome_payload.get("job_id") or "")
+    outcomes = [item for item in outcomes if not (isinstance(item, dict) and str(item.get("job_id") or "") == job_id)]
+    outcomes.append(outcome_payload)
+    payload["schema_version"] = SCHEMA_VERSION
+    payload["updated_at"] = _now()
+    payload["outcomes"] = outcomes
+    return _save_yaml(path, payload)
+
+
+def _dedupe(items: list[str]) -> list[str]:
+    seen: set[str] = set()
+    result: list[str] = []
+    for item in items:
+        text = str(item or "").strip()
+        if not text or text in seen:
+            continue
+        seen.add(text)
+        result.append(text)
+    return result
+
+
+def _text_or_none(value: Any) -> str | None:
+    text = str(value or "").strip()
+    return text or None
 
 
 def _load_or_scan_profile(root: Path) -> Any:
