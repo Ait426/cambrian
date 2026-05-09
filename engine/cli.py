@@ -292,7 +292,8 @@ def main() -> None:
         help="스킬 상세 정보",
         parents=[common_parser],
     )
-    skill_parser.add_argument("skill_id", help="스킬 ID")
+    skill_parser.add_argument("skill_id", nargs="?", help="Skill ID or generate")
+    skill_parser.add_argument("--json", action="store_true", dest="json_output", help="JSON output")
 
     absorb_parser = subparsers.add_parser(
         "absorb",
@@ -420,6 +421,91 @@ def main() -> None:
 
     auto_release_gate_parser = auto_subparsers.add_parser("release-gate", help="auto release gate evidence package 생성", parents=[common_parser])
     auto_release_gate_parser.add_argument("--json", action="store_true", dest="json_output", help="JSON 출력")
+
+
+    project_parser = subparsers.add_parser(
+        "project",
+        help="Project harness profile commands",
+        parents=[common_parser],
+    )
+    project_subparsers = project_parser.add_subparsers(dest="project_command", help="project subcommand")
+    project_scan_parser = project_subparsers.add_parser("scan", help="Scan project profile", parents=[common_parser])
+    project_scan_parser.add_argument("--json", action="store_true", dest="json_output", help="JSON output")
+
+    harness_parser = subparsers.add_parser(
+        "harness",
+        help="Custom harness plan and install commands",
+        parents=[common_parser],
+    )
+    harness_subparsers = harness_parser.add_subparsers(dest="harness_command", help="harness subcommand")
+    harness_plan_parser = harness_subparsers.add_parser("plan", help="Build harness plan", parents=[common_parser])
+    harness_plan_parser.add_argument("--seed-preset", default=None, dest="seed_preset", help="Reference preset")
+    harness_plan_parser.add_argument("--json", action="store_true", dest="json_output", help="JSON output")
+    harness_design_parser = harness_subparsers.add_parser("design", help="Build harness plan alias", parents=[common_parser])
+    harness_design_parser.add_argument("--seed-preset", default=None, dest="seed_preset", help="Reference preset")
+    harness_design_parser.add_argument("--json", action="store_true", dest="json_output", help="JSON output")
+    harness_install_parser = harness_subparsers.add_parser("install", help="Install harness", parents=[common_parser])
+    harness_install_parser.add_argument("--confirm", action="store_true", help="Confirm install")
+    harness_install_parser.add_argument("--seed-preset", default=None, dest="seed_preset", help="Reference preset")
+    harness_install_parser.add_argument("--json", action="store_true", dest="json_output", help="JSON output")
+
+    interview_parser = harness_subparsers.add_parser("interview", help="Harness interview", parents=[common_parser])
+    interview_subparsers = interview_parser.add_subparsers(dest="interview_command", help="interview subcommand")
+    interview_start_parser = interview_subparsers.add_parser("start", help="Create interview questions", parents=[common_parser])
+    interview_start_parser.add_argument("--json", action="store_true", dest="json_output", help="JSON output")
+    interview_answer_parser = interview_subparsers.add_parser("answer", help="Apply interview answers", parents=[common_parser])
+    interview_answer_parser.add_argument("--answers", required=True, help="answers.yaml path")
+    interview_answer_parser.add_argument("--json", action="store_true", dest="json_output", help="JSON output")
+
+    engineer_parser = harness_subparsers.add_parser("engineer", help="Pre-install engineering gate", parents=[common_parser])
+    engineer_subparsers = engineer_parser.add_subparsers(dest="engineer_command", help="engineer subcommand")
+    engineer_design_parser = engineer_subparsers.add_parser("design", help="Create design candidate", parents=[common_parser])
+    engineer_design_parser.add_argument("--json", action="store_true", dest="json_output", help="JSON output")
+    engineer_review_parser = engineer_subparsers.add_parser("review", help="Review design candidate", parents=[common_parser])
+    engineer_review_parser.add_argument("--json", action="store_true", dest="json_output", help="JSON output")
+    engineer_dry_run_parser = engineer_subparsers.add_parser("dry-run", help="Dry-run design candidate", parents=[common_parser])
+    engineer_dry_run_parser.add_argument("request", help="Request to validate")
+    engineer_dry_run_parser.add_argument("--json", action="store_true", dest="json_output", help="JSON output")
+
+    workforce_parser = subparsers.add_parser(
+        "workforce",
+        help="Generate custom harness workforce",
+        parents=[common_parser],
+    )
+    workforce_subparsers = workforce_parser.add_subparsers(dest="workforce_command", help="workforce subcommand")
+    workforce_generate_parser = workforce_subparsers.add_parser("generate", help="Generate workforce draft", parents=[common_parser])
+    workforce_generate_parser.add_argument("--json", action="store_true", dest="json_output", help="JSON output")
+
+    agent_parser = subparsers.add_parser(
+        "agent",
+        help="Custom harness agent dispatch/run",
+        parents=[common_parser],
+    )
+    agent_subparsers = agent_parser.add_subparsers(dest="agent_command", help="agent subcommand")
+    agent_dispatch_parser = agent_subparsers.add_parser("dispatch", help="Start an agent job", parents=[common_parser])
+    agent_dispatch_parser.add_argument("request", help="Work request")
+    agent_dispatch_parser.add_argument("--json", action="store_true", dest="json_output", help="JSON output")
+    agent_run_parser = agent_subparsers.add_parser("run", help="Start a job with an explicit agent", parents=[common_parser])
+    agent_run_parser.add_argument("agent_id", help="Agent ID")
+    agent_run_parser.add_argument("request", help="Work request")
+    agent_run_parser.add_argument("--json", action="store_true", dest="json_output", help="JSON output")
+
+    job_parser = subparsers.add_parser(
+        "job",
+        help="Custom harness job commands",
+        parents=[common_parser],
+    )
+    job_subparsers = job_parser.add_subparsers(dest="job_command", help="job subcommand")
+    job_start_parser = job_subparsers.add_parser("start", help="Start custom harness job", parents=[common_parser])
+    job_start_parser.add_argument("request", help="Work request")
+    job_start_parser.add_argument("--json", action="store_true", dest="json_output", help="JSON output")
+    job_ingest_parser = job_subparsers.add_parser("ingest", help="Ingest AI reply", parents=[common_parser])
+    job_ingest_parser.add_argument("job_ref", nargs="?", default="latest", help="Job ID or latest")
+    job_ingest_parser.add_argument("reply_path", nargs="?", help="AI reply file")
+    job_ingest_parser.add_argument("--json", action="store_true", dest="json_output", help="JSON output")
+    job_validate_parser = job_subparsers.add_parser("validate", help="Validate job", parents=[common_parser])
+    job_validate_parser.add_argument("job_ref", nargs="?", default="latest", help="Job ID or latest")
+    job_validate_parser.add_argument("--json", action="store_true", dest="json_output", help="JSON output")
 
     history_parser = subparsers.add_parser(
         "history",
@@ -2195,7 +2281,10 @@ def main() -> None:
         elif args.command == "skills":
             _handle_skills(args)
         elif args.command == "skill":
-            _handle_skill(args)
+            if getattr(args, "skill_id", None) == "generate":
+                _handle_skill_generate(args)
+            else:
+                _handle_skill(args)
         elif args.command == "absorb":
             _handle_absorb(args)
         elif args.command == "remove":
@@ -2212,6 +2301,16 @@ def main() -> None:
             _handle_authority(args)
         elif args.command == "auto":
             _handle_auto(args)
+        elif args.command == "project":
+            _handle_project(args)
+        elif args.command == "harness":
+            _handle_harness(args)
+        elif args.command == "workforce":
+            _handle_workforce(args)
+        elif args.command == "agent":
+            _handle_agent(args)
+        elif args.command == "job":
+            _handle_job(args)
         elif args.command == "history":
             _handle_history(args)
         elif args.command == "rollback":
@@ -7736,6 +7835,204 @@ def _handle_brain_handoff(args: argparse.Namespace) -> None:
         for r in record.block_reasons:
             print(f"    - {r}")
         print(f"  Artifact  : not created")
+
+
+def _emit_cli_payload(payload: dict, json_output: bool, text: str | None = None) -> None:
+    if json_output:
+        print(json.dumps(payload, indent=2, ensure_ascii=False))
+        return
+    if text:
+        print(text)
+        return
+    status = payload.get("status") or ("ok" if payload.get("ok") else "blocked")
+    print(str(status))
+
+
+def _payload_from_result(result) -> dict:
+    if hasattr(result, "to_dict"):
+        return result.to_dict()
+    if isinstance(result, dict):
+        return dict(result)
+    raise TypeError(f"Unsupported result payload: {type(result).__name__}")
+
+
+def _exit_if_blocked(payload: dict) -> None:
+    if not bool(payload.get("ok")):
+        sys.exit(1)
+
+
+def _handle_project(args: argparse.Namespace) -> None:
+    if getattr(args, "project_command", None) != "scan":
+        print("project subcommand is required", file=sys.stderr)
+        sys.exit(2)
+    from engine.project_harness_profile import ProjectHarnessProfileStore, ProjectHarnessScanner, default_project_profile_path
+
+    root = Path.cwd()
+    profile = ProjectHarnessScanner().scan(root)
+    saved = ProjectHarnessProfileStore().save(profile, default_project_profile_path(root))
+    payload = profile.to_dict()
+    payload["ok"] = True
+    payload["profile_ref"] = str(saved.relative_to(root)).replace("\\", "/")
+    _emit_cli_payload(payload, bool(getattr(args, "json_output", False)), f"Project profile saved: {payload['profile_ref']}")
+
+
+def _handle_harness(args: argparse.Namespace) -> None:
+    command = getattr(args, "harness_command", None)
+    root = Path.cwd()
+    if command == "interview":
+        _handle_harness_interview(args, root)
+        return
+    if command in {"plan", "design"}:
+        from engine.project_harness_plan import build_and_save_harness_plan, render_harness_plan
+
+        plan, saved = build_and_save_harness_plan(root, seed_preset=getattr(args, "seed_preset", None))
+        payload = plan.to_dict()
+        payload["plan_ref"] = str(saved.relative_to(root)).replace("\\", "/")
+        _emit_cli_payload(payload, bool(getattr(args, "json_output", False)), render_harness_plan(plan, saved))
+        _exit_if_blocked(payload)
+        return
+    if command == "engineer":
+        _handle_harness_engineer(args, root)
+        return
+    if command == "install":
+        from engine.project_harness_plan import HarnessInstaller, render_harness_install_result
+
+        result = HarnessInstaller().install(
+            root,
+            confirm=bool(getattr(args, "confirm", False)),
+            seed_preset=getattr(args, "seed_preset", None),
+        )
+        payload = result.to_dict()
+        _emit_cli_payload(payload, bool(getattr(args, "json_output", False)), render_harness_install_result(result))
+        _exit_if_blocked(payload)
+        return
+    print("harness subcommand is required", file=sys.stderr)
+    sys.exit(2)
+
+
+def _handle_harness_interview(args: argparse.Namespace, root: Path) -> None:
+    command = getattr(args, "interview_command", None)
+    if command == "start":
+        from engine.project_harness_interview import HarnessInterviewBuilder, render_harness_interview_session
+
+        session = HarnessInterviewBuilder().start(root)
+        _emit_cli_payload(session.to_dict(), bool(getattr(args, "json_output", False)), render_harness_interview_session(session))
+        return
+    if command == "answer":
+        from engine.project_harness_interview import HarnessInterviewAnswerHandler, render_harness_interview_answer_result
+
+        result = HarnessInterviewAnswerHandler().answer(root, Path(getattr(args, "answers")))
+        payload = result.to_dict()
+        _emit_cli_payload(payload, bool(getattr(args, "json_output", False)), render_harness_interview_answer_result(result))
+        _exit_if_blocked(payload)
+        return
+    print("harness interview subcommand is required", file=sys.stderr)
+    sys.exit(2)
+
+
+def _handle_harness_engineer(args: argparse.Namespace, root: Path) -> None:
+    command = getattr(args, "engineer_command", None)
+    from engine.project_harness_engineering import design_harness_candidate, dry_run_harness_candidate, review_harness_candidate
+
+    if command == "design":
+        result = design_harness_candidate(root)
+    elif command == "review":
+        result = review_harness_candidate(root)
+    elif command == "dry-run":
+        result = dry_run_harness_candidate(root, str(getattr(args, "request", "")))
+    else:
+        print("harness engineer subcommand is required", file=sys.stderr)
+        sys.exit(2)
+    payload = _payload_from_result(result)
+    _emit_cli_payload(payload, bool(getattr(args, "json_output", False)))
+    _exit_if_blocked(payload)
+
+
+def _handle_workforce(args: argparse.Namespace) -> None:
+    if getattr(args, "workforce_command", None) != "generate":
+        print("workforce subcommand is required", file=sys.stderr)
+        sys.exit(2)
+    from engine.project_workforce_builder import build_workforce, render_workforce_generate_result
+
+    result = build_workforce(Path.cwd())
+    payload = result.to_dict()
+    _emit_cli_payload(payload, bool(getattr(args, "json_output", False)), render_workforce_generate_result(result))
+    _exit_if_blocked(payload)
+
+
+def _handle_skill_generate(args: argparse.Namespace) -> None:
+    from engine.project_skill_builder import build_skillset, render_skill_generate_result
+
+    result = build_skillset(Path.cwd())
+    payload = result.to_dict()
+    _emit_cli_payload(payload, bool(getattr(args, "json_output", False)), render_skill_generate_result(result))
+    _exit_if_blocked(payload)
+
+
+def _handle_agent(args: argparse.Namespace) -> None:
+    command = getattr(args, "agent_command", None)
+    if command == "dispatch":
+        from engine.project_agent_dispatch import AgentDispatcher, render_agent_dispatch_result
+
+        result = AgentDispatcher().dispatch(Path.cwd(), str(getattr(args, "request", "")))
+        payload = result.to_dict()
+        _emit_cli_payload(payload, bool(getattr(args, "json_output", False)), render_agent_dispatch_result(result))
+        _exit_if_blocked(payload)
+        return
+    if command == "run":
+        payload = _start_custom_job(str(getattr(args, "request", "")), selected_agent_id=str(getattr(args, "agent_id", "")), entry_mode="agent_run")
+        _emit_cli_payload(payload, bool(getattr(args, "json_output", False)))
+        _exit_if_blocked(payload)
+        return
+    print("agent subcommand is required", file=sys.stderr)
+    sys.exit(2)
+
+
+def _handle_job(args: argparse.Namespace) -> None:
+    command = getattr(args, "job_command", None)
+    if command == "start":
+        payload = _start_custom_job(str(getattr(args, "request", "")), selected_agent_id=None, entry_mode="job_start")
+        _emit_cli_payload(payload, bool(getattr(args, "json_output", False)))
+        _exit_if_blocked(payload)
+        return
+    if command in {"ingest", "validate"}:
+        payload = {"ok": False, "status": "not_implemented", "error": f"job {command} is reserved for the evidence slice"}
+        _emit_cli_payload(payload, bool(getattr(args, "json_output", False)))
+        sys.exit(1)
+    print("job subcommand is required", file=sys.stderr)
+    sys.exit(2)
+
+
+def _start_custom_job(request: str, selected_agent_id: str | None, entry_mode: str) -> dict:
+    from engine.project_custom_harness import create_custom_harness_job
+
+    result, pack_job = create_custom_harness_job(Path.cwd(), request, selected_agent_id=selected_agent_id, entry_mode=entry_mode)
+    job = dict(result.get("job", {})) if isinstance(result.get("job"), dict) else {}
+    outcome = dict(job.get("outcome_snapshot", {})) if isinstance(job.get("outcome_snapshot"), dict) else {}
+    packet_ref = str(pack_job.get("packet_ref") or job.get("linked_bridge_packet_ref") or "")
+    return {
+        "ok": True,
+        "status": "created",
+        "job_status": job.get("status"),
+        "job_id": job.get("job_id"),
+        "harness_id": outcome.get("harness_id") or job.get("pack_id"),
+        "workforce_id": outcome.get("workforce_id"),
+        "selected_agents": list(outcome.get("selected_agents", [])) if isinstance(outcome.get("selected_agents"), list) else [],
+        "selected_skills": list(outcome.get("selected_skills", [])) if isinstance(outcome.get("selected_skills"), list) else [],
+        "dispatch_reason": outcome.get("dispatch_reason"),
+        "change_policy": outcome.get("change_policy"),
+        "validation_commands": list(outcome.get("validation_commands", [])) if isinstance(outcome.get("validation_commands"), list) else [],
+        "request_packet_ref": packet_ref,
+        "request_packet": packet_ref,
+        "job_ref": pack_job.get("job_ref"),
+        "ai_provider_called": False,
+        "source_code_modified": False,
+        "next_commands": [
+            "cambrian job ingest latest ai_reply_patch_candidate.yaml",
+            "cambrian job validate latest",
+        ],
+        "pack_job": dict(pack_job),
+    }
 
 
 if __name__ == "__main__":
