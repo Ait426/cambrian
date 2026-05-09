@@ -1224,6 +1224,654 @@ def main() -> None:
         "--json", action="store_true", dest="json_output", help="JSON 출력",
     )
 
+    install_parser = subparsers.add_parser(
+        "install",
+        help="local pack manifest 설치와 provenance 관리",
+        parents=[common_parser],
+    )
+    install_subparsers = install_parser.add_subparsers(
+        dest="install_command",
+        help="install 하위 명령",
+    )
+    install_pack_parser = install_subparsers.add_parser(
+        "pack",
+        help="local catalog pack id로 안전하게 설치",
+        parents=[common_parser],
+    )
+    install_pack_parser.add_argument("pack_ref", help="pack id 또는 name")
+    install_pack_parser.add_argument("--registry", default=None, help="sync된 registry 이름")
+    install_pack_parser.add_argument("--version", default=None, help="설치할 pack version")
+    install_pack_parser.add_argument("--no-deps", action="store_true", help="dependency 자동 설치 계획을 사용하지 않음")
+    install_pack_parser.add_argument("--confirm-deps", action="store_true", help="dependency graph 설치를 명시 확인")
+    install_pack_parser.add_argument("--dry-run", action="store_true", help="설치 전 plan만 출력")
+    install_pack_parser.add_argument("--require-trusted", action="store_true", help="trusted source가 아니면 설치 차단")
+    install_pack_parser.add_argument("--json", action="store_true", dest="json_output", help="JSON 출력")
+    install_plan_parser = install_subparsers.add_parser(
+        "plan",
+        help="namespace/version/dependency-aware install plan 보기",
+        parents=[common_parser],
+    )
+    install_plan_parser.add_argument("pack_ref", help="pack id, namespace/id, 또는 pack@version")
+    install_plan_parser.add_argument("--registry", default=None, help="우선 검색할 registry 이름")
+    install_plan_parser.add_argument("--version", default=None, help="요청 version override")
+    install_plan_parser.add_argument("--no-deps", action="store_true", help="dependency를 plan에 포함하지 않음")
+    install_plan_parser.add_argument("--save", action="store_true", help="install graph 저장")
+    install_plan_parser.add_argument("--json", action="store_true", dest="json_output", help="JSON 출력")
+    install_manifest_parser = install_subparsers.add_parser(
+        "manifest",
+        help="local pack manifest를 안전하게 설치",
+        parents=[common_parser],
+    )
+    install_manifest_parser.add_argument("path", help="pack manifest YAML path")
+    install_manifest_parser.add_argument("--dry-run", action="store_true", help="설치 전 plan만 출력")
+    install_manifest_parser.add_argument("--require-trusted", action="store_true", help="trusted source가 아니면 설치 차단")
+    install_manifest_parser.add_argument("--json", action="store_true", dest="json_output", help="JSON 출력")
+    install_list_parser = install_subparsers.add_parser(
+        "list",
+        help="설치된 pack 목록 보기",
+        parents=[common_parser],
+    )
+    install_list_parser.add_argument("--json", action="store_true", dest="json_output", help="JSON 출력")
+    install_show_parser = install_subparsers.add_parser(
+        "show",
+        help="설치된 pack 상세 보기",
+        parents=[common_parser],
+    )
+    install_show_parser.add_argument("pack_ref", help="pack id 또는 name")
+    install_show_parser.add_argument("--json", action="store_true", dest="json_output", help="JSON 출력")
+    install_diff_parser = install_subparsers.add_parser(
+        "diff",
+        help="설치된 pack과 incoming manifest/catalog 버전 비교",
+        parents=[common_parser],
+    )
+    install_diff_parser.add_argument("pack_ref", help="pack id 또는 name")
+    install_diff_parser.add_argument("--manifest", default=None, help="비교할 incoming manifest path")
+    install_diff_parser.add_argument("--save", action="store_true", help="diff report 저장")
+    install_diff_parser.add_argument("--json", action="store_true", dest="json_output", help="JSON 출력")
+    install_update_parser = install_subparsers.add_parser(
+        "update",
+        help="설치된 pack 업데이트 preview 또는 confirm 실행",
+        parents=[common_parser],
+    )
+    install_update_parser.add_argument("pack_ref", help="pack id 또는 name")
+    install_update_parser.add_argument("--manifest", default=None, help="업데이트할 incoming manifest path")
+    install_update_parser.add_argument("--dry-run", action="store_true", help="preview만 출력")
+    install_update_parser.add_argument("--confirm", action="store_true", help="실제 update 실행")
+    install_update_parser.add_argument("--require-trusted", action="store_true", help="trusted source가 아니면 update 차단")
+    install_update_parser.add_argument("--json", action="store_true", dest="json_output", help="JSON 출력")
+    install_verify_parser = install_subparsers.add_parser(
+        "verify",
+        help="설치된 pack manifest digest와 artifact refs 검증",
+        parents=[common_parser],
+    )
+    install_verify_parser.add_argument("pack_ref", nargs="?", default=None, help="pack id 또는 name")
+    install_verify_parser.add_argument("--save", action="store_true", help="verification report 저장")
+    install_verify_parser.add_argument("--json", action="store_true", dest="json_output", help="JSON 출력")
+    install_doctor_parser = install_subparsers.add_parser(
+        "doctor",
+        help="설치된 pack 참조 무결성 검사",
+        parents=[common_parser],
+    )
+    install_doctor_parser.add_argument("--json", action="store_true", dest="json_output", help="JSON 출력")
+
+    uninstall_parser = subparsers.add_parser(
+        "uninstall",
+        help="installed pack 제거 preview와 confirm 실행",
+        parents=[common_parser],
+    )
+    uninstall_subparsers = uninstall_parser.add_subparsers(
+        dest="uninstall_command",
+        help="uninstall 하위 명령",
+    )
+    uninstall_pack_parser = uninstall_subparsers.add_parser(
+        "pack",
+        help="installed pack 제거 plan 또는 confirm 실행",
+        parents=[common_parser],
+    )
+    uninstall_pack_parser.add_argument("pack_ref", help="pack id 또는 name")
+    uninstall_pack_parser.add_argument("--confirm", action="store_true", help="실제 uninstall 실행")
+    uninstall_pack_parser.add_argument("--force", action="store_true", help="blocking reference가 있어도 de-register")
+    uninstall_pack_parser.add_argument("--json", action="store_true", dest="json_output", help="JSON 출력")
+
+    pack_parser = subparsers.add_parser(
+        "pack",
+        help="local pack catalog 탐색과 추천",
+        parents=[common_parser],
+    )
+    pack_subparsers = pack_parser.add_subparsers(
+        dest="pack_command",
+        help="pack 하위 명령",
+    )
+    pack_list_parser = pack_subparsers.add_parser(
+        "list",
+        help="설치 가능한 local pack 목록",
+        parents=[common_parser],
+    )
+    pack_list_parser.add_argument("--kind", choices=["worker", "team", "template", "lane"], default=None)
+    pack_list_parser.add_argument("--json", action="store_true", dest="json_output", help="JSON 출력")
+    pack_show_parser = pack_subparsers.add_parser(
+        "show",
+        help="local pack 상세 보기",
+        parents=[common_parser],
+    )
+    pack_show_parser.add_argument("pack_ref", help="pack id 또는 name")
+    pack_show_parser.add_argument("--registry", default=None, help="sync된 registry에서 pack 상세 보기")
+    pack_show_parser.add_argument("--json", action="store_true", dest="json_output", help="JSON 출력")
+    pack_search_parser = pack_subparsers.add_parser(
+        "search",
+        help="local catalog와 sync된 registry cache에서 pack 검색",
+        parents=[common_parser],
+    )
+    pack_search_parser.add_argument("query", nargs="?", default=None, help="검색어")
+    pack_search_parser.add_argument("--registry", default=None, help="검색할 registry 이름")
+    pack_search_parser.add_argument("--kind", choices=["worker", "team", "template", "lane"], default=None)
+    pack_search_parser.add_argument("--json", action="store_true", dest="json_output", help="JSON 출력")
+    pack_recommend_parser = pack_subparsers.add_parser(
+        "recommend",
+        help="현재 프로젝트에 맞는 local pack 추천",
+        parents=[common_parser],
+    )
+    pack_recommend_parser.add_argument("--json", action="store_true", dest="json_output", help="JSON 출력")
+    pack_activate_parser = pack_subparsers.add_parser(
+        "activate",
+        help="설치된 pack을 현재 작업 context로 명시 활성화",
+        parents=[common_parser],
+    )
+    pack_activate_parser.add_argument("pack_ref", help="설치된 pack id/ref")
+    pack_activate_parser.add_argument("--json", action="store_true", dest="json_output", help="JSON 출력")
+    pack_active_parser = pack_subparsers.add_parser(
+        "active",
+        help="현재 active pack context 보기",
+        parents=[common_parser],
+    )
+    pack_active_parser.add_argument("--json", action="store_true", dest="json_output", help="JSON 출력")
+    pack_next_parser = pack_subparsers.add_parser(
+        "next",
+        help="active pack 기준 첫 작업 명령 안내",
+        parents=[common_parser],
+    )
+    pack_next_parser.add_argument("pack_ref", nargs="?", default=None, help="설치된 pack id/ref")
+    pack_next_parser.add_argument("--json", action="store_true", dest="json_output", help="JSON 출력")
+    pack_doctor_parser = pack_subparsers.add_parser(
+        "doctor",
+        help="pack의 현재 프로젝트 readiness와 fit 점검",
+        parents=[common_parser],
+    )
+    pack_doctor_parser.add_argument("pack_ref", nargs="?", default=None, help="pack id/ref")
+    pack_doctor_parser.add_argument("--registry", default=None, help="sync된 registry에서 preinstall doctor")
+    pack_doctor_parser.add_argument("--save", action="store_true", help="readiness report 저장")
+    pack_doctor_parser.add_argument("--json", action="store_true", dest="json_output", help="JSON 출력")
+    pack_readiness_parser = pack_subparsers.add_parser(
+        "readiness",
+        help="pack readiness report 보기",
+        parents=[common_parser],
+    )
+    pack_readiness_parser.add_argument("pack_ref", nargs="?", default=None, help="pack id/ref")
+    pack_readiness_parser.add_argument("--registry", default=None, help="sync된 registry에서 preinstall readiness")
+    pack_readiness_parser.add_argument("--save", action="store_true", help="readiness report 저장")
+    pack_readiness_parser.add_argument("--json", action="store_true", dest="json_output", help="JSON 출력")
+    pack_setup_parser = pack_subparsers.add_parser(
+        "setup",
+        help="pack readiness blocker를 guided setup plan으로 변환",
+        parents=[common_parser],
+    )
+    pack_setup_parser.add_argument("pack_ref", nargs="?", default=None, help="pack id/ref")
+    pack_setup_parser.add_argument("--save", action="store_true", help="setup plan 저장")
+    pack_setup_parser.add_argument("--json", action="store_true", dest="json_output", help="JSON 출력")
+    pack_setup_show_parser = pack_subparsers.add_parser(
+        "setup-show",
+        help="pack setup plan 보기",
+        parents=[common_parser],
+    )
+    pack_setup_show_parser.add_argument("setup_ref", help="setup plan id/path/latest")
+    pack_setup_show_parser.add_argument("--json", action="store_true", dest="json_output", help="JSON 출력")
+    pack_setup_apply_parser = pack_subparsers.add_parser(
+        "setup-apply",
+        help="safe Cambrian-state setup step만 적용",
+        parents=[common_parser],
+    )
+    pack_setup_apply_parser.add_argument("setup_ref", help="setup plan id/path/latest")
+    pack_setup_apply_parser.add_argument("--json", action="store_true", dest="json_output", help="JSON 출력")
+    pack_start_parser = pack_subparsers.add_parser(
+        "start",
+        help="active 또는 명시 pack에 first job handoff 시작",
+        parents=[common_parser],
+    )
+    pack_start_parser.add_argument("start_args", nargs="+", help="request 또는 pack ref + request")
+    pack_start_parser.add_argument("--pack", dest="pack_ref_option", default=None, help="작업을 맡길 installed pack id/ref")
+    pack_start_parser.add_argument("--mode", choices=["bridge", "do", "safe-autonomy"], default="bridge", help="job entry mode")
+    pack_start_parser.add_argument("--json", action="store_true", dest="json_output", help="JSON 출력")
+    pack_jobs_parser = pack_subparsers.add_parser(
+        "jobs",
+        help="최근 pack job 목록 보기",
+        parents=[common_parser],
+    )
+    pack_jobs_parser.add_argument("--pack", dest="pack_ref_option", default=None, help="pack id/ref 필터")
+    pack_jobs_parser.add_argument("--limit", type=int, default=20, help="표시할 job 수")
+    pack_jobs_parser.add_argument("--json", action="store_true", dest="json_output", help="JSON 출력")
+    pack_job_show_parser = pack_subparsers.add_parser(
+        "job-show",
+        help="pack job 상세 보기",
+        parents=[common_parser],
+    )
+    pack_job_show_parser.add_argument("job_ref", help="job id/path/latest")
+    pack_job_show_parser.add_argument("--json", action="store_true", dest="json_output", help="JSON 출력")
+    pack_job_next_parser = pack_subparsers.add_parser(
+        "job-next",
+        help="pack job 다음 명령 보기",
+        parents=[common_parser],
+    )
+    pack_job_next_parser.add_argument("job_ref", help="job id/path/latest")
+    pack_job_next_parser.add_argument("--json", action="store_true", dest="json_output", help="JSON 출력")
+    pack_job_paste_parser = pack_subparsers.add_parser(
+        "job-paste",
+        help="AI reply를 pack job에 붙여 bridge fast path로 라우팅",
+        parents=[common_parser],
+    )
+    pack_job_paste_parser.add_argument("job_ref", help="job id/path/latest")
+    pack_job_paste_parser.add_argument("--json", action="store_true", dest="json_output", help="JSON 출력")
+    pack_job_ingest_parser = pack_subparsers.add_parser(
+        "job-ingest",
+        help="AI reply 파일을 pack job에 붙여 bridge fast path로 라우팅",
+        parents=[common_parser],
+    )
+    pack_job_ingest_parser.add_argument("job_ref", help="job id/path/latest")
+    pack_job_ingest_parser.add_argument("reply_file", help="AI reply YAML/JSON/text file")
+    pack_job_ingest_parser.add_argument("--json", action="store_true", dest="json_output", help="JSON 출력")
+    pack_job_validate_parser = pack_subparsers.add_parser(
+        "job-validate",
+        help="validation-ready pack job을 continue --validate로 이어감",
+        parents=[common_parser],
+    )
+    pack_job_validate_parser.add_argument("job_ref", help="job id/path/latest")
+    pack_job_validate_parser.add_argument("--json", action="store_true", dest="json_output", help="JSON 출력")
+    pack_job_apply_parser = pack_subparsers.add_parser(
+        "job-apply",
+        help="validated pack job proposal apply preview/confirm",
+        parents=[common_parser],
+    )
+    pack_job_apply_parser.add_argument("job_ref", help="job id/path/latest")
+    pack_job_apply_parser.add_argument("--confirm", action="store_true", help="실제 source mutation을 명시 승인")
+    pack_job_apply_parser.add_argument("--json", action="store_true", dest="json_output", help="JSON 출력")
+    pack_job_adopt_parser = pack_subparsers.add_parser(
+        "job-adopt",
+        help="pack job 결과를 accepted/rejected/skipped로 명시 기록",
+        parents=[common_parser],
+    )
+    pack_job_adopt_parser.add_argument("job_ref", help="job id/path/latest")
+    adopt_group = pack_job_adopt_parser.add_mutually_exclusive_group(required=True)
+    adopt_group.add_argument("--accepted", action="store_true", help="pack job 결과를 채택")
+    adopt_group.add_argument("--rejected", action="store_true", help="pack job 결과를 기각")
+    adopt_group.add_argument("--skipped", action="store_true", help="pack job 결과 채택 판단을 건너뜀")
+    pack_job_adopt_parser.add_argument("--reason", default=None, help="채택/기각/스킵 이유")
+    pack_job_adopt_parser.add_argument("--json", action="store_true", dest="json_output", help="JSON 출력")
+    pack_job_retro_parser = pack_subparsers.add_parser(
+        "job-retro",
+        help="완료된 pack job 회고 artifact 생성",
+        parents=[common_parser],
+    )
+    pack_job_retro_parser.add_argument("job_ref", help="job id/path/latest")
+    pack_job_retro_parser.add_argument("--save", action="store_true", help="retrospective 저장")
+    pack_job_retro_parser.add_argument("--json", action="store_true", dest="json_output", help="JSON 출력")
+    pack_retrospectives_parser = pack_subparsers.add_parser(
+        "retrospectives",
+        help="pack job retrospective 목록 보기",
+        parents=[common_parser],
+    )
+    pack_retrospectives_parser.add_argument("pack_ref", nargs="?", default=None, help="pack id/ref")
+    pack_retrospectives_parser.add_argument("--limit", type=int, default=20, help="표시할 retrospective 수")
+    pack_retrospectives_parser.add_argument("--json", action="store_true", dest="json_output", help="JSON 출력")
+    pack_retro_summary_parser = pack_subparsers.add_parser(
+        "retro-summary",
+        help="pack 단위 retrospective summary 생성",
+        parents=[common_parser],
+    )
+    pack_retro_summary_parser.add_argument("pack_ref", nargs="?", default=None, help="pack id/ref")
+    pack_retro_summary_parser.add_argument("--save", action="store_true", help="summary 저장")
+    pack_retro_summary_parser.add_argument("--json", action="store_true", dest="json_output", help="JSON 출력")
+    pack_improve_parser = pack_subparsers.add_parser(
+        "improve",
+        help="retrospective/proof evidence에서 pack improvement queue 생성",
+        parents=[common_parser],
+    )
+    pack_improve_parser.add_argument("pack_ref", nargs="?", default=None, help="pack id/ref")
+    pack_improve_parser.add_argument("--save", action="store_true", help="queue 저장")
+    pack_improve_parser.add_argument("--json", action="store_true", dest="json_output", help="JSON 출력")
+    pack_improvements_parser = pack_subparsers.add_parser(
+        "improvements",
+        help="pack improvement queue 목록 보기",
+        parents=[common_parser],
+    )
+    pack_improvements_parser.add_argument("pack_ref", nargs="?", default=None, help="pack id/ref")
+    pack_improvements_parser.add_argument("--status", choices=["open", "accepted", "dismissed", "deferred"], default=None, help="상태 필터")
+    pack_improvements_parser.add_argument("--json", action="store_true", dest="json_output", help="JSON 출력")
+    pack_improvement_show_parser = pack_subparsers.add_parser(
+        "improvement-show",
+        help="pack improvement item 상세 보기",
+        parents=[common_parser],
+    )
+    pack_improvement_show_parser.add_argument("item_ref", help="item id/path")
+    pack_improvement_show_parser.add_argument("--json", action="store_true", dest="json_output", help="JSON 출력")
+    pack_improvement_accept_parser = pack_subparsers.add_parser(
+        "improvement-accept",
+        help="pack improvement item을 채택 decision으로 기록",
+        parents=[common_parser],
+    )
+    pack_improvement_accept_parser.add_argument("item_ref", help="item id/path")
+    pack_improvement_accept_parser.add_argument("--resolution", default=None, help="채택 메모")
+    pack_improvement_accept_parser.add_argument("--json", action="store_true", dest="json_output", help="JSON 출력")
+    pack_improvement_dismiss_parser = pack_subparsers.add_parser(
+        "improvement-dismiss",
+        help="pack improvement item을 기각 decision으로 기록",
+        parents=[common_parser],
+    )
+    pack_improvement_dismiss_parser.add_argument("item_ref", help="item id/path")
+    pack_improvement_dismiss_parser.add_argument("--resolution", default=None, help="기각 메모")
+    pack_improvement_dismiss_parser.add_argument("--json", action="store_true", dest="json_output", help="JSON 출력")
+    pack_derivative_plan_parser = pack_subparsers.add_parser(
+        "derivative-plan",
+        help="accepted improvements를 다음 pack version 계획으로 묶기",
+        parents=[common_parser],
+    )
+    pack_derivative_plan_parser.add_argument("pack_ref", nargs="?", default=None, help="pack id/ref")
+    pack_derivative_plan_parser.add_argument("--save", action="store_true", help="derivative plan 저장")
+    pack_derivative_plan_parser.add_argument("--json", action="store_true", dest="json_output", help="JSON 출력")
+    pack_derivative_show_parser = pack_subparsers.add_parser(
+        "derivative-show",
+        help="pack derivative plan 상세 보기",
+        parents=[common_parser],
+    )
+    pack_derivative_show_parser.add_argument("plan_ref", help="plan id/path/latest")
+    pack_derivative_show_parser.add_argument("--json", action="store_true", dest="json_output", help="JSON 출력")
+    pack_derivative_create_parser = pack_subparsers.add_parser(
+        "derivative-create",
+        help="derivative plan에서 vNext pack draft 생성",
+        parents=[common_parser],
+    )
+    pack_derivative_create_parser.add_argument("plan_ref", help="plan id/path/latest")
+    pack_derivative_create_parser.add_argument("--as", dest="target_pack_id", required=True, help="새 pack id")
+    pack_derivative_create_parser.add_argument("--version", default=None, help="새 draft version")
+    pack_derivative_create_parser.add_argument("--json", action="store_true", dest="json_output", help="JSON 출력")
+    pack_derivative_workbench_parser = pack_subparsers.add_parser(
+        "derivative-workbench",
+        help="derivative plan을 vNext workbench로 변환",
+        parents=[common_parser],
+    )
+    pack_derivative_workbench_parser.add_argument("plan_ref", help="plan id/path/latest")
+    pack_derivative_workbench_parser.add_argument("--json", action="store_true", dest="json_output", help="JSON 출력")
+    pack_workorders_parser = pack_subparsers.add_parser(
+        "workorders",
+        help="pack vNext work order 목록 보기",
+        parents=[common_parser],
+    )
+    pack_workorders_parser.add_argument("pack_ref", nargs="?", default=None, help="pack id/ref")
+    pack_workorders_parser.add_argument("--status", choices=["open", "done", "skipped", "blocked"], default=None, help="상태 필터")
+    pack_workorders_parser.add_argument("--json", action="store_true", dest="json_output", help="JSON 출력")
+    pack_workorder_show_parser = pack_subparsers.add_parser(
+        "workorder-show",
+        help="pack vNext work order 상세 보기",
+        parents=[common_parser],
+    )
+    pack_workorder_show_parser.add_argument("workorder_ref", help="workorder id/path/latest")
+    pack_workorder_show_parser.add_argument("--json", action="store_true", dest="json_output", help="JSON 출력")
+    pack_workorder_done_parser = pack_subparsers.add_parser(
+        "workorder-done",
+        help="pack vNext work order를 완료로 기록",
+        parents=[common_parser],
+    )
+    pack_workorder_done_parser.add_argument("workorder_ref", help="workorder id/path/latest")
+    pack_workorder_done_parser.add_argument("--evidence", action="append", default=[], help="완료 근거 artifact ref")
+    pack_workorder_done_parser.add_argument("--note", default=None, help="완료 메모")
+    pack_workorder_done_parser.add_argument("--json", action="store_true", dest="json_output", help="JSON 출력")
+    pack_workorder_skip_parser = pack_subparsers.add_parser(
+        "workorder-skip",
+        help="pack vNext work order를 스킵으로 기록",
+        parents=[common_parser],
+    )
+    pack_workorder_skip_parser.add_argument("workorder_ref", help="workorder id/path/latest")
+    pack_workorder_skip_parser.add_argument("--note", required=True, help="스킵 메모")
+    pack_workorder_skip_parser.add_argument("--json", action="store_true", dest="json_output", help="JSON 출력")
+    pack_rc_parser = pack_subparsers.add_parser(
+        "rc",
+        help="vNext draft/workspace release candidate 생성",
+        parents=[common_parser],
+    )
+    pack_rc_parser.add_argument("draft_or_workspace", help="draft path 또는 derivative workspace path/id")
+    pack_rc_parser.add_argument("--allow-unresolved", action="store_true", help="open required workorder를 candidate warning으로 허용")
+    pack_rc_parser.add_argument("--json", action="store_true", dest="json_output", help="JSON 출력")
+    pack_rc_show_parser = pack_subparsers.add_parser(
+        "rc-show",
+        help="pack release candidate 상세 보기",
+        parents=[common_parser],
+    )
+    pack_rc_show_parser.add_argument("rc_ref", help="rc id/path/latest")
+    pack_rc_show_parser.add_argument("--json", action="store_true", dest="json_output", help="JSON 출력")
+    pack_release_local_parser = pack_subparsers.add_parser(
+        "release-local",
+        help="release candidate를 local catalog에 preview/release",
+        parents=[common_parser],
+    )
+    pack_release_local_parser.add_argument("rc_ref", help="rc id/path/latest")
+    pack_release_local_parser.add_argument("--confirm", action="store_true", help="실제 local catalog update 실행")
+    pack_release_local_parser.add_argument("--no-supersede", action="store_true", help="source pack supersede record 생략")
+    pack_release_local_parser.add_argument("--json", action="store_true", dest="json_output", help="JSON 출력")
+    pack_rollout_parser = pack_subparsers.add_parser(
+        "rollout",
+        help="새 local release의 안전 rollout plan 생성",
+        parents=[common_parser],
+    )
+    pack_rollout_parser.add_argument("new_pack_ref", help="새 pack id/ref")
+    pack_rollout_parser.add_argument("--save", action="store_true", help="rollout plan 저장")
+    pack_rollout_parser.add_argument("--json", action="store_true", dest="json_output", help="JSON 출력")
+    pack_rollout_show_parser = pack_subparsers.add_parser(
+        "rollout-show",
+        help="pack rollout plan 상세 보기",
+        parents=[common_parser],
+    )
+    pack_rollout_show_parser.add_argument("rollout_ref", help="rollout id/path/latest")
+    pack_rollout_show_parser.add_argument("--json", action="store_true", dest="json_output", help="JSON 출력")
+    pack_rollout_apply_parser = pack_subparsers.add_parser(
+        "rollout-apply",
+        help="rollout plan의 safe Cambrian-state step을 명시 적용",
+        parents=[common_parser],
+    )
+    pack_rollout_apply_parser.add_argument("rollout_ref", help="rollout id/path/latest")
+    pack_rollout_apply_parser.add_argument("--confirm", action="store_true", help="실제 install/activate 상태 변경 실행")
+    pack_rollout_apply_parser.add_argument("--install", action="store_true", help="새 pack install 실행")
+    pack_rollout_apply_parser.add_argument("--activate", action="store_true", help="새 pack active 전환 실행")
+    pack_rollout_apply_parser.add_argument("--mark-old-backup", action="store_true", help="이전 pack을 rollback 후보로 기록")
+    pack_rollout_apply_parser.add_argument("--json", action="store_true", dest="json_output", help="JSON 출력")
+    pack_deactivate_parser = pack_subparsers.add_parser(
+        "deactivate",
+        help="active pack context 해제",
+        parents=[common_parser],
+    )
+    pack_deactivate_parser.add_argument("--json", action="store_true", dest="json_output", help="JSON 출력")
+    pack_usage_parser = pack_subparsers.add_parser(
+        "usage",
+        help="pack 사용 이벤트와 outcome 요약 보기",
+        parents=[common_parser],
+    )
+    pack_usage_parser.add_argument("pack_ref", nargs="?", default=None, help="pack id/ref")
+    pack_usage_parser.add_argument("--save", action="store_true", help="usage summary 저장")
+    pack_usage_parser.add_argument("--json", action="store_true", dest="json_output", help="JSON 출력")
+    pack_events_parser = pack_subparsers.add_parser(
+        "events",
+        help="pack raw usage event 목록 보기",
+        parents=[common_parser],
+    )
+    pack_events_parser.add_argument("pack_ref", nargs="?", default=None, help="pack id/ref")
+    pack_events_parser.add_argument("--limit", type=int, default=20, help="표시할 event 수")
+    pack_events_parser.add_argument(
+        "--kind",
+        choices=["activated", "surfaced", "used", "benchmark_used", "deactivated"],
+        default=None,
+        help="event kind 필터",
+    )
+    pack_events_parser.add_argument("--json", action="store_true", dest="json_output", help="JSON 출력")
+    pack_outcomes_parser = pack_subparsers.add_parser(
+        "outcomes",
+        help="pack outcome attribution 요약 보기",
+        parents=[common_parser],
+    )
+    pack_outcomes_parser.add_argument("pack_ref", nargs="?", default=None, help="pack id/ref")
+    pack_outcomes_parser.add_argument("--save", action="store_true", help="usage outcome summary 저장")
+    pack_outcomes_parser.add_argument("--json", action="store_true", dest="json_output", help="JSON 출력")
+    pack_proof_parser = pack_subparsers.add_parser(
+        "proof",
+        help="pack usage/outcome 기반 local proof card 생성",
+        parents=[common_parser],
+    )
+    pack_proof_parser.add_argument("pack_ref", nargs="?", default=None, help="pack id/ref")
+    pack_proof_parser.add_argument("--save", action="store_true", help="proof card YAML/Markdown 저장")
+    pack_proof_parser.add_argument("--format", choices=["yaml", "md", "both"], default="both", help="저장 형식")
+    pack_proof_parser.add_argument("--json", action="store_true", dest="json_output", help="JSON 출력")
+    pack_proof_show_parser = pack_subparsers.add_parser(
+        "proof-show",
+        help="저장된 pack proof card 다시 보기",
+        parents=[common_parser],
+    )
+    pack_proof_show_parser.add_argument("proof_ref", help="proof id 또는 path")
+    pack_proof_show_parser.add_argument("--json", action="store_true", dest="json_output", help="JSON 출력")
+    pack_proof_export_parser = pack_subparsers.add_parser(
+        "proof-export",
+        help="local pack proof card를 privacy-safe public snapshot으로 export",
+        parents=[common_parser],
+    )
+    pack_proof_export_parser.add_argument("pack_ref", nargs="?", default=None, help="pack id/ref")
+    pack_proof_export_parser.add_argument("--proof", default=None, help="source proof card path")
+    pack_proof_export_parser.add_argument("--out", default=None, help="public-safe copy output path")
+    pack_proof_export_parser.add_argument("--json", action="store_true", dest="json_output", help="JSON 출력")
+    pack_proof_export_show_parser = pack_subparsers.add_parser(
+        "proof-export-show",
+        help="저장된 privacy-safe pack proof export 다시 보기",
+        parents=[common_parser],
+    )
+    pack_proof_export_show_parser.add_argument("export_ref", help="proof export id 또는 path")
+    pack_proof_export_show_parser.add_argument("--json", action="store_true", dest="json_output", help="JSON 출력")
+    pack_verify_parser = pack_subparsers.add_parser(
+        "verify",
+        help="catalog pack 또는 local manifest digest 검증",
+        parents=[common_parser],
+    )
+    pack_verify_parser.add_argument("pack_ref", help="pack id/name 또는 manifest path")
+    pack_verify_parser.add_argument("--save", action="store_true", help="verification report 저장")
+    pack_verify_parser.add_argument("--json", action="store_true", dest="json_output", help="JSON 출력")
+    pack_draft_parser = pack_subparsers.add_parser(
+        "draft",
+        help="로컬 worker/team/template/lane refs로 pack draft 생성",
+        parents=[common_parser],
+    )
+    pack_draft_parser.add_argument("pack_id", help="새 pack id")
+    pack_draft_parser.add_argument("--kind", choices=["worker", "team", "template", "lane"], required=True)
+    pack_draft_parser.add_argument("--name", dest="pack_name", default=None, help="표시 이름")
+    pack_draft_parser.add_argument("--version", default=None, help="pack version")
+    pack_draft_parser.add_argument("--description", default=None, help="pack 설명")
+    pack_draft_parser.add_argument("--tag", action="append", default=[], dest="tags", help="pack tag")
+    pack_draft_parser.add_argument("--worker", action="append", default=[], dest="workers", help="worker/agent ref")
+    pack_draft_parser.add_argument("--team", action="append", default=[], dest="teams", help="team ref")
+    pack_draft_parser.add_argument("--template", action="append", default=[], dest="templates", help="template ref")
+    pack_draft_parser.add_argument("--benchmark", action="append", default=[], dest="benchmarks", help="benchmark workset ref")
+    pack_draft_parser.add_argument("--lane", default=None, dest="lane_ref", help="lane id")
+    pack_draft_parser.add_argument("--json", action="store_true", dest="json_output", help="JSON 출력")
+    pack_validate_parser = pack_subparsers.add_parser(
+        "validate",
+        help="pack draft 또는 manifest 검증",
+        parents=[common_parser],
+    )
+    pack_validate_parser.add_argument("target", help="draft path/pack id 또는 manifest path")
+    pack_validate_parser.add_argument("--json", action="store_true", dest="json_output", help="JSON 출력")
+    pack_build_parser = pack_subparsers.add_parser(
+        "build",
+        help="pack draft를 installable manifest로 빌드",
+        parents=[common_parser],
+    )
+    pack_build_parser.add_argument("target", help="draft path 또는 pack id")
+    pack_build_parser.add_argument("--out", default=None, help="출력 manifest path")
+    pack_build_parser.add_argument("--json", action="store_true", dest="json_output", help="JSON 출력")
+    pack_publish_parser = pack_subparsers.add_parser(
+        "publish-local",
+        help="installable manifest를 local catalog에 preview/publish",
+        parents=[common_parser],
+    )
+    pack_publish_parser.add_argument("manifest_path", help="publish할 .cambrian-pack.yaml path")
+    pack_publish_parser.add_argument("--confirm", action="store_true", help="실제 catalog update 실행")
+    pack_publish_parser.add_argument("--require-proof", action="store_true", help="proof evidence 없으면 publish 차단")
+    pack_publish_parser.add_argument("--release-check", default=None, help="기존 release report path 재사용")
+    pack_publish_parser.add_argument("--json", action="store_true", dest="json_output", help="JSON 출력")
+    pack_release_parser = pack_subparsers.add_parser(
+        "release-check",
+        help="pack publish 전 proof/maturity release gate 실행",
+        parents=[common_parser],
+    )
+    pack_release_parser.add_argument("target", help="manifest path 또는 local catalog pack id")
+    pack_release_parser.add_argument("--require-proof", action="store_true", help="proof evidence 없으면 blocked")
+    pack_release_parser.add_argument("--save", action="store_true", help="release report 저장")
+    pack_release_parser.add_argument("--json", action="store_true", dest="json_output", help="JSON 출력")
+    pack_web_sync_parser = pack_subparsers.add_parser(
+        "web-sync",
+        help="local catalog를 static web hiring desk asset으로 동기화",
+        parents=[common_parser],
+    )
+    pack_web_sync_parser.add_argument("--catalog", default=None, help="동기화할 packs/catalog.yaml path")
+    pack_web_sync_parser.add_argument("--out", default=None, help="web output directory")
+    pack_web_sync_parser.add_argument("--json", action="store_true", dest="json_output", help="JSON 출력")
+
+    registry_parser = subparsers.add_parser(
+        "registry",
+        help="static pack registry source 등록과 sync",
+        parents=[common_parser],
+    )
+    registry_subparsers = registry_parser.add_subparsers(
+        dest="registry_command",
+        help="registry 하위 명령",
+    )
+    registry_add_parser = registry_subparsers.add_parser(
+        "add",
+        help="static registry catalog URL/path 등록",
+        parents=[common_parser],
+    )
+    registry_add_parser.add_argument("name", help="registry 이름")
+    registry_add_parser.add_argument("source_ref", help="catalog JSON/YAML URL 또는 path")
+    registry_add_parser.add_argument(
+        "--trust-level",
+        choices=["trusted", "local", "remote_static", "unknown", "untrusted"],
+        default=None,
+        help="registry source trust level",
+    )
+    registry_add_parser.add_argument("--json", action="store_true", dest="json_output", help="JSON 출력")
+    registry_list_parser = registry_subparsers.add_parser(
+        "list",
+        help="등록된 registry source 목록",
+        parents=[common_parser],
+    )
+    registry_list_parser.add_argument("--json", action="store_true", dest="json_output", help="JSON 출력")
+    registry_sync_parser = registry_subparsers.add_parser(
+        "sync",
+        help="registry catalog를 local cache로 가져오기",
+        parents=[common_parser],
+    )
+    registry_sync_parser.add_argument("name", help="registry 이름")
+    registry_sync_parser.add_argument("--json", action="store_true", dest="json_output", help="JSON 출력")
+
+    registry_export_parser = registry_subparsers.add_parser(
+        "export",
+        help="local catalog를 static registry bundle로 export",
+        parents=[common_parser],
+    )
+    registry_export_parser.add_argument("--out", required=True, help="export output directory")
+    registry_export_parser.add_argument("--registry-name", default=None, help="bundle registry name")
+    registry_export_parser.add_argument("--namespace", default=None, help="exported pack namespace")
+    registry_export_parser.add_argument("--include-unproven", action="store_true", help="draft/unproven pack도 포함")
+    registry_export_parser.add_argument("--json", action="store_true", dest="json_output", help="JSON 출력")
+    registry_export_check_parser = registry_subparsers.add_parser(
+        "export-check",
+        help="static registry bundle 무결성과 privacy-safe 여부 검증",
+        parents=[common_parser],
+    )
+    registry_export_check_parser.add_argument("bundle_dir", help="exported registry bundle directory")
+    registry_export_check_parser.add_argument("--json", action="store_true", dest="json_output", help="JSON 출력")
+
     metrics_parser = subparsers.add_parser(
         "metrics",
         help="주간 운영 지표 대시보드",
@@ -1338,6 +1986,162 @@ def main() -> None:
     alpha_check_parser.add_argument(
         "--json", action="store_true", dest="json_output", help="JSON 출력",
     )
+
+    bridge_parser = subparsers.add_parser(
+        "bridge",
+        help="AI 비종속 prompt packet/reply ingest 브리지",
+        parents=[common_parser],
+    )
+    bridge_subparsers = bridge_parser.add_subparsers(
+        dest="bridge_command",
+        help="bridge 하위 명령",
+    )
+    bridge_prepare_parser = bridge_subparsers.add_parser(
+        "prepare",
+        help="AI에 붙여넣을 Cambrian 작업 패킷 생성",
+        parents=[common_parser],
+    )
+    bridge_prepare_parser.add_argument("request", help="작업 요청")
+    bridge_prepare_parser.add_argument("--session", default=None, help="연결할 session id 또는 path")
+    bridge_prepare_parser.add_argument("--format", choices=["yaml", "md"], default="yaml", help="출력 형식")
+    bridge_prepare_parser.add_argument("--json", action="store_true", dest="json_output", help="JSON output")
+    bridge_paste_parser = bridge_subparsers.add_parser(
+        "paste",
+        help="stdin으로 AI reply를 붙여넣고 safe fast path로 라우팅",
+        parents=[common_parser],
+        description="AI가 반환한 YAML/JSON reply를 파일 저장 없이 붙여넣어 Cambrian bridge fast path로 처리합니다.",
+        epilog=(
+            "Fast path:\n"
+            "  cambrian bridge prepare \"로그인 에러 수정해\"\n"
+            "  cambrian bridge paste --packet packet-...\n\n"
+            "Input 종료:\n"
+            "  Windows/PowerShell: Ctrl+Z then Enter\n"
+            "  Unix/macOS: Ctrl+D"
+        ),
+    )
+    bridge_paste_parser.add_argument("--packet", default=None, help="연결할 packet id 또는 path")
+    bridge_paste_parser.add_argument("--session", default=None, help="연결할 session id 또는 path")
+    bridge_paste_parser.add_argument("--json", action="store_true", dest="json_output", help="JSON output")
+    bridge_show_parser = bridge_subparsers.add_parser(
+        "show",
+        help="bridge packet 보기",
+        parents=[common_parser],
+    )
+    bridge_show_parser.add_argument("packet_ref", help="packet id 또는 path")
+    bridge_show_parser.add_argument("--format", choices=["text", "md"], default="text", help="출력 형식")
+    bridge_show_parser.add_argument("--json", action="store_true", dest="json_output", help="JSON output")
+    bridge_ingest_parser = bridge_subparsers.add_parser(
+        "ingest",
+        help="AI structured reply를 Cambrian reply artifact로 저장",
+        parents=[common_parser],
+    )
+    bridge_ingest_parser.add_argument("file", help="YAML/JSON/markdown reply file")
+    bridge_ingest_parser.add_argument("--packet", default=None, help="연결할 packet id 또는 path")
+    bridge_ingest_parser.add_argument("--session", default=None, help="연결할 session id 또는 path")
+    bridge_ingest_parser.add_argument("--json", action="store_true", dest="json_output", help="JSON output")
+    bridge_ingest_parser.add_argument("--auto-route", action="store_true", dest="auto_route", help="ingest 후 response_kind별 fast path를 실행")
+    bridge_reply_show_parser = bridge_subparsers.add_parser(
+        "reply-show",
+        help="ingested bridge reply 보기",
+        parents=[common_parser],
+    )
+    bridge_reply_show_parser.add_argument("reply_ref", help="reply id 또는 path")
+    bridge_reply_show_parser.add_argument("--json", action="store_true", dest="json_output", help="JSON output")
+    bridge_review_parser = bridge_subparsers.add_parser(
+        "review",
+        help="ingested bridge reply를 검토하고 safe handoff option을 봅니다",
+        parents=[common_parser],
+    )
+    bridge_review_parser.add_argument("reply_ref", help="reply id 또는 path")
+    bridge_review_parser.add_argument("--save", action="store_true", help="review artifact 저장")
+    bridge_review_parser.add_argument("--json", action="store_true", dest="json_output", help="JSON output")
+    bridge_handoff_parser = bridge_subparsers.add_parser(
+        "handoff",
+        help="bridge reply/materialization을 안전한 다음 artifact로 넘깁니다",
+        parents=[common_parser],
+    )
+    bridge_handoff_parser.add_argument("handoff_ref", help="reply/materialization id 또는 path")
+    bridge_handoff_parser.add_argument(
+        "--as",
+        dest="handoff_kind",
+        choices=["patch_intent", "context_hint", "checklist"],
+        required=True,
+        help="handoff artifact kind",
+    )
+    bridge_handoff_parser.add_argument("--session", default=None, help="연결할 do session id 또는 path")
+    bridge_handoff_parser.add_argument("--json", action="store_true", dest="json_output", help="JSON output")
+    bridge_resume_parser = bridge_subparsers.add_parser(
+        "resume",
+        help="bridge reply에서 이어갈 do session과 다음 명령을 보여줍니다",
+        parents=[common_parser],
+    )
+    bridge_resume_parser.add_argument("reply_ref", help="reply id 또는 path")
+    bridge_resume_parser.add_argument("--json", action="store_true", dest="json_output", help="JSON output")
+    bridge_materialize_parser = bridge_subparsers.add_parser(
+        "materialize",
+        help="analysis/review/plan bridge reply를 읽기용 artifact로 변환",
+        parents=[common_parser],
+    )
+    bridge_materialize_parser.add_argument("reply_ref", help="reply id 또는 path")
+    bridge_materialize_parser.add_argument("--as", dest="materialization_kind", choices=["analysis_brief", "review_note", "plan_record"], default=None)
+    bridge_materialize_parser.add_argument("--json", action="store_true", dest="json_output", help="JSON output")
+    bridge_materialize_show_parser = bridge_subparsers.add_parser(
+        "materialize-show",
+        help="bridge materialization 상세 보기",
+        parents=[common_parser],
+    )
+    bridge_materialize_show_parser.add_argument("materialization_ref", help="materialization id 또는 path")
+    bridge_materialize_show_parser.add_argument("--json", action="store_true", dest="json_output", help="JSON output")
+    bridge_materializations_parser = bridge_subparsers.add_parser(
+        "materializations",
+        help="bridge materialization 목록",
+        parents=[common_parser],
+    )
+    bridge_materializations_parser.add_argument("--kind", choices=["analysis_brief", "review_note", "plan_record"], default=None)
+    bridge_materializations_parser.add_argument("--limit", type=int, default=10)
+    bridge_materializations_parser.add_argument("--json", action="store_true", dest="json_output", help="JSON output")
+    bridge_context_hints_parser = bridge_subparsers.add_parser(
+        "context-hints",
+        help="bridge analysis context hint 목록",
+        parents=[common_parser],
+    )
+    bridge_context_hints_parser.add_argument("--limit", type=int, default=10)
+    bridge_context_hints_parser.add_argument("--json", action="store_true", dest="json_output", help="JSON output")
+    bridge_context_hint_show_parser = bridge_subparsers.add_parser(
+        "context-hint-show",
+        help="bridge context hint 상세 보기",
+        parents=[common_parser],
+    )
+    bridge_context_hint_show_parser.add_argument("hint_ref", help="context hint id 또는 path")
+    bridge_context_hint_show_parser.add_argument("--json", action="store_true", dest="json_output", help="JSON output")
+    bridge_checklists_parser = bridge_subparsers.add_parser(
+        "checklists",
+        help="bridge plan checklist 목록",
+        parents=[common_parser],
+    )
+    bridge_checklists_parser.add_argument("--status", choices=["open", "in_progress", "blocked", "completed"], default=None)
+    bridge_checklists_parser.add_argument("--limit", type=int, default=10)
+    bridge_checklists_parser.add_argument("--json", action="store_true", dest="json_output", help="JSON output")
+    bridge_checklist_show_parser = bridge_subparsers.add_parser(
+        "checklist-show",
+        help="bridge checklist 상세 보기",
+        parents=[common_parser],
+    )
+    bridge_checklist_show_parser.add_argument("checklist_ref", help="checklist id 또는 path")
+    bridge_checklist_show_parser.add_argument("--json", action="store_true", dest="json_output", help="JSON output")
+    bridge_checklist_step_parser = bridge_subparsers.add_parser(
+        "checklist-step",
+        help="bridge checklist step 상태 변경",
+        parents=[common_parser],
+    )
+    bridge_checklist_step_parser.add_argument("checklist_ref", help="checklist id 또는 path")
+    bridge_checklist_step_parser.add_argument("step_id", help="step id")
+    bridge_checklist_step_parser.add_argument("--done", action="store_true")
+    bridge_checklist_step_parser.add_argument("--blocked", action="store_true")
+    bridge_checklist_step_parser.add_argument("--skip", action="store_true")
+    bridge_checklist_step_parser.add_argument("--todo", action="store_true")
+    bridge_checklist_step_parser.add_argument("--note", default=None)
+    bridge_checklist_step_parser.add_argument("--json", action="store_true", dest="json_output", help="JSON output")
 
     notes_parser = subparsers.add_parser(
         "notes",
@@ -2939,12 +3743,22 @@ def main() -> None:
             _handle_init(args)
         elif args.command == "demo":
             _handle_demo(args)
+        elif args.command == "pack":
+            _handle_pack(args)
+        elif args.command == "registry":
+            _handle_registry(args)
+        elif args.command == "install":
+            _handle_install(args)
+        elif args.command == "uninstall":
+            _handle_uninstall(args)
         elif args.command == "metrics":
             _handle_metrics(args)
         elif args.command == "status":
             _handle_status(args)
         elif args.command == "summary":
             _handle_summary(args)
+        elif args.command == "bridge":
+            _handle_bridge(args)
         elif args.command == "notes":
             _handle_notes(args)
         elif args.command == "doctor":
@@ -3521,6 +4335,24 @@ def _handle_project_benchmark(args: argparse.Namespace) -> None:
         if getattr(args, "record_result", True):
             replay_ref = _relative_cli(saved, root) if saved is not None else None
             result_saved = save_replay_result(root, report, replay_ref)
+        try:
+            from engine.project_pack_usage import safe_record_pack_usage_event
+
+            safe_record_pack_usage_event(
+                root,
+                event_kind="benchmark_used",
+                surface_kind="benchmark_replay",
+                request=report.request,
+                request_class=report.request_class,
+                linked_session_id=report.linked_session_id,
+                linked_session_ref=report.linked_session_ref,
+                linked_bridge_reply_ref=report.linked_bridge_reply_ref,
+                linked_benchmark_replay_ref=_relative_cli(saved, root) if saved is not None else None,
+                linked_benchmark_result_ref=_relative_cli(result_saved, root) if result_saved is not None else None,
+                summary="active pack used in benchmark replay",
+            )
+        except Exception as exc:
+            logger.warning("pack usage benchmark replay event failed: %s", exc)
         if getattr(args, "json_output", False):
             payload = report.to_dict()
             payload["saved_path"] = str(saved.resolve()) if saved else None
@@ -3563,6 +4395,20 @@ def _handle_project_benchmark(args: argparse.Namespace) -> None:
         saved = None
         if getattr(args, "save", True):
             saved = WorksetReplayStore().save(report, default_workset_replay_path(root, report))
+        try:
+            from engine.project_pack_usage import safe_record_pack_usage_event
+
+            safe_record_pack_usage_event(
+                root,
+                event_kind="benchmark_used",
+                surface_kind="benchmark_replay",
+                request=report.workset_name,
+                request_class="benchmark_workset",
+                linked_benchmark_replay_ref=_relative_cli(saved, root) if saved is not None else None,
+                summary="active pack used in benchmark workset replay",
+            )
+        except Exception as exc:
+            logger.warning("pack usage benchmark workset replay event failed: %s", exc)
         if getattr(args, "json_output", False):
             payload = report.to_dict()
             if saved is not None:
@@ -5798,6 +6644,2844 @@ def _handle_init(args: argparse.Namespace) -> None:
     print(render_init_summary(result))
 
 
+def _handle_bridge(args: argparse.Namespace) -> None:
+    """AI bridge 명령을 처리한다."""
+    from engine.project_bridge import (
+        ProjectBridgeBuilder,
+        ProjectBridgeReplyParser,
+        ProjectBridgeStore,
+        default_bridge_packet_path,
+        default_bridge_reply_path,
+        render_bridge_packet,
+        render_bridge_packet_markdown,
+        render_bridge_packet_prepared,
+        render_bridge_reply,
+        render_bridge_reply_ingested,
+        resolve_bridge_packet_path,
+        resolve_bridge_reply_path,
+    )
+    from engine.project_bridge_handoff import (
+        BridgeHandoffStore,
+        BridgeReplyHandoff,
+        BridgeReplyReviewStore,
+        BridgeReplyReviewer,
+        default_bridge_handoff_path,
+        default_bridge_review_path,
+        load_bridge_reply_activity,
+        render_bridge_handoff,
+        render_bridge_reply_review,
+    )
+    from engine.project_bridge_checklists import (
+        BridgeChecklistBuilder,
+        BridgeChecklistStore,
+        default_bridge_checklist_path,
+        default_bridge_checklists_dir,
+        load_bridge_checklist_activity,
+        render_bridge_checklist,
+        render_bridge_checklist_created,
+        render_bridge_checklist_step_updated,
+        render_bridge_checklists,
+        resolve_bridge_checklist_path,
+    )
+    from engine.project_bridge_context import (
+        BridgeContextHintBuilder,
+        BridgeContextHintStore,
+        default_bridge_context_hint_path,
+        default_bridge_context_hints_dir,
+        load_bridge_context_hint_activity,
+        render_bridge_context_hint,
+        render_bridge_context_hint_created,
+        render_bridge_context_hints,
+        resolve_bridge_context_hint_path,
+    )
+    from engine.project_bridge_materialize import (
+        BridgeMaterializationStore,
+        BridgeMaterializer,
+        default_bridge_materialized_dir,
+        default_bridge_materialized_path,
+        load_bridge_materialization_activity,
+        render_bridge_materialization_show,
+        render_bridge_materializations,
+        render_bridge_materialized,
+        resolve_bridge_materialization_path,
+    )
+    from engine.project_bridge_resume import (
+        BridgeSessionCoordinator,
+        render_bridge_resume_hint,
+        resolve_bridge_resume_target,
+    )
+    from engine.project_bridge_fastpath import (
+        BridgeFastPathCoordinator,
+        default_bridge_fastpath_path,
+        load_bridge_fastpath_activity,
+        render_bridge_fastpath,
+    )
+
+    root = Path.cwd().resolve()
+    command = getattr(args, "bridge_command", None)
+    store = ProjectBridgeStore()
+
+    if not command:
+        print("bridge 하위 명령이 필요합니다. 예: cambrian bridge prepare \"로그인 에러 수정\"", file=sys.stderr)
+        sys.exit(1)
+
+    if command == "prepare":
+        packet = ProjectBridgeBuilder().build_packet(
+            root,
+            str(getattr(args, "request", "")),
+            session_ref=getattr(args, "session", None),
+        )
+        saved_path = store.save_packet(packet, default_bridge_packet_path(root, packet))
+        saved_ref = str(saved_path.relative_to(root)).replace("\\", "/")
+        payload = {
+            "status": "prepared",
+            "packet": packet.to_dict(),
+            "saved_path": saved_ref,
+        }
+        try:
+            from engine.project_pack_usage import safe_record_pack_usage_event
+
+            safe_record_pack_usage_event(
+                root,
+                event_kind="used",
+                surface_kind="bridge_prepare",
+                request=packet.request,
+                request_class=packet.request_intent,
+                linked_bridge_packet_ref=saved_ref,
+                summary="active pack used in bridge prepare",
+            )
+        except Exception as exc:
+            logger.warning("pack usage bridge prepare event failed: %s", exc)
+        if getattr(args, "format", "yaml") == "md":
+            payload["markdown"] = render_bridge_packet_markdown(packet)
+        if getattr(args, "json_output", False):
+            print(json.dumps(payload, indent=2, ensure_ascii=False))
+            return
+        if getattr(args, "format", "yaml") == "md":
+            print(render_bridge_packet_markdown(packet))
+            print()
+            print("Saved:")
+            print(f"  {saved_ref}")
+            return
+        print(render_bridge_packet_prepared(packet, saved_ref))
+        try:
+            from engine.project_pack_activation import current_active_pack, render_active_pack_bridge_hint
+
+            hint = render_active_pack_bridge_hint(current_active_pack(root))
+            if hint:
+                print(hint)
+        except Exception as exc:
+            logger.warning("active pack bridge hint failed: %s", exc)
+        return
+
+    if command == "show":
+        try:
+            packet_path = resolve_bridge_packet_path(root, str(getattr(args, "packet_ref")))
+            packet = store.load_packet(packet_path)
+        except FileNotFoundError as exc:
+            print(f"Bridge packet not found: {exc}", file=sys.stderr)
+            sys.exit(1)
+        if getattr(args, "json_output", False):
+            print(json.dumps(packet.to_dict(), indent=2, ensure_ascii=False))
+            return
+        if getattr(args, "format", "text") == "md":
+            print(render_bridge_packet_markdown(packet))
+            return
+        print(render_bridge_packet(packet))
+        return
+
+    if command == "paste":
+        text = sys.stdin.read()
+        if not text.strip():
+            print("Bridge paste blocked: stdin reply text is empty", file=sys.stderr)
+            sys.exit(1)
+        record = BridgeFastPathCoordinator().run_text(
+            root,
+            text,
+            packet_ref=getattr(args, "packet", None),
+            session_ref=getattr(args, "session", None),
+        )
+        saved_path = default_bridge_fastpath_path(root, record)
+        saved_ref = str(saved_path.relative_to(root)).replace("\\", "/")
+        payload = record.to_dict()
+        payload["saved_path"] = saved_ref
+        if getattr(args, "json_output", False):
+            print(json.dumps(payload, indent=2, ensure_ascii=False))
+        else:
+            print(render_bridge_fastpath(record, saved_ref))
+        if record.status == "blocked" or record.errors:
+            sys.exit(1)
+        return
+
+    if command == "ingest":
+        source_path = Path(str(getattr(args, "file"))).expanduser()
+        if not source_path.is_absolute():
+            source_path = root / source_path
+        if not source_path.exists():
+            print(f"Bridge reply file not found: {source_path}", file=sys.stderr)
+            sys.exit(1)
+        if getattr(args, "auto_route", False):
+            record = BridgeFastPathCoordinator().run_file(
+                root,
+                source_path,
+                packet_ref=getattr(args, "packet", None),
+                session_ref=getattr(args, "session", None),
+            )
+            saved_path = default_bridge_fastpath_path(root, record)
+            saved_ref = str(saved_path.relative_to(root)).replace("\\", "/")
+            payload = record.to_dict()
+            payload["saved_path"] = saved_ref
+            if getattr(args, "json_output", False):
+                print(json.dumps(payload, indent=2, ensure_ascii=False))
+            else:
+                print(render_bridge_fastpath(record, saved_ref))
+            if record.status == "blocked" or record.errors:
+                sys.exit(1)
+            return
+        try:
+            reply = ProjectBridgeReplyParser().parse_reply(source_path.read_text(encoding="utf-8"))
+        except ValueError as exc:
+            print(f"Bridge reply blocked: {exc}", file=sys.stderr)
+            sys.exit(1)
+        packet_ref = getattr(args, "packet", None)
+        if packet_ref:
+            try:
+                packet_path = resolve_bridge_packet_path(root, str(packet_ref))
+                packet = store.load_packet(packet_path)
+            except FileNotFoundError as exc:
+                print(f"Bridge packet not found: {exc}", file=sys.stderr)
+                sys.exit(1)
+            reply.packet_id = packet.packet_id
+            reply.project_name = packet.project_name
+            reply.request = packet.request
+            reply.linked_request_ref = str(packet_path.relative_to(root)).replace("\\", "/")
+        if getattr(args, "session", None):
+            reply.linked_session_id = str(getattr(args, "session"))
+        try:
+            reply.source_reply_path = str(source_path.resolve().relative_to(root)).replace("\\", "/")
+        except ValueError:
+            reply.source_reply_path = str(source_path.resolve())
+        if reply.errors:
+            if getattr(args, "json_output", False):
+                print(
+                    json.dumps(
+                        {"status": "blocked", "errors": reply.errors, "reply": reply.to_dict()},
+                        indent=2,
+                        ensure_ascii=False,
+                    )
+                )
+            else:
+                print("Bridge reply blocked:", file=sys.stderr)
+                for error in reply.errors:
+                    print(f"  - {error}", file=sys.stderr)
+            sys.exit(1)
+        saved_path = store.save_reply(reply, default_bridge_reply_path(root, reply))
+        saved_ref = str(saved_path.relative_to(root)).replace("\\", "/")
+        payload = {
+            "status": "ingested",
+            "reply": reply.to_dict(),
+            "saved_path": saved_ref,
+        }
+        if getattr(args, "json_output", False):
+            print(json.dumps(payload, indent=2, ensure_ascii=False))
+            return
+        print(render_bridge_reply_ingested(reply, saved_ref))
+        return
+
+    if command == "reply-show":
+        try:
+            reply_path = resolve_bridge_reply_path(root, str(getattr(args, "reply_ref")))
+            reply = store.load_reply(reply_path)
+        except FileNotFoundError as exc:
+            print(f"Bridge reply not found: {exc}", file=sys.stderr)
+            sys.exit(1)
+        activity = load_bridge_reply_activity(root, reply.reply_id)
+        activity.update(load_bridge_materialization_activity(root, reply.reply_id))
+        activity.update(load_bridge_context_hint_activity(root, reply_id=reply.reply_id))
+        activity.update(load_bridge_checklist_activity(root, reply_id=reply.reply_id))
+        activity.update(load_bridge_fastpath_activity(root, reply_id=reply.reply_id))
+        if getattr(args, "json_output", False):
+            payload = reply.to_dict()
+            payload["activity"] = activity
+            print(json.dumps(payload, indent=2, ensure_ascii=False))
+            return
+        print(render_bridge_reply(reply, activity=activity))
+        return
+
+    if command == "review":
+        try:
+            reply_path = resolve_bridge_reply_path(root, str(getattr(args, "reply_ref")))
+        except FileNotFoundError as exc:
+            print(f"Bridge reply not found: {exc}", file=sys.stderr)
+            sys.exit(1)
+        try:
+            review = BridgeReplyReviewer().review(root, reply_path)
+        except ValueError as exc:
+            print(f"Bridge reply review blocked: {exc}", file=sys.stderr)
+            sys.exit(1)
+        saved_ref = None
+        if getattr(args, "save", False):
+            saved_path = BridgeReplyReviewStore().save(review, default_bridge_review_path(root, review))
+            saved_ref = str(saved_path.relative_to(root)).replace("\\", "/")
+        payload = review.to_dict()
+        if saved_ref:
+            payload["saved_path"] = saved_ref
+        if getattr(args, "json_output", False):
+            print(json.dumps(payload, indent=2, ensure_ascii=False))
+            return
+        print(render_bridge_reply_review(review, saved_path=saved_ref))
+        return
+
+    if command == "resume":
+        try:
+            target_path = resolve_bridge_resume_target(root, str(getattr(args, "reply_ref")))
+        except FileNotFoundError as exc:
+            print(f"Bridge resume target not found: {exc}", file=sys.stderr)
+            sys.exit(1)
+        hint = BridgeSessionCoordinator().build_resume_hint(root, target_path)
+        if getattr(args, "json_output", False):
+            print(json.dumps(hint.to_dict(), indent=2, ensure_ascii=False))
+            return
+        print(render_bridge_resume_hint(hint))
+        return
+
+    if command == "materialize":
+        try:
+            reply_path = resolve_bridge_reply_path(root, str(getattr(args, "reply_ref")))
+        except FileNotFoundError as exc:
+            print(f"Bridge reply not found: {exc}", file=sys.stderr)
+            sys.exit(1)
+        record = BridgeMaterializer().materialize(
+            root,
+            reply_path,
+            as_kind=getattr(args, "materialization_kind", None),
+        )
+        if record.errors:
+            if getattr(args, "json_output", False):
+                print(json.dumps(record.to_dict(), indent=2, ensure_ascii=False))
+            else:
+                print(render_bridge_materialized(record), file=sys.stderr)
+            sys.exit(1)
+        saved_path = BridgeMaterializationStore().save_record(record, default_bridge_materialized_path(root, record))
+        saved_ref = str(saved_path.relative_to(root)).replace("\\", "/")
+        payload = record.to_dict()
+        payload["saved_path"] = saved_ref
+        if getattr(args, "json_output", False):
+            print(json.dumps(payload, indent=2, ensure_ascii=False))
+            return
+        print(render_bridge_materialized(record, saved_ref))
+        return
+
+    if command == "materialize-show":
+        try:
+            materialization_path = resolve_bridge_materialization_path(root, str(getattr(args, "materialization_ref")))
+            record = BridgeMaterializationStore().load_record(materialization_path)
+        except (FileNotFoundError, ValueError) as exc:
+            print(f"Bridge materialization not found: {exc}", file=sys.stderr)
+            sys.exit(1)
+        activity = load_bridge_context_hint_activity(root, materialization_id=record.materialization_id)
+        activity.update(load_bridge_checklist_activity(root, materialization_id=record.materialization_id))
+        if getattr(args, "json_output", False):
+            payload = record.to_dict()
+            payload["activity"] = activity
+            print(json.dumps(payload, indent=2, ensure_ascii=False))
+            return
+        print(render_bridge_materialization_show(record, activity=activity))
+        return
+
+    if command == "materializations":
+        records = BridgeMaterializationStore().list_records(default_bridge_materialized_dir(root))
+        kind_filter = getattr(args, "kind", None)
+        filtered = [record for record in records if kind_filter is None or record.materialization_kind == kind_filter]
+        limit = int(getattr(args, "limit", 10) or 10)
+        if getattr(args, "json_output", False):
+            print(json.dumps([record.to_dict() for record in filtered[:limit]], indent=2, ensure_ascii=False))
+            return
+        print(render_bridge_materializations(records, kind=kind_filter, limit=limit))
+        return
+
+    if command == "context-hints":
+        hints = BridgeContextHintStore().list_hints(default_bridge_context_hints_dir(root))
+        limit = int(getattr(args, "limit", 10) or 10)
+        if getattr(args, "json_output", False):
+            print(json.dumps([hint.to_dict() for hint in hints[:limit]], indent=2, ensure_ascii=False))
+            return
+        print(render_bridge_context_hints(hints, limit=limit))
+        return
+
+    if command == "context-hint-show":
+        try:
+            hint_path = resolve_bridge_context_hint_path(root, str(getattr(args, "hint_ref")))
+            hint = BridgeContextHintStore().load_hint(hint_path)
+        except (FileNotFoundError, ValueError) as exc:
+            print(f"Bridge context hint not found: {exc}", file=sys.stderr)
+            sys.exit(1)
+        if getattr(args, "json_output", False):
+            print(json.dumps(hint.to_dict(), indent=2, ensure_ascii=False))
+            return
+        print(render_bridge_context_hint(hint))
+        return
+
+    if command == "checklists":
+        checklists = BridgeChecklistStore().list(default_bridge_checklists_dir(root))
+        status_filter = getattr(args, "status", None)
+        filtered = [item for item in checklists if status_filter is None or item.overall_status == status_filter]
+        limit = int(getattr(args, "limit", 10) or 10)
+        if getattr(args, "json_output", False):
+            print(json.dumps([item.to_dict() for item in filtered[:limit]], indent=2, ensure_ascii=False))
+            return
+        print(render_bridge_checklists(checklists, status=status_filter, limit=limit))
+        return
+
+    if command == "checklist-show":
+        try:
+            checklist_path = resolve_bridge_checklist_path(root, str(getattr(args, "checklist_ref")))
+            checklist = BridgeChecklistStore().load(checklist_path)
+        except (FileNotFoundError, ValueError) as exc:
+            print(f"Bridge checklist not found: {exc}", file=sys.stderr)
+            sys.exit(1)
+        if getattr(args, "json_output", False):
+            print(json.dumps(checklist.to_dict(), indent=2, ensure_ascii=False))
+            return
+        print(render_bridge_checklist(checklist))
+        return
+
+    if command == "checklist-step":
+        flags = [
+            ("done", bool(getattr(args, "done", False))),
+            ("blocked", bool(getattr(args, "blocked", False))),
+            ("skipped", bool(getattr(args, "skip", False))),
+            ("todo", bool(getattr(args, "todo", False))),
+        ]
+        selected = [status for status, enabled in flags if enabled]
+        if len(selected) != 1:
+            print("Exactly one step status flag is required: --done/--blocked/--skip/--todo", file=sys.stderr)
+            sys.exit(1)
+        try:
+            checklist_path = resolve_bridge_checklist_path(root, str(getattr(args, "checklist_ref")))
+            BridgeChecklistStore().update_step(
+                checklist_path,
+                str(getattr(args, "step_id")),
+                selected[0],
+                note=getattr(args, "note", None),
+            )
+            checklist = BridgeChecklistStore().load(checklist_path)
+        except (FileNotFoundError, ValueError, KeyError) as exc:
+            print(f"Bridge checklist step update blocked: {exc}", file=sys.stderr)
+            sys.exit(1)
+        saved_ref = str(checklist_path.relative_to(root)).replace("\\", "/")
+        if getattr(args, "json_output", False):
+            payload = checklist.to_dict()
+            payload["saved_path"] = saved_ref
+            print(json.dumps(payload, indent=2, ensure_ascii=False))
+            return
+        print(render_bridge_checklist_step_updated(checklist, str(getattr(args, "step_id")), saved_ref))
+        return
+
+    if command == "handoff":
+        handoff_kind = str(getattr(args, "handoff_kind", "") or "")
+        target_ref = str(getattr(args, "handoff_ref"))
+        if handoff_kind == "patch_intent":
+            try:
+                reply_path = resolve_bridge_reply_path(root, target_ref)
+            except FileNotFoundError as exc:
+                print(f"Bridge reply not found: {exc}", file=sys.stderr)
+                sys.exit(1)
+            record = BridgeReplyHandoff().to_patch_intent(root, reply_path)
+            saved_path = BridgeHandoffStore().save(record, default_bridge_handoff_path(root, record))
+            saved_ref = str(saved_path.relative_to(root)).replace("\\", "/")
+            link_payload = None
+            if record.status == "created":
+                try:
+                    link = BridgeSessionCoordinator().ensure_linked_session(
+                        root,
+                        reply_path,
+                        record,
+                        patch_intent_ref=record.target_artifact_ref,
+                        explicit_session_ref=getattr(args, "session", None),
+                    )
+                except (FileNotFoundError, ValueError) as exc:
+                    print(f"Bridge session link blocked: {exc}", file=sys.stderr)
+                    sys.exit(1)
+                link_payload = link.to_dict()
+            payload = record.to_dict()
+            payload["saved_path"] = saved_ref
+            if link_payload:
+                payload["bridge_link"] = link_payload
+            if getattr(args, "json_output", False):
+                print(json.dumps(payload, indent=2, ensure_ascii=False))
+                if record.status != "created":
+                    sys.exit(1)
+                return
+            print(render_bridge_handoff(record, saved_path=saved_ref))
+            if link_payload:
+                print()
+                print("Linked session:")
+                print(f"  {link_payload.get('session_id')}")
+                print()
+                print("Next:")
+                for command_text in link_payload.get("next_commands", [])[:2]:
+                    print(f"  {command_text}")
+            if record.status != "created":
+                sys.exit(1)
+            return
+
+        if handoff_kind == "context_hint":
+            try:
+                materialization_path = resolve_bridge_materialization_path(root, target_ref)
+                hint = BridgeContextHintBuilder().from_materialization(root, materialization_path)
+                saved_path = BridgeContextHintStore().save_hint(hint, default_bridge_context_hint_path(root, hint))
+            except (FileNotFoundError, ValueError) as exc:
+                print(f"Bridge context hint handoff blocked: {exc}", file=sys.stderr)
+                sys.exit(1)
+            saved_ref = str(saved_path.relative_to(root)).replace("\\", "/")
+            payload = hint.to_dict()
+            payload["saved_path"] = saved_ref
+            if getattr(args, "json_output", False):
+                print(json.dumps(payload, indent=2, ensure_ascii=False))
+                return
+            print(render_bridge_context_hint_created(hint, saved_ref))
+            return
+
+        if handoff_kind == "checklist":
+            try:
+                materialization_path = resolve_bridge_materialization_path(root, target_ref)
+                checklist = BridgeChecklistBuilder().from_materialization(
+                    root,
+                    materialization_path,
+                    session_ref=getattr(args, "session", None),
+                )
+                saved_path = BridgeChecklistStore().save(checklist, default_bridge_checklist_path(root, checklist))
+            except (FileNotFoundError, ValueError) as exc:
+                print(f"Bridge checklist handoff blocked: {exc}", file=sys.stderr)
+                sys.exit(1)
+            saved_ref = str(saved_path.relative_to(root)).replace("\\", "/")
+            payload = checklist.to_dict()
+            payload["saved_path"] = saved_ref
+            if getattr(args, "json_output", False):
+                print(json.dumps(payload, indent=2, ensure_ascii=False))
+                return
+            print(render_bridge_checklist_created(checklist, saved_ref))
+            return
+
+    print("bridge 하위 명령이 올바르지 않습니다. 예: cambrian bridge prepare \"로그인 에러 수정\"", file=sys.stderr)
+    sys.exit(1)
+
+
+def _handle_install(args: argparse.Namespace) -> None:
+    """cambrian install 처리."""
+    from engine.project_pack_lifecycle import (
+        PackDiffBuilder,
+        PackUpdater,
+        render_pack_diff,
+        render_pack_update,
+        save_pack_diff,
+    )
+    from engine.project_pack_trust import (
+        PackVerifier,
+        render_installed_verify_reports,
+        render_pack_verify,
+        save_pack_verification,
+    )
+    from engine.project_pack_install import (
+        IncompatibleHarnessError,
+        InstalledPackStore,
+        PackInstaller,
+        build_install_doctor_report,
+        default_installed_packs_path,
+        render_install_doctor,
+        render_install_plan,
+        render_install_result,
+        render_installed_pack_list,
+        render_installed_pack_show,
+    )
+
+    root = Path.cwd().resolve()
+    command = getattr(args, "install_command", None)
+    if command is None:
+        print("install 하위 명령이 필요합니다. 예: cambrian install manifest <path>", file=sys.stderr)
+        sys.exit(1)
+
+    if command == "plan":
+        from engine.project_pack_dependencies import (
+            PackDependencyResolver,
+            render_install_graph,
+            save_install_graph,
+        )
+
+        graph = PackDependencyResolver().resolve(
+            root,
+            str(getattr(args, "pack_ref")),
+            registry_name=getattr(args, "registry", None),
+            version=getattr(args, "version", None),
+            include_deps=not bool(getattr(args, "no_deps", False)),
+        )
+        if getattr(args, "save", False):
+            save_install_graph(root, graph)
+        if getattr(args, "json_output", False):
+            print(json.dumps(graph.to_dict(), indent=2, ensure_ascii=False))
+            return
+        print(render_install_graph(graph))
+        if not graph.safe_to_install:
+            sys.exit(1)
+        return
+
+    if command == "manifest":
+        installer = PackInstaller()
+        try:
+            plan = installer.install(
+                root,
+                Path(str(getattr(args, "path"))),
+                dry_run=bool(getattr(args, "dry_run", False)),
+                source_kind_override="local_file",
+                source_ref_override=str(Path(str(getattr(args, "path"))).resolve()),
+                require_trusted=bool(getattr(args, "require_trusted", False)),
+            )
+        except (FileNotFoundError, ValueError) as exc:
+            print(f"Pack install blocked: {exc}", file=sys.stderr)
+            sys.exit(1)
+        payload = plan.to_dict()
+        payload["dry_run"] = bool(getattr(args, "dry_run", False))
+        if getattr(args, "json_output", False):
+            print(json.dumps(payload, indent=2, ensure_ascii=False))
+        else:
+            if getattr(args, "dry_run", False):
+                print(render_install_plan(plan))
+            elif plan.safe_to_install:
+                print(render_install_result(plan))
+            else:
+                print(render_install_plan(plan), file=sys.stderr)
+        if not plan.safe_to_install:
+            sys.exit(1)
+        return
+
+    if command == "pack":
+        from engine.project_pack_dependencies import (
+            PackDependencyGraphInstaller,
+            PackDependencyResolver,
+            render_graph_install_result,
+            render_install_graph,
+            save_install_graph,
+        )
+
+        pack_ref_text = str(getattr(args, "pack_ref"))
+        registry_name = getattr(args, "registry", None)
+        graph = PackDependencyResolver().resolve(
+            root,
+            pack_ref_text,
+            registry_name=str(registry_name) if registry_name else None,
+            version=getattr(args, "version", None),
+            include_deps=not bool(getattr(args, "no_deps", False)),
+        )
+        graph_has_dependencies = len(graph.install_order) > 1 or any(node.dependencies for node in graph.nodes)
+        explicit_graph_ref = "/" in pack_ref_text or "@" in pack_ref_text or bool(getattr(args, "version", None))
+        force_graph_path = graph_has_dependencies or explicit_graph_ref or bool(getattr(args, "confirm_deps", False)) or bool(getattr(args, "no_deps", False))
+        ambiguous_conflict = any("ambiguous" in item for item in graph.conflicts)
+        if graph.conflicts and (force_graph_path or ambiguous_conflict):
+            if getattr(args, "json_output", False):
+                print(json.dumps(graph.to_dict(), indent=2, ensure_ascii=False))
+            else:
+                print(render_install_graph(graph), file=sys.stderr)
+            sys.exit(1)
+        if force_graph_path:
+            if not graph.safe_to_install:
+                if getattr(args, "json_output", False):
+                    print(json.dumps(graph.to_dict(), indent=2, ensure_ascii=False))
+                else:
+                    print(render_install_graph(graph), file=sys.stderr)
+                sys.exit(1)
+            if graph_has_dependencies and not getattr(args, "confirm_deps", False):
+                if getattr(args, "json_output", False):
+                    payload = graph.to_dict()
+                    payload["requires_confirm_deps"] = True
+                    print(json.dumps(payload, indent=2, ensure_ascii=False))
+                else:
+                    print(render_install_graph(graph))
+                    print()
+                    print("Next:")
+                    print(f"  cambrian install pack {pack_ref_text} --confirm-deps")
+                if not getattr(args, "dry_run", False):
+                    sys.exit(1)
+                return
+            if getattr(args, "dry_run", False):
+                if getattr(args, "json_output", False):
+                    print(json.dumps(graph.to_dict(), indent=2, ensure_ascii=False))
+                else:
+                    print(render_install_graph(graph))
+                return
+            graph_ref = save_install_graph(root, graph)
+            result = PackDependencyGraphInstaller().install(
+                root,
+                graph,
+                dry_run=False,
+                require_trusted=bool(getattr(args, "require_trusted", False)),
+                graph_ref=graph_ref,
+            )
+            if getattr(args, "json_output", False):
+                print(json.dumps(result.to_dict(), indent=2, ensure_ascii=False))
+            else:
+                print(render_graph_install_result(result))
+            if result.errors:
+                sys.exit(1)
+            return
+        if registry_name:
+            from engine.project_pack_registry import RegistryPackInstaller
+
+            try:
+                pack, manifest_path, plan = RegistryPackInstaller().install(
+                    root,
+                    pack_ref_text,
+                    str(registry_name),
+                    dry_run=bool(getattr(args, "dry_run", False)),
+                    require_trusted=bool(getattr(args, "require_trusted", False)),
+                )
+            except (KeyError, FileNotFoundError, ValueError) as exc:
+                print(f"Pack install blocked: {exc}", file=sys.stderr)
+                sys.exit(1)
+            payload = plan.to_dict()
+            payload["dry_run"] = bool(getattr(args, "dry_run", False))
+            payload["registry_name"] = pack.registry_name
+            payload["registry_source_ref"] = pack.registry_source_ref
+            payload["manifest_path"] = _relative_cli(manifest_path, root)
+            payload["manifest_sha256"] = pack.manifest_sha256
+            if getattr(args, "json_output", False):
+                print(json.dumps(payload, indent=2, ensure_ascii=False))
+            else:
+                print("Installing pack from static registry.")
+                print()
+                print("Pack:")
+                print(f"  {pack.pack_id}")
+                print()
+                print("Registry:")
+                print(f"  {pack.registry_name}")
+                print()
+                print("Manifest:")
+                print(f"  {payload['manifest_path']}")
+                print()
+                print("Integrity:")
+                print(f"  sha256: {pack.manifest_sha256 or 'unknown'}")
+                print()
+                if getattr(args, "dry_run", False):
+                    print(render_install_plan(plan))
+                elif plan.safe_to_install:
+                    print(render_install_result(plan))
+                else:
+                    print(render_install_plan(plan), file=sys.stderr)
+            if not plan.safe_to_install:
+                sys.exit(1)
+            return
+
+        from engine.project_pack_catalog import (
+            PackCatalogResolver,
+            PackFitAnalyzer,
+            default_pack_catalog_path,
+            load_default_catalog,
+            local_catalog_source_ref,
+        )
+
+        repo_root = Path(__file__).resolve().parents[1]
+        catalog = load_default_catalog(repo_root)
+        if catalog.errors:
+            print(f"Pack catalog blocked: {catalog.errors[0]}", file=sys.stderr)
+            sys.exit(1)
+        resolver = PackCatalogResolver()
+        try:
+            entry = resolver.find_entry(catalog, pack_ref_text)
+            manifest_path = resolver.resolve_manifest_path(repo_root, entry)
+            fit = PackFitAnalyzer().analyze(root, entry)
+            plan = PackInstaller().install(
+                root,
+                manifest_path,
+                dry_run=bool(getattr(args, "dry_run", False)),
+                source_kind_override="local_catalog",
+                source_ref_override=local_catalog_source_ref(repo_root, entry),
+                expected_sha256=entry.manifest_sha256,
+                require_trusted=bool(getattr(args, "require_trusted", False)),
+                trust_level_override=entry.trust_level,
+            )
+        except IncompatibleHarnessError as exc:
+            if getattr(args, "json_output", False):
+                print(json.dumps(exc.to_dict(), indent=2, ensure_ascii=False))
+            else:
+                issue = exc.issue
+                print(f"Cannot install {issue.pack} for this project.", file=sys.stderr)
+                print("", file=sys.stderr)
+                print("Reason:", file=sys.stderr)
+                print(
+                    f"  {issue.pack} supports {issue.required.get('language') or 'unknown'} + {issue.required.get('test_framework') or 'unknown'}.",
+                    file=sys.stderr,
+                )
+                print(
+                    f"  Current project appears to be {issue.detected.get('language') or 'unknown'} + {issue.detected.get('test_framework') or 'unknown'}.",
+                    file=sys.stderr,
+                )
+                if issue.recommended_harness:
+                    print("", file=sys.stderr)
+                    print("Recommended:", file=sys.stderr)
+                    for command_text in issue.next_commands:
+                        print(f"  {command_text}", file=sys.stderr)
+            sys.exit(1)
+        except (KeyError, FileNotFoundError, ValueError) as exc:
+            print(f"Pack install blocked: {exc}", file=sys.stderr)
+            sys.exit(1)
+        payload = plan.to_dict()
+        payload["dry_run"] = bool(getattr(args, "dry_run", False))
+        payload["catalog_ref"] = f"{_relative_cli(default_pack_catalog_path(repo_root), repo_root)}#{entry.pack_id}"
+        payload["manifest_path"] = _relative_cli(manifest_path, repo_root)
+        payload["fit"] = fit.to_dict()
+        if getattr(args, "json_output", False):
+            print(json.dumps(payload, indent=2, ensure_ascii=False))
+        else:
+            print("Installing pack from local catalog.")
+            print()
+            print("Pack:")
+            print(f"  {entry.pack_id}")
+            print()
+            print("Manifest:")
+            print(f"  {payload['manifest_path']}")
+            print()
+            print("Fit:")
+            print(f"  {fit.fit_status}")
+            print()
+            if getattr(args, "dry_run", False):
+                print(render_install_plan(plan))
+            elif plan.safe_to_install:
+                print(render_install_result(plan))
+            else:
+                print(render_install_plan(plan), file=sys.stderr)
+        if not plan.safe_to_install:
+            sys.exit(1)
+        return
+
+    if command == "diff":
+        try:
+            report = PackDiffBuilder().build(
+                root,
+                str(getattr(args, "pack_ref")),
+                Path(str(getattr(args, "manifest"))) if getattr(args, "manifest", None) else None,
+            )
+        except (KeyError, FileNotFoundError, ValueError) as exc:
+            print(f"Pack diff blocked: {exc}", file=sys.stderr)
+            sys.exit(1)
+        if getattr(args, "save", False):
+            save_pack_diff(root, report)
+        if getattr(args, "json_output", False):
+            print(json.dumps(report.to_dict(), indent=2, ensure_ascii=False))
+            return
+        print(render_pack_diff(report))
+        if not report.safe_to_update:
+            sys.exit(1)
+        return
+
+    if command == "update":
+        incoming_manifest = Path(str(getattr(args, "manifest"))) if getattr(args, "manifest", None) else None
+        if not bool(getattr(args, "confirm", False)) or bool(getattr(args, "dry_run", False)):
+            try:
+                report = PackDiffBuilder().build(root, str(getattr(args, "pack_ref")), incoming_manifest)
+            except (KeyError, FileNotFoundError, ValueError) as exc:
+                print(f"Pack update blocked: {exc}", file=sys.stderr)
+                sys.exit(1)
+            if getattr(args, "json_output", False):
+                payload = report.to_dict()
+                payload["preview_only"] = True
+                print(json.dumps(payload, indent=2, ensure_ascii=False))
+                return
+            print(render_pack_diff(report))
+            print()
+            print("Update preview only. 실제 업데이트는 --confirm이 필요합니다.")
+            if not report.safe_to_update:
+                sys.exit(1)
+            return
+        try:
+            record = PackUpdater().update(
+                root,
+                str(getattr(args, "pack_ref")),
+                incoming_manifest_path=incoming_manifest,
+                confirm=True,
+                require_trusted=bool(getattr(args, "require_trusted", False)),
+            )
+        except (KeyError, FileNotFoundError, ValueError) as exc:
+            print(f"Pack update blocked: {exc}", file=sys.stderr)
+            sys.exit(1)
+        if getattr(args, "json_output", False):
+            print(json.dumps(record.to_dict(), indent=2, ensure_ascii=False))
+            return
+        print(render_pack_update(record))
+        if record.status != "updated":
+            sys.exit(1)
+        return
+
+    if command == "verify":
+        verifier = PackVerifier()
+        pack_ref = getattr(args, "pack_ref", None)
+        try:
+            if pack_ref:
+                reports = [verifier.verify_installed_pack(root, str(pack_ref))]
+            else:
+                reports = verifier.verify_all_installed(root)
+        except (KeyError, FileNotFoundError, ValueError) as exc:
+            print(f"Install verify blocked: {exc}", file=sys.stderr)
+            sys.exit(1)
+        if getattr(args, "save", False):
+            for report in reports:
+                save_pack_verification(root, report)
+        if getattr(args, "json_output", False):
+            print(json.dumps([report.to_dict() for report in reports], indent=2, ensure_ascii=False))
+            return
+        if pack_ref and reports:
+            print(render_pack_verify(reports[0]))
+        else:
+            print(render_installed_verify_reports(reports))
+        if any(report.status == "failed" for report in reports):
+            sys.exit(1)
+        return
+
+    store = InstalledPackStore()
+    index = store.load(default_installed_packs_path(root))
+    if command == "list":
+        if getattr(args, "json_output", False):
+            print(json.dumps(index.to_dict(), indent=2, ensure_ascii=False))
+            return
+        print(render_installed_pack_list(index))
+        return
+
+    if command == "show":
+        try:
+            record = store.find(index, str(getattr(args, "pack_ref")))
+        except KeyError as exc:
+            print(f"Installed pack not found: {exc.args[0]}", file=sys.stderr)
+            sys.exit(1)
+        if getattr(args, "json_output", False):
+            print(json.dumps(record.to_dict(), indent=2, ensure_ascii=False))
+            return
+        print(render_installed_pack_show(record))
+        return
+
+    if command == "doctor":
+        report = build_install_doctor_report(root)
+        if getattr(args, "json_output", False):
+            print(json.dumps(report, indent=2, ensure_ascii=False))
+            return
+        print(render_install_doctor(report))
+        if report.get("errors"):
+            sys.exit(1)
+        return
+
+    print("알 수 없는 install 하위 명령입니다.", file=sys.stderr)
+    sys.exit(1)
+
+
+def _handle_uninstall(args: argparse.Namespace) -> None:
+    """cambrian uninstall 처리."""
+    from engine.project_pack_lifecycle import (
+        PackUninstallPlanner,
+        PackUninstaller,
+        render_uninstall_plan,
+        render_uninstall_record,
+    )
+
+    root = Path.cwd().resolve()
+    command = getattr(args, "uninstall_command", None)
+    if command is None:
+        print("uninstall 하위 명령이 필요합니다. 예: cambrian uninstall pack <pack-id>", file=sys.stderr)
+        sys.exit(1)
+    if command != "pack":
+        print("알 수 없는 uninstall 하위 명령입니다.", file=sys.stderr)
+        sys.exit(1)
+
+    pack_ref = str(getattr(args, "pack_ref"))
+    if not bool(getattr(args, "confirm", False)):
+        try:
+            plan = PackUninstallPlanner().build_plan(root, pack_ref)
+        except (KeyError, FileNotFoundError, ValueError) as exc:
+            print(f"Pack uninstall blocked: {exc}", file=sys.stderr)
+            sys.exit(1)
+        if getattr(args, "json_output", False):
+            payload = plan.to_dict()
+            payload["preview_only"] = True
+            print(json.dumps(payload, indent=2, ensure_ascii=False))
+            return
+        print(render_uninstall_plan(plan))
+        print()
+        print("Uninstall preview only. 실제 제거는 --confirm이 필요합니다.")
+        return
+
+    try:
+        record = PackUninstaller().uninstall(
+            root,
+            pack_ref,
+            confirm=True,
+            force=bool(getattr(args, "force", False)),
+        )
+    except (KeyError, FileNotFoundError, ValueError) as exc:
+        print(f"Pack uninstall blocked: {exc}", file=sys.stderr)
+        sys.exit(1)
+    if getattr(args, "json_output", False):
+        print(json.dumps(record.to_dict(), indent=2, ensure_ascii=False))
+        return
+    print(render_uninstall_record(record))
+    if record.status != "uninstalled":
+        sys.exit(1)
+
+
+def _handle_registry(args: argparse.Namespace) -> None:
+    """cambrian registry 처리."""
+    from engine.project_pack_registry import (
+        PackRegistryStore,
+        PackRegistrySyncer,
+        create_registry_source,
+        default_registry_index_path,
+        registry_payload,
+        render_registry_added,
+        render_registry_list,
+        render_registry_sync,
+    )
+    from engine.project_pack_registry_export import (
+        RegistryBundleChecker,
+        RegistryBundleExporter,
+        render_registry_export,
+        render_registry_export_check,
+    )
+
+    root = Path.cwd().resolve()
+    command = getattr(args, "registry_command", None)
+    if command is None:
+        print("registry 하위 명령이 필요합니다. 예: cambrian registry add local-web web/assets/catalog.json", file=sys.stderr)
+        sys.exit(1)
+
+    store = PackRegistryStore()
+    index_path = default_registry_index_path(root)
+
+    if command == "export":
+        bundle = RegistryBundleExporter().export(
+            root,
+            Path(str(getattr(args, "out"))),
+            registry_name=getattr(args, "registry_name", None),
+            namespace=getattr(args, "namespace", None),
+            include_unproven=bool(getattr(args, "include_unproven", False)),
+        )
+        if getattr(args, "json_output", False):
+            print(json.dumps(bundle.to_dict(), indent=2, ensure_ascii=False))
+            return
+        print(render_registry_export(bundle))
+        if bundle.status != "exported":
+            sys.exit(1)
+        return
+
+    if command == "export-check":
+        report = RegistryBundleChecker().check(Path(str(getattr(args, "bundle_dir"))))
+        if getattr(args, "json_output", False):
+            print(json.dumps(report.to_dict(), indent=2, ensure_ascii=False))
+            return
+        print(render_registry_export_check(report))
+        if report.status == "failed":
+            sys.exit(1)
+        return
+
+    if command == "add":
+        source = create_registry_source(
+            str(getattr(args, "name")),
+            str(getattr(args, "source_ref")),
+            trust_level=getattr(args, "trust_level", None),
+        )
+        store.add(index_path, source)
+        if getattr(args, "json_output", False):
+            print(json.dumps(source.to_dict(), indent=2, ensure_ascii=False))
+            return
+        print(render_registry_added(source))
+        return
+
+    if command == "list":
+        index = store.load(index_path)
+        if getattr(args, "json_output", False):
+            print(json.dumps(registry_payload(index), indent=2, ensure_ascii=False))
+            return
+        print(render_registry_list(index))
+        return
+
+    if command == "sync":
+        report = PackRegistrySyncer().sync(root, str(getattr(args, "name")))
+        if getattr(args, "json_output", False):
+            print(json.dumps(report.to_dict(), indent=2, ensure_ascii=False))
+            return
+        print(render_registry_sync(report))
+        if report.status != "synced":
+            sys.exit(1)
+        return
+
+    print("알 수 없는 registry 하위 명령입니다.", file=sys.stderr)
+    sys.exit(1)
+
+
+def _handle_pack(args: argparse.Namespace) -> None:
+    """cambrian pack 처리."""
+    root = Path.cwd().resolve()
+    repo_root = Path(__file__).resolve().parents[1]
+    command = getattr(args, "pack_command", None)
+    if command is None:
+        print("pack 하위 명령이 필요합니다. 예: cambrian pack list", file=sys.stderr)
+        sys.exit(1)
+
+    launch_commands = {
+        "list",
+        "show",
+        "doctor",
+        "readiness",
+        "start",
+        "job-paste",
+        "job-ingest",
+        "job-validate",
+        "activate",
+        "active",
+        "next",
+        "proof",
+    }
+    if command in launch_commands:
+        _handle_pack_launch_path(args, root, repo_root, command)
+        return
+
+    from engine.project_pack_authoring import (
+        PackBuilder,
+        PackDraftBuilder,
+        PackLocalPublisher,
+        PackValidator,
+        load_pack_draft,
+        render_pack_built,
+        render_pack_draft_created,
+        render_pack_publish,
+        render_pack_validate,
+        resolve_draft_path,
+        save_pack_draft,
+    )
+    from engine.project_pack_catalog import (
+        PackCatalogResolver,
+        PackFitAnalyzer,
+        default_pack_catalog_path,
+        best_recommendation,
+        catalog_payload,
+        load_default_catalog,
+        manifest_for_entry,
+        render_pack_list,
+        render_pack_recommend,
+        render_pack_show,
+    )
+    from engine.project_pack_trust import PackVerifier, render_pack_verify, save_pack_verification
+    from engine.project_pack_release import (
+        PackReleaseChecker,
+        PackWebSyncer,
+        render_pack_release_report,
+        render_pack_web_sync,
+        save_pack_release_report,
+    )
+    from engine.project_pack_proof import (
+        PackProofBuilder,
+        PackProofStore,
+        latest_pack_proof_card,
+        render_pack_proof_card,
+        render_pack_proof_compact,
+        resolve_pack_proof_path,
+        save_pack_proof_card,
+    )
+    from engine.project_pack_proof_export import (
+        PackProofExportStore,
+        PackProofExporter,
+        render_pack_proof_export,
+        resolve_pack_proof_export_path,
+    )
+    from engine.project_pack_registry import (
+        PackRegistryResolver,
+        SyncedRegistryPack,
+        pack_search_payload,
+        registry_pack_show_payload,
+        render_pack_search,
+        render_registry_pack_show,
+    )
+    from engine.project_pack_activation import (
+        PackActivationStore,
+        PackActivator,
+        PackNextGuideBuilder,
+        current_active_pack,
+        default_active_pack_path,
+        render_active_pack,
+        render_pack_activated,
+        render_pack_deactivated,
+        render_pack_next,
+    )
+    from engine.project_pack_usage import (
+        PackOutcomeLinkBuilder,
+        PackUsageEventStore,
+        PackUsageSummaryBuilder,
+        PackUsageSummaryStore,
+        default_usage_events_dir,
+        default_usage_summary_path,
+        render_pack_events,
+        render_pack_outcomes,
+        render_pack_usage,
+        render_pack_usage_compact,
+        safe_record_pack_usage_event,
+        safe_record_pack_usage_from_context,
+        save_pack_outcome_links,
+    )
+    from engine.project_pack_readiness import (
+        PackReadinessBuilder,
+        latest_pack_readiness,
+        render_pack_readiness,
+        render_pack_readiness_compact,
+        save_pack_readiness_report,
+    )
+    from engine.project_pack_setup import (
+        PackSetupApplier,
+        PackSetupPlanner,
+        PackSetupStore,
+        latest_pack_setup_plan,
+        render_pack_setup_compact,
+        render_pack_setup_plan,
+        render_pack_setup_prompt,
+        render_pack_setup_run,
+        resolve_pack_setup_plan_path,
+        save_pack_setup_plan,
+    )
+    from engine.project_pack_jobs import (
+        PackJobNextBuilder,
+        PackJobStarter,
+        PackJobStore,
+        default_pack_jobs_dir,
+        render_pack_job,
+        render_pack_job_next,
+        render_pack_job_started,
+        render_pack_jobs,
+        resolve_pack_job_path,
+    )
+    from engine.project_pack_job_reply import (
+        PackJobReplyHandler,
+        PackJobValidator,
+        render_pack_job_reply_result,
+        render_pack_job_validation_result,
+    )
+    from engine.project_pack_job_apply import (
+        PackJobAdoptionHandler,
+        PackJobApplyHandler,
+        render_pack_job_adoption_record,
+        render_pack_job_apply_preview,
+        render_pack_job_apply_record,
+    )
+    from engine.project_pack_retrospective import (
+        PackJobRetrospectiveBuilder,
+        PackRetrospectiveStore,
+        PackRetrospectiveSummaryBuilder,
+        default_job_retrospectives_dir,
+        latest_pack_retro_summary,
+        render_pack_job_retrospective,
+        render_pack_retro_summary,
+        render_pack_retro_summary_compact,
+        render_pack_retrospectives,
+        save_pack_job_retrospective,
+        save_pack_retro_summary,
+    )
+    from engine.project_pack_improvements import (
+        PackImprovementQueueBuilder,
+        PackImprovementStore,
+        default_pack_improvement_items_dir,
+        default_pack_improvement_queue_path,
+        latest_pack_improvement_queue,
+        record_pack_improvement_decision,
+        render_pack_improvement_decision,
+        render_pack_improvement_compact,
+        render_pack_improvement_item,
+        render_pack_improvement_queue,
+        render_pack_improvements,
+        save_pack_improvement_queue,
+        resolve_pack_improvement_item_path,
+    )
+    from engine.project_pack_derivatives import (
+        PackDerivativeCreator,
+        PackDerivativePlanner,
+        PackDerivativeStore,
+        latest_pack_derivative_plan,
+        render_pack_derivative_compact,
+        render_pack_derivative_plan,
+        render_pack_derivative_workspace,
+        resolve_pack_derivative_plan_path,
+        save_pack_derivative_plan,
+        save_pack_derivative_workspace,
+    )
+    from engine.project_pack_vnext_workbench import (
+        PackVNextWorkbenchBuilder,
+        PackWorkOrderStore,
+        default_pack_vnext_workorders_dir,
+        latest_pack_vnext_workbench,
+        record_pack_workorder_decision,
+        render_pack_vnext_compact,
+        render_pack_vnext_workbench,
+        render_pack_workorder,
+        render_pack_workorder_decision,
+        render_pack_workorders,
+        resolve_pack_workorder_path,
+        save_pack_vnext_workbench,
+    )
+    from engine.project_pack_release_candidate import (
+        PackLocalReleaser,
+        PackReleaseCandidateBuilder,
+        PackReleaseCandidateStore,
+        latest_pack_local_release,
+        latest_pack_rc,
+        release_check_target_from_rc,
+        render_pack_local_release,
+        render_pack_rc,
+        render_pack_rc_compact,
+        render_status_pack_rc,
+        resolve_pack_rc_path,
+        save_pack_local_release,
+        save_pack_rc,
+    )
+    from engine.project_pack_rollout import (
+        PackRolloutApplier,
+        PackRolloutPlanner,
+        PackRolloutStore,
+        latest_pack_rollout,
+        render_pack_rollout_apply_record,
+        render_pack_rollout_compact,
+        render_pack_rollout_plan,
+        render_pack_upgrade_available,
+        resolve_pack_rollout_path,
+        save_pack_rollout_apply_record,
+        save_pack_rollout_plan,
+    )
+
+    if command == "draft":
+        refs = {
+            "workers": getattr(args, "workers", []),
+            "teams": getattr(args, "teams", []),
+            "templates": getattr(args, "templates", []),
+            "benchmarks": getattr(args, "benchmarks", []),
+            "lane": getattr(args, "lane_ref", None),
+        }
+        draft = PackDraftBuilder().create(
+            root,
+            str(getattr(args, "pack_id")),
+            str(getattr(args, "kind")),
+            refs,
+            pack_name=getattr(args, "pack_name", None),
+            version=getattr(args, "version", None),
+            description=getattr(args, "description", None),
+            tags=list(getattr(args, "tags", []) or []),
+        )
+        draft_ref = save_pack_draft(root, draft)
+        if getattr(args, "json_output", False):
+            payload = draft.to_dict()
+            payload["draft_ref"] = draft_ref
+            print(json.dumps(payload, indent=2, ensure_ascii=False))
+            return
+        print(render_pack_draft_created(draft, draft_ref))
+        if draft.errors:
+            sys.exit(1)
+        return
+
+    if command == "validate":
+        target = str(getattr(args, "target"))
+        try:
+            target_path = Path(target)
+            if not target_path.exists():
+                target_path = resolve_draft_path(root, target)
+            payload = yaml.safe_load(target_path.read_text(encoding="utf-8")) or {}
+            if isinstance(payload, dict) and payload.get("draft_id"):
+                report = PackValidator().validate_draft(root, load_pack_draft(target_path))
+            else:
+                report = PackValidator().validate_manifest(root, target_path)
+        except (FileNotFoundError, ValueError, yaml.YAMLError) as exc:
+            print(f"Pack validate blocked: {exc}", file=sys.stderr)
+            sys.exit(1)
+        if getattr(args, "json_output", False):
+            print(json.dumps(report.to_dict(), indent=2, ensure_ascii=False))
+            return
+        print(render_pack_validate(report))
+        if report.errors:
+            sys.exit(1)
+        return
+
+    if command == "build":
+        try:
+            report = PackBuilder().build(
+                root,
+                str(getattr(args, "target")),
+                out_path=Path(str(getattr(args, "out"))) if getattr(args, "out", None) else None,
+            )
+        except (FileNotFoundError, ValueError) as exc:
+            print(f"Pack build blocked: {exc}", file=sys.stderr)
+            sys.exit(1)
+        if getattr(args, "json_output", False):
+            print(json.dumps(report.to_dict(), indent=2, ensure_ascii=False))
+            return
+        print(render_pack_built(report))
+        if report.status != "built":
+            sys.exit(1)
+        return
+
+    if command == "publish-local":
+        record = PackLocalPublisher().publish(
+            root,
+            Path(str(getattr(args, "manifest_path"))),
+            confirm=bool(getattr(args, "confirm", False)),
+            require_proof=bool(getattr(args, "require_proof", False)),
+            release_check_path=Path(str(getattr(args, "release_check"))) if getattr(args, "release_check", None) else None,
+        )
+        if getattr(args, "json_output", False):
+            print(json.dumps(record.to_dict(), indent=2, ensure_ascii=False))
+            return
+        print(render_pack_publish(record, confirm=bool(getattr(args, "confirm", False))))
+        if record.status == "blocked":
+            sys.exit(1)
+        return
+
+    if command == "release-check":
+        target = release_check_target_from_rc(root, str(getattr(args, "target")))
+        report = PackReleaseChecker().check(
+            root,
+            target,
+            require_proof=bool(getattr(args, "require_proof", False)),
+        )
+        if getattr(args, "save", False):
+            save_pack_release_report(root, report)
+        if getattr(args, "json_output", False):
+            print(json.dumps(report.to_dict(), indent=2, ensure_ascii=False))
+            return
+        print(render_pack_release_report(report))
+        if not report.safe_to_publish:
+            sys.exit(1)
+        return
+
+    if command == "rc":
+        try:
+            rc = PackReleaseCandidateBuilder().build(
+                root,
+                str(getattr(args, "draft_or_workspace")),
+                allow_unresolved=bool(getattr(args, "allow_unresolved", False)),
+            )
+            saved_ref = save_pack_rc(root, rc)
+        except (FileNotFoundError, ValueError) as exc:
+            print(f"Pack RC blocked: {exc}", file=sys.stderr)
+            sys.exit(1)
+        if getattr(args, "json_output", False):
+            payload = rc.to_dict()
+            payload["saved_ref"] = saved_ref
+            print(json.dumps(payload, indent=2, ensure_ascii=False))
+            if rc.status in {"blocked", "failed"}:
+                sys.exit(1)
+            return
+        print(render_pack_rc(rc))
+        print("")
+        print("Saved:")
+        print(f"  {saved_ref}")
+        if rc.status in {"blocked", "failed"}:
+            sys.exit(1)
+        return
+
+    if command == "rc-show":
+        try:
+            rc_path = resolve_pack_rc_path(root, str(getattr(args, "rc_ref")))
+            rc = PackReleaseCandidateStore().load_rc(rc_path)
+        except (FileNotFoundError, ValueError) as exc:
+            print(f"Pack RC show blocked: {exc}", file=sys.stderr)
+            sys.exit(1)
+        if getattr(args, "json_output", False):
+            payload = rc.to_dict()
+            payload["path"] = _relative_cli(rc_path, root)
+            print(json.dumps(payload, indent=2, ensure_ascii=False))
+            return
+        print(render_pack_rc(rc))
+        return
+
+    if command == "release-local":
+        try:
+            record = PackLocalReleaser().release(
+                root,
+                str(getattr(args, "rc_ref")),
+                confirm=bool(getattr(args, "confirm", False)),
+                supersede_previous=not bool(getattr(args, "no_supersede", False)),
+            )
+            saved_ref = save_pack_local_release(root, record)
+        except (FileNotFoundError, ValueError) as exc:
+            print(f"Pack release-local blocked: {exc}", file=sys.stderr)
+            sys.exit(1)
+        if getattr(args, "json_output", False):
+            payload = record.to_dict()
+            payload["saved_ref"] = saved_ref
+            print(json.dumps(payload, indent=2, ensure_ascii=False))
+            if record.status in {"blocked", "failed"}:
+                sys.exit(1)
+            return
+        print(render_pack_local_release(record, confirm=bool(getattr(args, "confirm", False))))
+        print("")
+        print("Saved:")
+        print(f"  {saved_ref}")
+        if record.status in {"blocked", "failed"}:
+            sys.exit(1)
+        return
+
+    if command == "rollout":
+        plan = PackRolloutPlanner().build(root, str(getattr(args, "new_pack_ref")))
+        saved_ref = save_pack_rollout_plan(root, plan)
+        if getattr(args, "json_output", False):
+            payload = plan.to_dict()
+            payload["saved_ref"] = saved_ref
+            print(json.dumps(payload, indent=2, ensure_ascii=False))
+            if plan.status in {"blocked", "failed"}:
+                sys.exit(1)
+            return
+        print(render_pack_rollout_plan(plan))
+        print("")
+        print("Saved:")
+        print(f"  {saved_ref}")
+        if plan.status in {"blocked", "failed"}:
+            sys.exit(1)
+        return
+
+    if command == "rollout-show":
+        try:
+            rollout_path = resolve_pack_rollout_path(root, str(getattr(args, "rollout_ref")))
+            plan = PackRolloutStore().load_plan(rollout_path)
+        except (FileNotFoundError, ValueError) as exc:
+            print(f"Pack rollout show blocked: {exc}", file=sys.stderr)
+            sys.exit(1)
+        if getattr(args, "json_output", False):
+            payload = plan.to_dict()
+            payload["path"] = _relative_cli(rollout_path, root)
+            print(json.dumps(payload, indent=2, ensure_ascii=False))
+            return
+        print(render_pack_rollout_plan(plan))
+        return
+
+    if command == "rollout-apply":
+        try:
+            record = PackRolloutApplier().apply(
+                root,
+                str(getattr(args, "rollout_ref")),
+                confirm=bool(getattr(args, "confirm", False)),
+                install=bool(getattr(args, "install", False)),
+                activate=bool(getattr(args, "activate", False)),
+                mark_old_backup=bool(getattr(args, "mark_old_backup", False)),
+            )
+            saved_ref = save_pack_rollout_apply_record(root, record)
+        except (FileNotFoundError, ValueError) as exc:
+            print(f"Pack rollout apply blocked: {exc}", file=sys.stderr)
+            sys.exit(1)
+        if getattr(args, "json_output", False):
+            payload = record.to_dict()
+            payload["saved_ref"] = saved_ref
+            print(json.dumps(payload, indent=2, ensure_ascii=False))
+            if record.status in {"blocked", "failed"}:
+                sys.exit(1)
+            return
+        print(render_pack_rollout_apply_record(record))
+        print("")
+        print("Saved:")
+        print(f"  {saved_ref}")
+        if record.status in {"blocked", "failed"}:
+            sys.exit(1)
+        return
+
+    if command == "web-sync":
+        record = PackWebSyncer().sync(
+            root,
+            catalog_path=Path(str(getattr(args, "catalog"))) if getattr(args, "catalog", None) else None,
+            web_dir=Path(str(getattr(args, "out"))) if getattr(args, "out", None) else None,
+        )
+        if getattr(args, "json_output", False):
+            print(json.dumps(record.to_dict(), indent=2, ensure_ascii=False))
+            return
+        print(render_pack_web_sync(record))
+        if record.status == "failed":
+            sys.exit(1)
+        return
+
+    if command in {"doctor", "readiness"}:
+        pack_ref = getattr(args, "pack_ref", None)
+        registry_name = getattr(args, "registry", None)
+        try:
+            report = PackReadinessBuilder().build(
+                root,
+                str(pack_ref) if pack_ref else None,
+                registry_name=str(registry_name) if registry_name else None,
+            )
+        except KeyError as exc:
+            print(f"Pack doctor blocked: {exc.args[0]}", file=sys.stderr)
+            sys.exit(1)
+        if getattr(args, "save", False):
+            save_pack_readiness_report(root, report)
+        if getattr(args, "json_output", False):
+            print(json.dumps(report.to_dict(), indent=2, ensure_ascii=False))
+            return
+        print(render_pack_readiness(report))
+        setup_plan = latest_pack_setup_plan(root, report.pack_id)
+        setup_text = render_pack_setup_compact(setup_plan) or render_pack_setup_prompt(report)
+        if setup_text:
+            print(setup_text)
+        return
+
+    if command == "setup":
+        pack_ref = getattr(args, "pack_ref", None)
+        try:
+            plan = PackSetupPlanner().build(root, str(pack_ref) if pack_ref else None)
+            saved_ref = save_pack_setup_plan(root, plan)
+        except (KeyError, FileNotFoundError, ValueError) as exc:
+            print(f"Pack setup blocked: {exc}", file=sys.stderr)
+            sys.exit(1)
+        if getattr(args, "json_output", False):
+            payload = plan.to_dict()
+            payload["saved_ref"] = saved_ref
+            print(json.dumps(payload, indent=2, ensure_ascii=False))
+            return
+        print(render_pack_setup_plan(plan))
+        return
+
+    if command == "setup-show":
+        try:
+            setup_path = resolve_pack_setup_plan_path(root, str(getattr(args, "setup_ref")))
+            plan = PackSetupStore().load_plan(setup_path)
+        except (FileNotFoundError, ValueError) as exc:
+            print(f"Pack setup show blocked: {exc}", file=sys.stderr)
+            sys.exit(1)
+        if getattr(args, "json_output", False):
+            payload = plan.to_dict()
+            payload["path"] = _relative_cli(setup_path, root)
+            print(json.dumps(payload, indent=2, ensure_ascii=False))
+            return
+        print(render_pack_setup_plan(plan))
+        return
+
+    if command == "setup-apply":
+        try:
+            run = PackSetupApplier().apply(root, Path(str(getattr(args, "setup_ref"))))
+        except (FileNotFoundError, ValueError) as exc:
+            print(f"Pack setup apply blocked: {exc}", file=sys.stderr)
+            sys.exit(1)
+        if getattr(args, "json_output", False):
+            print(json.dumps(run.to_dict(), indent=2, ensure_ascii=False))
+            if run.status in {"blocked", "failed"}:
+                sys.exit(1)
+            return
+        print(render_pack_setup_run(run))
+        if run.status in {"blocked", "failed"}:
+            sys.exit(1)
+        return
+
+    if command == "start":
+        try:
+            pack_ref, request = _parse_pack_start_args(args)
+            result = PackJobStarter().start(
+                root,
+                request,
+                pack_ref=pack_ref,
+                mode=str(getattr(args, "mode", "bridge") or "bridge"),
+            )
+        except (KeyError, FileNotFoundError, ValueError) as exc:
+            print(f"Pack start blocked: {exc}", file=sys.stderr)
+            sys.exit(1)
+        if getattr(args, "json_output", False):
+            print(json.dumps(result.to_dict(), indent=2, ensure_ascii=False))
+            if result.job.status == "blocked":
+                sys.exit(1)
+            return
+        print(render_pack_job_started(result))
+        if result.job.status == "blocked":
+            sys.exit(1)
+        return
+
+    if command == "jobs":
+        pack_ref = getattr(args, "pack_ref_option", None)
+        limit = int(getattr(args, "limit", 20) or 20)
+        jobs = PackJobStore().list(default_pack_jobs_dir(root), pack_id=str(pack_ref) if pack_ref else None)
+        if getattr(args, "json_output", False):
+            print(json.dumps({"jobs": [job.to_dict() for job in jobs[:limit]]}, indent=2, ensure_ascii=False))
+            return
+        print(render_pack_jobs(jobs, limit=limit))
+        return
+
+    if command == "job-paste":
+        reply_text = sys.stdin.read()
+        try:
+            result = PackJobReplyHandler().paste(root, str(getattr(args, "job_ref")), reply_text)
+        except (FileNotFoundError, ValueError) as exc:
+            print(f"Pack job paste blocked: {exc}", file=sys.stderr)
+            sys.exit(1)
+        if getattr(args, "json_output", False):
+            print(json.dumps(result.to_dict(), indent=2, ensure_ascii=False))
+            if result.status in {"blocked", "failed"}:
+                sys.exit(1)
+            return
+        print(render_pack_job_reply_result(result))
+        if result.status in {"blocked", "failed"}:
+            sys.exit(1)
+        return
+
+    if command == "job-ingest":
+        try:
+            result = PackJobReplyHandler().ingest(
+                root,
+                str(getattr(args, "job_ref")),
+                Path(str(getattr(args, "reply_file"))),
+            )
+        except (FileNotFoundError, ValueError) as exc:
+            print(f"Pack job ingest blocked: {exc}", file=sys.stderr)
+            sys.exit(1)
+        if getattr(args, "json_output", False):
+            print(json.dumps(result.to_dict(), indent=2, ensure_ascii=False))
+            if result.status in {"blocked", "failed"}:
+                sys.exit(1)
+            return
+        print(render_pack_job_reply_result(result))
+        if result.status in {"blocked", "failed"}:
+            sys.exit(1)
+        return
+
+    if command == "job-validate":
+        try:
+            result = PackJobValidator().validate(root, str(getattr(args, "job_ref")))
+        except (FileNotFoundError, ValueError) as exc:
+            print(f"Pack job validate blocked: {exc}", file=sys.stderr)
+            sys.exit(1)
+        if getattr(args, "json_output", False):
+            print(json.dumps(result.to_dict(), indent=2, ensure_ascii=False))
+            if result.validation_status in {"blocked", "failed", "not_ready"}:
+                sys.exit(1)
+            return
+        print(render_pack_job_validation_result(result))
+        if result.validation_status in {"blocked", "failed", "not_ready"}:
+            sys.exit(1)
+        return
+
+    if command == "job-apply":
+        try:
+            handler = PackJobApplyHandler()
+            if bool(getattr(args, "confirm", False)):
+                record = handler.apply(root, str(getattr(args, "job_ref")), confirm=True)
+                if getattr(args, "json_output", False):
+                    print(json.dumps(record.to_dict(), indent=2, ensure_ascii=False))
+                    if record.status in {"blocked", "failed"}:
+                        sys.exit(1)
+                    return
+                print(render_pack_job_apply_record(record))
+                if record.status in {"blocked", "failed"}:
+                    sys.exit(1)
+                return
+            preview = handler.preview(root, str(getattr(args, "job_ref")))
+        except (FileNotFoundError, ValueError) as exc:
+            print(f"Pack job apply blocked: {exc}", file=sys.stderr)
+            sys.exit(1)
+        if getattr(args, "json_output", False):
+            print(json.dumps(preview.to_dict(), indent=2, ensure_ascii=False))
+            if not preview.safe_to_apply:
+                sys.exit(1)
+            return
+        print(render_pack_job_apply_preview(preview))
+        if not preview.safe_to_apply:
+            sys.exit(1)
+        return
+
+    if command == "job-adopt":
+        decision = "accepted" if getattr(args, "accepted", False) else "rejected" if getattr(args, "rejected", False) else "skipped"
+        try:
+            record = PackJobAdoptionHandler().adopt(
+                root,
+                str(getattr(args, "job_ref")),
+                decision,
+                reason=getattr(args, "reason", None),
+            )
+        except (FileNotFoundError, ValueError) as exc:
+            print(f"Pack job adoption blocked: {exc}", file=sys.stderr)
+            sys.exit(1)
+        if getattr(args, "json_output", False):
+            print(json.dumps(record.to_dict(), indent=2, ensure_ascii=False))
+            if record.errors:
+                sys.exit(1)
+            return
+        print(render_pack_job_adoption_record(record))
+        if record.errors:
+            sys.exit(1)
+        return
+
+    if command == "job-retro":
+        try:
+            retro = PackJobRetrospectiveBuilder().build(root, str(getattr(args, "job_ref")))
+            saved_ref = save_pack_job_retrospective(root, retro)
+        except (FileNotFoundError, ValueError) as exc:
+            print(f"Pack job retrospective blocked: {exc}", file=sys.stderr)
+            sys.exit(1)
+        if getattr(args, "json_output", False):
+            payload = retro.to_dict()
+            payload["saved_ref"] = saved_ref
+            print(json.dumps(payload, indent=2, ensure_ascii=False))
+            return
+        print(render_pack_job_retrospective(retro))
+        print("")
+        print("Saved:")
+        print(f"  {saved_ref}")
+        return
+
+    if command == "retrospectives":
+        pack_ref = getattr(args, "pack_ref", None)
+        limit = int(getattr(args, "limit", 20) or 20)
+        retros = PackRetrospectiveStore().list_job_retros(
+            default_job_retrospectives_dir(root),
+            str(pack_ref) if pack_ref else None,
+        )
+        if getattr(args, "json_output", False):
+            print(json.dumps({"retrospectives": [retro.to_dict() for retro in retros[:limit]]}, indent=2, ensure_ascii=False))
+            return
+        print(render_pack_retrospectives(retros, limit=limit))
+        return
+
+    if command == "retro-summary":
+        pack_ref = getattr(args, "pack_ref", None)
+        summary = PackRetrospectiveSummaryBuilder().build(root, str(pack_ref) if pack_ref else None)
+        saved_ref = save_pack_retro_summary(root, summary) if getattr(args, "save", False) else None
+        if getattr(args, "json_output", False):
+            payload = summary.to_dict()
+            payload["saved_ref"] = saved_ref
+            print(json.dumps(payload, indent=2, ensure_ascii=False))
+            return
+        print(render_pack_retro_summary(summary))
+        if saved_ref:
+            print("")
+            print("Saved:")
+            print(f"  {saved_ref}")
+        return
+
+    if command == "improve":
+        pack_ref = getattr(args, "pack_ref", None)
+        queue = PackImprovementQueueBuilder().build(root, str(pack_ref) if pack_ref else None)
+        saved_ref = save_pack_improvement_queue(root, queue)
+        if getattr(args, "json_output", False):
+            payload = queue.to_dict()
+            payload["saved_ref"] = saved_ref
+            print(json.dumps(payload, indent=2, ensure_ascii=False))
+            return
+        print(render_pack_improvement_queue(queue))
+        print("")
+        print("Saved:")
+        print(f"  {saved_ref}")
+        return
+
+    if command == "improvements":
+        pack_ref = getattr(args, "pack_ref", None)
+        status_filter = getattr(args, "status", None)
+        store = PackImprovementStore()
+        if latest_pack_improvement_queue(root, str(pack_ref) if pack_ref else None) is None:
+            queue = PackImprovementQueueBuilder().build(root, str(pack_ref) if pack_ref else None)
+            save_pack_improvement_queue(root, queue)
+        items = store.list_items(
+            default_pack_improvement_items_dir(root),
+            pack_id=str(pack_ref) if pack_ref else None,
+            status=str(status_filter) if status_filter else None,
+        )
+        if getattr(args, "json_output", False):
+            print(json.dumps({"items": [item.to_dict() for item in items]}, indent=2, ensure_ascii=False))
+            return
+        print(render_pack_improvements(items, status=str(status_filter) if status_filter else None))
+        return
+
+    if command == "improvement-show":
+        try:
+            item_path = resolve_pack_improvement_item_path(root, str(getattr(args, "item_ref")))
+            item = PackImprovementStore().load_item(item_path)
+        except (FileNotFoundError, ValueError) as exc:
+            print(f"Pack improvement show blocked: {exc}", file=sys.stderr)
+            sys.exit(1)
+        if getattr(args, "json_output", False):
+            payload = item.to_dict()
+            payload["path"] = _relative_cli(item_path, root)
+            print(json.dumps(payload, indent=2, ensure_ascii=False))
+            return
+        print(render_pack_improvement_item(item))
+        return
+
+    if command in {"improvement-accept", "improvement-dismiss"}:
+        status = "accepted" if command == "improvement-accept" else "dismissed"
+        try:
+            decision, item, item_ref = record_pack_improvement_decision(
+                root,
+                str(getattr(args, "item_ref")),
+                status,
+                resolution=getattr(args, "resolution", None),
+            )
+        except (FileNotFoundError, ValueError) as exc:
+            print(f"Pack improvement decision blocked: {exc}", file=sys.stderr)
+            sys.exit(1)
+        if getattr(args, "json_output", False):
+            print(json.dumps({"decision": decision.to_dict(), "item": item.to_dict(), "item_ref": item_ref}, indent=2, ensure_ascii=False))
+            return
+        print(render_pack_improvement_decision(decision, item))
+        return
+
+    if command == "derivative-plan":
+        pack_ref = getattr(args, "pack_ref", None)
+        plan = PackDerivativePlanner().build(root, str(pack_ref) if pack_ref else None)
+        saved_ref = save_pack_derivative_plan(root, plan)
+        if getattr(args, "json_output", False):
+            payload = plan.to_dict()
+            payload["saved_ref"] = saved_ref
+            print(json.dumps(payload, indent=2, ensure_ascii=False))
+            return
+        print(render_pack_derivative_plan(plan))
+        print("")
+        print("Saved:")
+        print(f"  {saved_ref}")
+        return
+
+    if command == "derivative-show":
+        try:
+            plan_path = resolve_pack_derivative_plan_path(root, str(getattr(args, "plan_ref")))
+            plan = PackDerivativeStore().load_plan(plan_path)
+        except (FileNotFoundError, ValueError) as exc:
+            print(f"Pack derivative show blocked: {exc}", file=sys.stderr)
+            sys.exit(1)
+        if getattr(args, "json_output", False):
+            payload = plan.to_dict()
+            payload["path"] = _relative_cli(plan_path, root)
+            print(json.dumps(payload, indent=2, ensure_ascii=False))
+            return
+        print(render_pack_derivative_plan(plan))
+        return
+
+    if command == "derivative-create":
+        try:
+            workspace = PackDerivativeCreator().create(
+                root,
+                Path(str(getattr(args, "plan_ref"))),
+                str(getattr(args, "target_pack_id")),
+                version=getattr(args, "version", None),
+            )
+            saved_ref = save_pack_derivative_workspace(root, workspace)
+        except (FileNotFoundError, ValueError) as exc:
+            print(f"Pack derivative create blocked: {exc}", file=sys.stderr)
+            sys.exit(1)
+        if getattr(args, "json_output", False):
+            payload = workspace.to_dict()
+            payload["saved_ref"] = saved_ref
+            print(json.dumps(payload, indent=2, ensure_ascii=False))
+            if workspace.status in {"blocked", "failed"}:
+                sys.exit(1)
+            return
+        print(render_pack_derivative_workspace(workspace))
+        print("")
+        print("Saved:")
+        print(f"  {saved_ref}")
+        if workspace.status in {"blocked", "failed"}:
+            sys.exit(1)
+        return
+
+    if command == "derivative-workbench":
+        try:
+            workbench = PackVNextWorkbenchBuilder().build(root, Path(str(getattr(args, "plan_ref"))))
+            saved_ref = save_pack_vnext_workbench(root, workbench)
+        except (FileNotFoundError, ValueError) as exc:
+            print(f"Pack derivative workbench blocked: {exc}", file=sys.stderr)
+            sys.exit(1)
+        if getattr(args, "json_output", False):
+            payload = workbench.to_dict()
+            payload["saved_ref"] = saved_ref
+            print(json.dumps(payload, indent=2, ensure_ascii=False))
+            return
+        print(render_pack_vnext_workbench(workbench))
+        print("")
+        print("Saved:")
+        print(f"  {saved_ref}")
+        return
+
+    if command == "workorders":
+        pack_ref = getattr(args, "pack_ref", None)
+        status_filter = getattr(args, "status", None)
+        orders = PackWorkOrderStore().list_workorders(
+            default_pack_vnext_workorders_dir(root),
+            pack_id=str(pack_ref) if pack_ref else None,
+            status=str(status_filter) if status_filter else None,
+        )
+        if getattr(args, "json_output", False):
+            print(json.dumps({"items": [order.to_dict() for order in orders]}, indent=2, ensure_ascii=False))
+            return
+        print(render_pack_workorders(orders, status=str(status_filter) if status_filter else None))
+        return
+
+    if command == "workorder-show":
+        try:
+            order_path = resolve_pack_workorder_path(root, str(getattr(args, "workorder_ref")))
+            order = PackWorkOrderStore().load_workorder(order_path)
+        except (FileNotFoundError, ValueError) as exc:
+            print(f"Pack workorder show blocked: {exc}", file=sys.stderr)
+            sys.exit(1)
+        if getattr(args, "json_output", False):
+            payload = order.to_dict()
+            payload["path"] = _relative_cli(order_path, root)
+            print(json.dumps(payload, indent=2, ensure_ascii=False))
+            return
+        print(render_pack_workorder(order))
+        return
+
+    if command in {"workorder-done", "workorder-skip"}:
+        status = "done" if command == "workorder-done" else "skipped"
+        try:
+            decision, order, order_ref = record_pack_workorder_decision(
+                root,
+                str(getattr(args, "workorder_ref")),
+                status,
+                note=getattr(args, "note", None),
+                evidence_refs=list(getattr(args, "evidence", []) or []),
+            )
+        except (FileNotFoundError, ValueError) as exc:
+            print(f"Pack workorder decision blocked: {exc}", file=sys.stderr)
+            sys.exit(1)
+        if getattr(args, "json_output", False):
+            print(json.dumps({"decision": decision.to_dict(), "workorder": order.to_dict(), "workorder_ref": order_ref}, indent=2, ensure_ascii=False))
+            return
+        print(render_pack_workorder_decision(decision, order))
+        return
+
+    if command == "job-show":
+        try:
+            job_path = resolve_pack_job_path(root, str(getattr(args, "job_ref")))
+            job = PackJobStore().load(job_path)
+        except (FileNotFoundError, ValueError) as exc:
+            print(f"Pack job show blocked: {exc}", file=sys.stderr)
+            sys.exit(1)
+        if getattr(args, "json_output", False):
+            payload = job.to_dict()
+            payload["path"] = _relative_cli(job_path, root)
+            print(json.dumps(payload, indent=2, ensure_ascii=False))
+            return
+        print(render_pack_job(job))
+        return
+
+    if command == "job-next":
+        try:
+            job_path = resolve_pack_job_path(root, str(getattr(args, "job_ref")))
+            job = PackJobStore().load(job_path)
+        except (FileNotFoundError, ValueError) as exc:
+            print(f"Pack job next blocked: {exc}", file=sys.stderr)
+            sys.exit(1)
+        actions = PackJobNextBuilder().build(root, job)
+        if getattr(args, "json_output", False):
+            print(json.dumps({"job": job.to_dict(), "next_actions": actions}, indent=2, ensure_ascii=False))
+            return
+        print(render_pack_job_next(job, actions))
+        return
+
+    if command == "activate":
+        pack_ref = str(getattr(args, "pack_ref"))
+        try:
+            readiness = PackReadinessBuilder().build(root, pack_ref)
+            if readiness.readiness_status == "blocked":
+                if not readiness.installed:
+                    print("Pack is not installed.", file=sys.stderr)
+                print(render_pack_readiness(readiness), file=sys.stderr)
+                sys.exit(1)
+            context = PackActivator().activate(root, pack_ref)
+            guide = PackNextGuideBuilder().build(root)
+        except KeyError as exc:
+            print(str(exc.args[0]), file=sys.stderr)
+            sys.exit(1)
+        safe_record_pack_usage_from_context(
+            root,
+            context,
+            event_kind="activated",
+            surface_kind="pack_active",
+            summary="pack activated as current work context",
+        )
+        if getattr(args, "json_output", False):
+            print(json.dumps({"active_pack": context.to_dict(), "next": guide.to_dict(), "readiness": readiness.to_dict()}, indent=2, ensure_ascii=False))
+            return
+        print(render_pack_activated(context, guide))
+        compact_readiness = render_pack_readiness_compact(readiness)
+        if compact_readiness and readiness.readiness_status != "ready":
+            print(compact_readiness)
+        return
+
+    if command == "active":
+        context = current_active_pack(root)
+        guide = PackNextGuideBuilder().build(root) if context is not None else None
+        if getattr(args, "json_output", False):
+            print(json.dumps({"active_pack": context.to_dict() if context else None}, indent=2, ensure_ascii=False))
+            return
+        print(render_active_pack(context, guide))
+        if context is not None:
+            upgrade_hint = render_pack_upgrade_available(latest_pack_local_release(root, context.pack_id), context.pack_id)
+            if upgrade_hint:
+                print(upgrade_hint)
+        return
+
+    if command == "next":
+        pack_ref = getattr(args, "pack_ref", None)
+        try:
+            guide = PackNextGuideBuilder().build(root, str(pack_ref) if pack_ref else None)
+            readiness = PackReadinessBuilder().build(root, str(pack_ref) if pack_ref else None)
+        except KeyError as exc:
+            print(str(exc.args[0]), file=sys.stderr)
+            sys.exit(1)
+        safe_record_pack_usage_event(
+            root,
+            event_kind="surfaced",
+            surface_kind="pack_next",
+            summary="pack next guide surfaced",
+        )
+        if getattr(args, "json_output", False):
+            print(json.dumps({"next": guide.to_dict(), "readiness": readiness.to_dict()}, indent=2, ensure_ascii=False))
+            return
+        compact_readiness = render_pack_readiness_compact(readiness)
+        if compact_readiness and readiness.readiness_status != "ready":
+            print(compact_readiness)
+            setup_plan = latest_pack_setup_plan(root, readiness.pack_id)
+            setup_text = render_pack_setup_compact(setup_plan) or render_pack_setup_prompt(readiness)
+            if setup_text:
+                print(setup_text)
+        print(render_pack_next(guide))
+        if guide.errors:
+            sys.exit(1)
+        return
+
+    if command == "deactivate":
+        context = PackActivator().deactivate(root)
+        safe_record_pack_usage_from_context(
+            root,
+            context,
+            event_kind="deactivated",
+            surface_kind="pack_active",
+            summary="pack deactivated as current work context",
+        )
+        if getattr(args, "json_output", False):
+            print(json.dumps(context.to_dict(), indent=2, ensure_ascii=False))
+            return
+        print(render_pack_deactivated(context))
+        return
+
+    if command == "usage":
+        pack_ref = getattr(args, "pack_ref", None)
+        summary = PackUsageSummaryBuilder().build(root, str(pack_ref) if pack_ref else None)
+        saved_path = None
+        if getattr(args, "save", False):
+            saved_path = PackUsageSummaryStore().save(summary, default_usage_summary_path(root, summary))
+        if getattr(args, "json_output", False):
+            payload = summary.to_dict()
+            payload["saved_path"] = str(saved_path.resolve()) if saved_path else None
+            print(json.dumps(payload, indent=2, ensure_ascii=False))
+            return
+        print(render_pack_usage(summary))
+        if saved_path is not None:
+            print("")
+            print("Saved:")
+            print(f"  {_relative_cli(saved_path, root)}")
+        return
+
+    if command == "events":
+        pack_ref = getattr(args, "pack_ref", None)
+        events = PackUsageEventStore().list_events(default_usage_events_dir(root), str(pack_ref) if pack_ref else None)
+        kind = getattr(args, "kind", None)
+        if kind:
+            events = [event for event in events if event.event_kind == kind]
+        limit = int(getattr(args, "limit", 20) or 20)
+        if getattr(args, "json_output", False):
+            print(json.dumps({"events": [event.to_dict() for event in events[:limit]]}, indent=2, ensure_ascii=False))
+            return
+        print(render_pack_events(events, limit=limit))
+        return
+
+    if command == "outcomes":
+        pack_ref = getattr(args, "pack_ref", None)
+        links = PackOutcomeLinkBuilder().build_links(root, str(pack_ref) if pack_ref else None)
+        saved_link_refs = save_pack_outcome_links(root, links) if getattr(args, "save", False) else []
+        summary = PackUsageSummaryBuilder().build(root, str(pack_ref) if pack_ref else None)
+        saved_path = None
+        if getattr(args, "save", False):
+            saved_path = PackUsageSummaryStore().save(summary, default_usage_summary_path(root, summary))
+        if getattr(args, "json_output", False):
+            payload = summary.to_dict()
+            payload["outcome_links"] = [link.to_dict() for link in links]
+            payload["saved_link_refs"] = saved_link_refs
+            payload["saved_path"] = str(saved_path.resolve()) if saved_path else None
+            print(json.dumps(payload, indent=2, ensure_ascii=False))
+            return
+        print(render_pack_outcomes(summary))
+        if saved_path is not None:
+            print("")
+            print("Saved:")
+            print(f"  {_relative_cli(saved_path, root)}")
+        return
+
+    if command == "proof":
+        pack_ref = getattr(args, "pack_ref", None)
+        try:
+            card = PackProofBuilder().build(root, str(pack_ref) if pack_ref else None)
+        except (KeyError, FileNotFoundError, ValueError) as exc:
+            print(f"Pack proof blocked: {exc}", file=sys.stderr)
+            sys.exit(1)
+        saved_paths: dict[str, str] = {}
+        if getattr(args, "save", False):
+            saved_paths = save_pack_proof_card(root, card, format_kind=str(getattr(args, "format", "both")))
+        if getattr(args, "json_output", False):
+            payload = card.to_dict()
+            payload["saved_paths"] = saved_paths
+            print(json.dumps(payload, indent=2, ensure_ascii=False))
+            return
+        print(render_pack_proof_card(card))
+        if saved_paths:
+            print("")
+            print("Saved:")
+            for item in saved_paths.values():
+                print(f"  {item}")
+        return
+
+    if command == "proof-show":
+        try:
+            proof_path = resolve_pack_proof_path(root, str(getattr(args, "proof_ref")))
+            card = PackProofStore().load_yaml(proof_path)
+        except (FileNotFoundError, ValueError) as exc:
+            print(f"Pack proof show blocked: {exc}", file=sys.stderr)
+            sys.exit(1)
+        if getattr(args, "json_output", False):
+            payload = card.to_dict()
+            payload["path"] = _relative_cli(proof_path, root)
+            print(json.dumps(payload, indent=2, ensure_ascii=False))
+            return
+        print(render_pack_proof_card(card))
+        return
+
+    if command == "proof-export":
+        pack_ref = getattr(args, "pack_ref", None)
+        proof_ref = getattr(args, "proof", None)
+        out_ref = getattr(args, "out", None)
+        try:
+            snapshot = PackProofExporter().export(
+                root,
+                str(pack_ref) if pack_ref else None,
+                source_proof_path=Path(str(proof_ref)) if proof_ref else None,
+                out_path=Path(str(out_ref)) if out_ref else None,
+            )
+        except (KeyError, FileNotFoundError, ValueError) as exc:
+            print(f"Pack proof export blocked: {exc}", file=sys.stderr)
+            sys.exit(1)
+        if getattr(args, "json_output", False):
+            print(json.dumps(snapshot.to_dict(), indent=2, ensure_ascii=False))
+            if snapshot.privacy_classification == "blocked_sensitive":
+                sys.exit(1)
+            return
+        print(render_pack_proof_export(snapshot))
+        if snapshot.privacy_classification == "blocked_sensitive":
+            sys.exit(1)
+        return
+
+    if command == "proof-export-show":
+        try:
+            export_path = resolve_pack_proof_export_path(root, str(getattr(args, "export_ref")))
+            snapshot = PackProofExportStore().load_yaml(export_path)
+        except (FileNotFoundError, ValueError) as exc:
+            print(f"Pack proof export show blocked: {exc}", file=sys.stderr)
+            sys.exit(1)
+        if getattr(args, "json_output", False):
+            payload = snapshot.to_dict()
+            payload["path"] = _relative_cli(export_path, root)
+            print(json.dumps(payload, indent=2, ensure_ascii=False))
+            return
+        print(render_pack_proof_export(snapshot))
+        return
+
+    if command == "search":
+        query = getattr(args, "query", None)
+        registry_name = getattr(args, "registry", None)
+        kind = getattr(args, "kind", None)
+        registry_packs = PackRegistryResolver().search(
+            root,
+            query=str(query) if query else None,
+            registry_name=str(registry_name) if registry_name else None,
+            kind=kind,
+        )
+        local_packs: list[SyncedRegistryPack] = []
+        if not registry_name:
+            catalog = load_default_catalog(repo_root)
+            if not catalog.errors:
+                needle = str(query or "").strip().lower()
+                for entry in catalog.entries:
+                    if kind and entry.pack_kind != kind:
+                        continue
+                    haystack = " ".join([entry.pack_id, entry.pack_name, entry.description or "", " ".join(entry.tags)]).lower()
+                    if needle and needle not in haystack:
+                        continue
+                    local_packs.append(
+                        SyncedRegistryPack(
+                            pack_id=entry.pack_id,
+                            pack_name=entry.pack_name,
+                            pack_kind=entry.pack_kind,
+                            version=entry.version,
+                            namespace=entry.namespace or "local",
+                            description=entry.description,
+                            tags=list(entry.tags),
+                            maturity=entry.maturity,
+                            proof_status=entry.proof_status,
+                            compatibility=dict(entry.compatibility),
+                            known_limits=list(entry.known_limits),
+                            manifest_ref=entry.manifest_path,
+                            manifest_sha256=entry.manifest_sha256,
+                            registry_name="local",
+                            registry_source_ref="packs/catalog.yaml",
+                            dependencies=list(entry.dependencies),
+                            trust_level=entry.trust_level or "local",
+                            warnings=list(entry.warnings),
+                        )
+                    )
+        packs = [*local_packs, *registry_packs]
+        if getattr(args, "json_output", False):
+            print(json.dumps(pack_search_payload(packs), indent=2, ensure_ascii=False))
+            return
+        print(render_pack_search(packs))
+        return
+
+    catalog = load_default_catalog(repo_root)
+    if catalog.errors:
+        print(f"Pack catalog blocked: {catalog.errors[0]}", file=sys.stderr)
+        sys.exit(1)
+
+    if command == "list":
+        kind = getattr(args, "kind", None)
+        payload = catalog_payload(catalog, root, repo_root, kind=kind)
+        latest_rc_for_list = latest_pack_rc(root)
+        latest_release_for_list = latest_pack_local_release(root)
+        if latest_rc_for_list is not None:
+            payload["latest_release_candidate"] = latest_rc_for_list.to_dict()
+        if latest_release_for_list is not None:
+            payload["latest_local_release"] = latest_release_for_list.to_dict()
+        if getattr(args, "json_output", False):
+            print(json.dumps(payload, indent=2, ensure_ascii=False))
+            return
+        entries = [PackCatalogResolver().find_entry(catalog, item["entry"]["pack_id"]) for item in payload["packs"]]
+        fits = {
+            item["entry"]["pack_id"]: PackFitAnalyzer().analyze(root, PackCatalogResolver().find_entry(catalog, item["entry"]["pack_id"]))
+            for item in payload["packs"]
+        }
+        print(render_pack_list(entries, fits))
+        compact_rc = render_pack_rc_compact(latest_rc_for_list, latest_release_for_list)
+        if compact_rc:
+            print(compact_rc)
+        return
+
+    if command == "show":
+        registry_name = getattr(args, "registry", None)
+        if registry_name:
+            try:
+                pack = PackRegistryResolver().resolve_pack(
+                    root,
+                    str(getattr(args, "pack_ref")),
+                    registry_name=str(registry_name),
+                )
+                readiness = PackReadinessBuilder().build(
+                    root,
+                    str(getattr(args, "pack_ref")),
+                    registry_name=str(registry_name),
+                )
+            except KeyError as exc:
+                print(f"Registry pack not found: {exc.args[0]}", file=sys.stderr)
+                sys.exit(1)
+            if getattr(args, "json_output", False):
+                payload = registry_pack_show_payload(pack, root)
+                payload["readiness"] = readiness.to_dict()
+                print(json.dumps(payload, indent=2, ensure_ascii=False))
+                return
+            print(render_registry_pack_show(pack, root))
+            compact_readiness = render_pack_readiness_compact(readiness)
+            if compact_readiness:
+                print(compact_readiness)
+            return
+
+        resolver = PackCatalogResolver()
+        try:
+            entry = resolver.find_entry(catalog, str(getattr(args, "pack_ref")))
+            manifest_path, manifest = manifest_for_entry(repo_root, entry)
+        except (KeyError, FileNotFoundError, ValueError) as exc:
+            print(f"Pack not found: {exc}", file=sys.stderr)
+            sys.exit(1)
+        fit = PackFitAnalyzer().analyze(root, entry)
+        payload = {
+            "entry": entry.to_dict(),
+            "fit": fit.to_dict(),
+            "manifest_path": _relative_cli(manifest_path, repo_root),
+            "includes": {
+                "workers": len(manifest.workers),
+                "teams": len(manifest.teams),
+                "templates": len(manifest.templates),
+                "benchmarks": len(manifest.benchmarks),
+            },
+        }
+        usage_summary = PackUsageSummaryBuilder().build(root, entry.pack_id)
+        payload["local_usage"] = usage_summary.to_dict()
+        proof_card = latest_pack_proof_card(root, entry.pack_id)
+        if proof_card is not None:
+            payload["local_proof"] = proof_card.to_dict()
+        retro_summary = latest_pack_retro_summary(root, entry.pack_id)
+        if retro_summary is not None:
+            payload["local_retrospective"] = retro_summary.to_dict()
+        improvement_queue = latest_pack_improvement_queue(root, entry.pack_id)
+        if improvement_queue is not None:
+            payload["local_improvements"] = improvement_queue.to_dict()
+        derivative_plan = latest_pack_derivative_plan(root, entry.pack_id)
+        if derivative_plan is not None:
+            payload["local_derivative"] = derivative_plan.to_dict()
+        vnext_workbench = latest_pack_vnext_workbench(root, entry.pack_id)
+        if vnext_workbench is not None:
+            payload["local_vnext_workbench"] = vnext_workbench.to_dict()
+        release_candidate = latest_pack_rc(root, entry.pack_id)
+        if release_candidate is not None:
+            payload["local_release_candidate"] = release_candidate.to_dict()
+        local_release = latest_pack_local_release(root, entry.pack_id)
+        if local_release is not None:
+            payload["local_release"] = local_release.to_dict()
+        rollout_plan = latest_pack_rollout(root, entry.pack_id)
+        if rollout_plan is not None:
+            payload["local_rollout"] = rollout_plan.to_dict()
+        readiness = PackReadinessBuilder().build(root, entry.pack_id)
+        payload["readiness"] = readiness.to_dict()
+        if getattr(args, "json_output", False):
+            print(json.dumps(payload, indent=2, ensure_ascii=False))
+            return
+        print(render_pack_show(entry, manifest, fit, manifest_path, repo_root))
+        compact_readiness = render_pack_readiness_compact(readiness)
+        if compact_readiness:
+            print(compact_readiness)
+        compact_usage = render_pack_usage_compact(usage_summary)
+        if compact_usage:
+            print(compact_usage)
+        compact_proof = render_pack_proof_compact(proof_card)
+        if compact_proof:
+            print(compact_proof)
+        compact_retro = render_pack_retro_summary_compact(retro_summary)
+        if compact_retro:
+            print(compact_retro)
+        compact_improvement = render_pack_improvement_compact(improvement_queue)
+        if compact_improvement:
+            print(compact_improvement)
+        compact_derivative = render_pack_derivative_compact(derivative_plan)
+        if compact_derivative:
+            print(compact_derivative)
+        compact_vnext = render_pack_vnext_compact(vnext_workbench)
+        if compact_vnext:
+            print(compact_vnext)
+        compact_rc = render_pack_rc_compact(release_candidate, local_release)
+        if compact_rc:
+            print(compact_rc)
+        compact_rollout = render_pack_rollout_compact(rollout_plan)
+        if compact_rollout:
+            print(compact_rollout)
+        return
+
+    if command == "recommend":
+        entry, fit = best_recommendation(catalog, root)
+        proof_card = latest_pack_proof_card(root, entry.pack_id) if entry else None
+        readiness = PackReadinessBuilder().build(root, entry.pack_id) if entry else None
+        retro_summary = latest_pack_retro_summary(root, entry.pack_id) if entry else None
+        improvement_queue = latest_pack_improvement_queue(root, entry.pack_id) if entry else None
+        payload = {
+            "entry": entry.to_dict() if entry else None,
+            "fit": fit.to_dict() if fit else None,
+            "local_proof": proof_card.to_dict() if proof_card else None,
+            "readiness": readiness.to_dict() if readiness else None,
+            "local_retrospective": retro_summary.to_dict() if retro_summary else None,
+            "local_improvements": improvement_queue.to_dict() if improvement_queue else None,
+        }
+        if getattr(args, "json_output", False):
+            print(json.dumps(payload, indent=2, ensure_ascii=False))
+            return
+        print(render_pack_recommend(entry, fit))
+        compact_readiness = render_pack_readiness_compact(readiness)
+        if compact_readiness:
+            print(compact_readiness)
+        compact_proof = render_pack_proof_compact(proof_card)
+        if compact_proof:
+            print(compact_proof)
+        compact_retro = render_pack_retro_summary_compact(retro_summary)
+        if compact_retro:
+            print(compact_retro)
+        compact_improvement = render_pack_improvement_compact(improvement_queue)
+        if compact_improvement:
+            print(compact_improvement)
+        return
+
+    if command == "verify":
+        target = str(getattr(args, "pack_ref"))
+        verifier = PackVerifier()
+        try:
+            target_path = Path(target)
+            if target_path.exists():
+                report = verifier.verify_manifest(target_path)
+            else:
+                report = verifier.verify_catalog_pack(Path(__file__).resolve().parents[1], target)
+        except (KeyError, FileNotFoundError, ValueError) as exc:
+            print(f"Pack verify blocked: {exc}", file=sys.stderr)
+            sys.exit(1)
+        if getattr(args, "save", False):
+            save_pack_verification(root, report)
+        if getattr(args, "json_output", False):
+            print(json.dumps(report.to_dict(), indent=2, ensure_ascii=False))
+            return
+        print(render_pack_verify(report))
+        if report.status == "failed":
+            sys.exit(1)
+        return
+
+    print("알 수 없는 pack 하위 명령입니다.", file=sys.stderr)
+    sys.exit(1)
+
+
+def _handle_pack_launch_path(args: argparse.Namespace, root: Path, repo_root: Path, command: str) -> None:
+    """출시 골든패스 pack 명령을 가벼운 branch-local import로 처리한다."""
+    if command == "list":
+        from engine.project_pack_catalog import (
+            PackCatalogResolver,
+            PackFitAnalyzer,
+            catalog_payload,
+            load_default_catalog,
+            render_pack_list,
+        )
+
+        catalog = load_default_catalog(repo_root)
+        if catalog.errors:
+            print(f"Pack catalog blocked: {catalog.errors[0]}", file=sys.stderr)
+            sys.exit(1)
+        kind = getattr(args, "kind", None)
+        payload = catalog_payload(catalog, root, repo_root, kind=kind)
+        if getattr(args, "json_output", False):
+            print(json.dumps(payload, indent=2, ensure_ascii=False))
+            return
+        entries = [PackCatalogResolver().find_entry(catalog, item["entry"]["pack_id"]) for item in payload["packs"]]
+        fits = {
+            item["entry"]["pack_id"]: PackFitAnalyzer().analyze(root, PackCatalogResolver().find_entry(catalog, item["entry"]["pack_id"]))
+            for item in payload["packs"]
+        }
+        print(render_pack_list(entries, fits))
+        return
+
+    if command == "show":
+        from engine.project_pack_catalog import (
+            PackCatalogResolver,
+            PackFitAnalyzer,
+            load_default_catalog,
+            manifest_for_entry,
+            render_pack_show,
+        )
+        from engine.project_pack_readiness import PackReadinessBuilder, render_pack_readiness_compact
+        from engine.project_pack_usage import PackUsageSummaryBuilder, render_pack_usage_compact
+        from engine.project_pack_proof import latest_pack_proof_card, render_pack_proof_compact
+        from engine.project_pack_retrospective import latest_pack_retro_summary, render_pack_retro_summary_compact
+        from engine.project_pack_improvements import latest_pack_improvement_queue, render_pack_improvement_compact
+
+        registry_name = getattr(args, "registry", None)
+        if registry_name:
+            from engine.project_pack_registry import PackRegistryResolver, registry_pack_show_payload, render_registry_pack_show
+
+            try:
+                pack = PackRegistryResolver().resolve_pack(
+                    root,
+                    str(getattr(args, "pack_ref")),
+                    registry_name=str(registry_name),
+                )
+                readiness = PackReadinessBuilder().build(
+                    root,
+                    str(getattr(args, "pack_ref")),
+                    registry_name=str(registry_name),
+                )
+            except KeyError as exc:
+                print(f"Registry pack not found: {exc.args[0]}", file=sys.stderr)
+                sys.exit(1)
+            if getattr(args, "json_output", False):
+                payload = registry_pack_show_payload(pack, root)
+                payload["readiness"] = readiness.to_dict()
+                print(json.dumps(payload, indent=2, ensure_ascii=False))
+                return
+            print(render_registry_pack_show(pack, root))
+            compact_readiness = render_pack_readiness_compact(readiness)
+            if compact_readiness:
+                print(compact_readiness)
+            return
+
+        catalog = load_default_catalog(repo_root)
+        if catalog.errors:
+            print(f"Pack catalog blocked: {catalog.errors[0]}", file=sys.stderr)
+            sys.exit(1)
+        resolver = PackCatalogResolver()
+        try:
+            entry = resolver.find_entry(catalog, str(getattr(args, "pack_ref")))
+            manifest_path, manifest = manifest_for_entry(repo_root, entry)
+        except (KeyError, FileNotFoundError, ValueError) as exc:
+            print(f"Pack not found: {exc}", file=sys.stderr)
+            sys.exit(1)
+        fit = PackFitAnalyzer().analyze(root, entry)
+        usage_summary = PackUsageSummaryBuilder().build(root, entry.pack_id)
+        proof_card = latest_pack_proof_card(root, entry.pack_id)
+        retro_summary = latest_pack_retro_summary(root, entry.pack_id)
+        improvement_queue = latest_pack_improvement_queue(root, entry.pack_id)
+        readiness = PackReadinessBuilder().build(root, entry.pack_id)
+        payload = {
+            "entry": entry.to_dict(),
+            "fit": fit.to_dict(),
+            "manifest_path": str(manifest_path.relative_to(repo_root)).replace("\\", "/"),
+            "includes": {
+                "workers": len(manifest.workers),
+                "teams": len(manifest.teams),
+                "templates": len(manifest.templates),
+                "benchmarks": len(manifest.benchmarks),
+            },
+            "local_usage": usage_summary.to_dict(),
+            "readiness": readiness.to_dict(),
+        }
+        if proof_card is not None:
+            payload["local_proof"] = proof_card.to_dict()
+        if retro_summary is not None:
+            payload["local_retrospective"] = retro_summary.to_dict()
+        if improvement_queue is not None:
+            payload["local_improvements"] = improvement_queue.to_dict()
+        if getattr(args, "json_output", False):
+            print(json.dumps(payload, indent=2, ensure_ascii=False))
+            return
+        print(render_pack_show(entry, manifest, fit, manifest_path, repo_root))
+        for compact in [
+            render_pack_readiness_compact(readiness),
+            render_pack_usage_compact(usage_summary),
+            render_pack_proof_compact(proof_card),
+            render_pack_retro_summary_compact(retro_summary),
+            render_pack_improvement_compact(improvement_queue),
+        ]:
+            if compact:
+                print(compact)
+        return
+
+    if command in {"doctor", "readiness"}:
+        from engine.project_pack_readiness import PackReadinessBuilder, render_pack_readiness, save_pack_readiness_report
+        from engine.project_pack_setup import latest_pack_setup_plan, render_pack_setup_compact, render_pack_setup_prompt
+
+        pack_ref = getattr(args, "pack_ref", None)
+        registry_name = getattr(args, "registry", None)
+        try:
+            report = PackReadinessBuilder().build(
+                root,
+                str(pack_ref) if pack_ref else None,
+                registry_name=str(registry_name) if registry_name else None,
+            )
+        except KeyError as exc:
+            print(f"Pack doctor blocked: {exc.args[0]}", file=sys.stderr)
+            sys.exit(1)
+        if getattr(args, "save", False):
+            save_pack_readiness_report(root, report)
+        if getattr(args, "json_output", False):
+            print(json.dumps(report.to_dict(), indent=2, ensure_ascii=False))
+            return
+        print(render_pack_readiness(report))
+        setup_plan = latest_pack_setup_plan(root, report.pack_id)
+        setup_text = render_pack_setup_compact(setup_plan) or render_pack_setup_prompt(report)
+        if setup_text:
+            print(setup_text)
+        return
+
+    if command == "start":
+        from engine.project_pack_jobs import PackJobStarter, render_pack_job_started
+
+        try:
+            pack_ref, request = _parse_pack_start_args(args)
+            result = PackJobStarter().start(
+                root,
+                request,
+                pack_ref=pack_ref,
+                mode=str(getattr(args, "mode", "bridge") or "bridge"),
+            )
+        except (KeyError, FileNotFoundError, ValueError) as exc:
+            print(f"Pack start blocked: {exc}", file=sys.stderr)
+            sys.exit(1)
+        if getattr(args, "json_output", False):
+            print(json.dumps(result.to_dict(), indent=2, ensure_ascii=False))
+            if result.job.status == "blocked":
+                sys.exit(1)
+            return
+        print(render_pack_job_started(result))
+        if result.job.status == "blocked":
+            sys.exit(1)
+        return
+
+    if command == "job-paste":
+        from engine.project_pack_job_reply import PackJobReplyHandler, render_pack_job_reply_result
+
+        reply_text = sys.stdin.read()
+        try:
+            result = PackJobReplyHandler().paste(root, str(getattr(args, "job_ref")), reply_text)
+        except (FileNotFoundError, ValueError) as exc:
+            print(f"Pack job paste blocked: {exc}", file=sys.stderr)
+            sys.exit(1)
+        if getattr(args, "json_output", False):
+            print(json.dumps(result.to_dict(), indent=2, ensure_ascii=False))
+            if result.status in {"blocked", "failed"}:
+                sys.exit(1)
+            return
+        print(render_pack_job_reply_result(result))
+        if result.status in {"blocked", "failed"}:
+            sys.exit(1)
+        return
+
+    if command == "job-ingest":
+        from engine.project_pack_job_reply import PackJobReplyHandler, render_pack_job_reply_result
+
+        try:
+            result = PackJobReplyHandler().ingest(
+                root,
+                str(getattr(args, "job_ref")),
+                Path(str(getattr(args, "reply_file"))),
+            )
+        except (FileNotFoundError, ValueError) as exc:
+            print(f"Pack job ingest blocked: {exc}", file=sys.stderr)
+            sys.exit(1)
+        if getattr(args, "json_output", False):
+            print(json.dumps(result.to_dict(), indent=2, ensure_ascii=False))
+            if result.status in {"blocked", "failed"}:
+                sys.exit(1)
+            return
+        print(render_pack_job_reply_result(result))
+        if result.status in {"blocked", "failed"}:
+            sys.exit(1)
+        return
+
+    if command == "job-validate":
+        from engine.project_pack_job_reply import PackJobValidator, render_pack_job_validation_result
+
+        try:
+            result = PackJobValidator().validate(root, str(getattr(args, "job_ref")))
+        except (FileNotFoundError, ValueError) as exc:
+            print(f"Pack job validate blocked: {exc}", file=sys.stderr)
+            sys.exit(1)
+        if getattr(args, "json_output", False):
+            print(json.dumps(result.to_dict(), indent=2, ensure_ascii=False))
+            if result.validation_status in {"blocked", "failed", "not_ready"}:
+                sys.exit(1)
+            return
+        print(render_pack_job_validation_result(result))
+        if result.validation_status in {"blocked", "failed", "not_ready"}:
+            sys.exit(1)
+        return
+
+    if command == "activate":
+        from engine.project_pack_activation import PackActivator, PackNextGuideBuilder, render_pack_activated
+        from engine.project_pack_readiness import PackReadinessBuilder, render_pack_readiness, render_pack_readiness_compact
+        from engine.project_pack_usage import safe_record_pack_usage_from_context
+
+        pack_ref = str(getattr(args, "pack_ref"))
+        try:
+            readiness = PackReadinessBuilder().build(root, pack_ref)
+            if readiness.readiness_status == "blocked":
+                if not readiness.installed:
+                    print("Pack is not installed.", file=sys.stderr)
+                print(render_pack_readiness(readiness), file=sys.stderr)
+                sys.exit(1)
+            context = PackActivator().activate(root, pack_ref)
+            guide = PackNextGuideBuilder().build(root)
+        except KeyError as exc:
+            print(str(exc.args[0]), file=sys.stderr)
+            sys.exit(1)
+        safe_record_pack_usage_from_context(
+            root,
+            context,
+            event_kind="activated",
+            surface_kind="pack_active",
+            summary="pack activated as current work context",
+        )
+        if getattr(args, "json_output", False):
+            print(json.dumps({"active_pack": context.to_dict(), "next": guide.to_dict(), "readiness": readiness.to_dict()}, indent=2, ensure_ascii=False))
+            return
+        print(render_pack_activated(context, guide))
+        compact_readiness = render_pack_readiness_compact(readiness)
+        if compact_readiness and readiness.readiness_status != "ready":
+            print(compact_readiness)
+        return
+
+    if command == "active":
+        from engine.project_pack_activation import PackNextGuideBuilder, current_active_pack, render_active_pack
+
+        context = current_active_pack(root)
+        guide = PackNextGuideBuilder().build(root) if context is not None else None
+        if getattr(args, "json_output", False):
+            print(json.dumps({"active_pack": context.to_dict() if context else None}, indent=2, ensure_ascii=False))
+            return
+        print(render_active_pack(context, guide))
+        return
+
+    if command == "next":
+        from engine.project_pack_activation import PackNextGuideBuilder, render_pack_next
+        from engine.project_pack_readiness import PackReadinessBuilder, render_pack_readiness_compact
+        from engine.project_pack_setup import latest_pack_setup_plan, render_pack_setup_compact, render_pack_setup_prompt
+        from engine.project_pack_usage import safe_record_pack_usage_event
+
+        pack_ref = getattr(args, "pack_ref", None)
+        try:
+            guide = PackNextGuideBuilder().build(root, str(pack_ref) if pack_ref else None)
+            readiness = PackReadinessBuilder().build(root, str(pack_ref) if pack_ref else None)
+        except KeyError as exc:
+            print(str(exc.args[0]), file=sys.stderr)
+            sys.exit(1)
+        safe_record_pack_usage_event(
+            root,
+            event_kind="surfaced",
+            surface_kind="pack_next",
+            summary="pack next guide surfaced",
+        )
+        if getattr(args, "json_output", False):
+            print(json.dumps({"next": guide.to_dict(), "readiness": readiness.to_dict()}, indent=2, ensure_ascii=False))
+            return
+        compact_readiness = render_pack_readiness_compact(readiness)
+        if compact_readiness and readiness.readiness_status != "ready":
+            print(compact_readiness)
+            setup_plan = latest_pack_setup_plan(root, readiness.pack_id)
+            setup_text = render_pack_setup_compact(setup_plan) or render_pack_setup_prompt(readiness)
+            if setup_text:
+                print(setup_text)
+        print(render_pack_next(guide))
+        if guide.errors:
+            sys.exit(1)
+        return
+
+    if command == "proof":
+        from engine.project_pack_proof import PackProofBuilder, render_pack_proof_card, save_pack_proof_card
+
+        pack_ref = getattr(args, "pack_ref", None)
+        try:
+            card = PackProofBuilder().build(root, str(pack_ref) if pack_ref else None)
+        except (KeyError, FileNotFoundError, ValueError) as exc:
+            print(f"Pack proof blocked: {exc}", file=sys.stderr)
+            sys.exit(1)
+        saved_paths: dict[str, str] = {}
+        if getattr(args, "save", False):
+            saved_paths = save_pack_proof_card(root, card, format_kind=str(getattr(args, "format", "both")))
+        if getattr(args, "json_output", False):
+            payload = card.to_dict()
+            payload["saved_paths"] = saved_paths
+            print(json.dumps(payload, indent=2, ensure_ascii=False))
+            return
+        print(render_pack_proof_card(card))
+        if saved_paths:
+            print("")
+            print("Saved:")
+            for item in saved_paths.values():
+                print(f"  {item}")
+        return
+
+    print("알 수 없는 launch pack 명령입니다.", file=sys.stderr)
+    sys.exit(1)
+
+
+def _parse_pack_start_args(args: argparse.Namespace) -> tuple[str | None, str]:
+    """pack start 인자를 pack ref와 request로 나눈다."""
+    explicit_pack = getattr(args, "pack_ref_option", None)
+    raw_args = [str(item) for item in list(getattr(args, "start_args", []) or []) if str(item).strip()]
+    if explicit_pack:
+        request = " ".join(raw_args).strip()
+        if not request:
+            raise ValueError("request is required")
+        return str(explicit_pack), request
+    if not raw_args:
+        raise ValueError("request is required")
+    if len(raw_args) == 1:
+        return None, raw_args[0]
+    return raw_args[0], " ".join(raw_args[1:]).strip()
+
+
 def _handle_metrics(args: argparse.Namespace) -> None:
     """cambrian metrics 처리."""
     from engine.project_metrics import (
@@ -5846,6 +9530,26 @@ def _handle_metrics(args: argparse.Namespace) -> None:
 def _handle_status(args: argparse.Namespace) -> None:
     """cambrian status 처리."""
     from engine.project_mode import ProjectStatusReader, render_status_summary
+    from engine.project_pack_activation import current_active_pack, render_status_active_pack
+    from engine.project_pack_proof import latest_pack_proof_card, render_pack_proof_compact
+    from engine.project_pack_readiness import PackReadinessBuilder, render_pack_readiness_compact
+    from engine.project_pack_setup import latest_pack_setup_plan, render_pack_setup_compact
+    from engine.project_pack_usage import PackUsageSummaryBuilder, render_pack_usage_compact
+    from engine.project_pack_jobs import latest_pack_job, render_status_latest_pack_job
+    from engine.project_pack_retrospective import (
+        latest_pack_retro_summary,
+        render_pack_retro_summary_compact,
+        render_status_pack_retrospective,
+    )
+    from engine.project_pack_improvements import latest_pack_improvement_queue, render_status_pack_improvement
+    from engine.project_pack_derivatives import (
+        accepted_improvement_count,
+        latest_pack_derivative_plan,
+        render_status_pack_derivative,
+    )
+    from engine.project_pack_vnext_workbench import latest_pack_vnext_workbench, render_status_pack_vnext
+    from engine.project_pack_release_candidate import latest_pack_local_release, latest_pack_rc, render_status_pack_rc
+    from engine.project_pack_rollout import latest_pack_rollout, render_pack_upgrade_available, render_status_pack_rollout
     from engine.project_summary import ProjectUsageSummaryBuilder, render_usage_summary
     from engine.project_timeline import (
         ProjectTimelineReader,
@@ -5898,6 +9602,63 @@ def _handle_status(args: argparse.Namespace) -> None:
         return
 
     print(render_status_summary(result))
+    active_context = current_active_pack(project_root)
+    active_summary = render_status_active_pack(active_context)
+    if active_summary:
+        print(active_summary)
+    if active_context is not None:
+        try:
+            readiness = PackReadinessBuilder().build(project_root, active_context.pack_id)
+            compact_readiness = render_pack_readiness_compact(readiness)
+            if compact_readiness:
+                print(compact_readiness)
+            setup_plan = latest_pack_setup_plan(project_root, active_context.pack_id)
+            compact_setup = render_pack_setup_compact(setup_plan)
+            if compact_setup:
+                print(compact_setup)
+        except Exception as exc:
+            logger.warning("active pack readiness status failed: %s", exc)
+        usage_summary = PackUsageSummaryBuilder().build(project_root, active_context.pack_id)
+        compact_usage = render_pack_usage_compact(usage_summary)
+        if compact_usage:
+            print(compact_usage)
+        compact_proof = render_pack_proof_compact(latest_pack_proof_card(project_root, active_context.pack_id))
+        if compact_proof:
+            print(compact_proof)
+        compact_retro = render_pack_retro_summary_compact(latest_pack_retro_summary(project_root, active_context.pack_id))
+        if compact_retro:
+            print(compact_retro)
+        improvement_summary = render_status_pack_improvement(latest_pack_improvement_queue(project_root, active_context.pack_id))
+        if improvement_summary:
+            print(improvement_summary)
+        derivative_summary = render_status_pack_derivative(
+            latest_pack_derivative_plan(project_root, active_context.pack_id),
+            accepted_improvement_count(project_root, active_context.pack_id),
+        )
+        if derivative_summary:
+            print(derivative_summary)
+        vnext_summary = render_status_pack_vnext(latest_pack_vnext_workbench(project_root, active_context.pack_id))
+        if vnext_summary:
+            print(vnext_summary)
+        rc_summary = render_status_pack_rc(
+            latest_pack_rc(project_root, active_context.pack_id),
+            latest_pack_local_release(project_root, active_context.pack_id),
+        )
+        if rc_summary:
+            print(rc_summary)
+        rollout_summary = render_status_pack_rollout(latest_pack_rollout(project_root, active_context.pack_id))
+        if rollout_summary:
+            print(rollout_summary)
+        else:
+            upgrade_hint = render_pack_upgrade_available(latest_pack_local_release(project_root, active_context.pack_id), active_context.pack_id)
+            if upgrade_hint:
+                print(upgrade_hint)
+    latest_job_summary = render_status_latest_pack_job(latest_pack_job(project_root))
+    if latest_job_summary:
+        print(latest_job_summary)
+    retro_prompt = render_status_pack_retrospective(project_root, latest_pack_job(project_root))
+    if retro_prompt:
+        print(retro_prompt)
 
 
 def _handle_summary(args: argparse.Namespace) -> None:
@@ -6367,6 +10128,7 @@ def _handle_do_v2(args: argparse.Namespace) -> None:
 
     common_options = {
         "session": getattr(args, "session", None),
+        "agent": getattr(args, "agent", None),
         "use_suggestion": getattr(args, "use_suggestion", None),
         "sources": list(getattr(args, "do_sources", []) or []),
         "tests": list(getattr(args, "do_tests", []) or []),
@@ -6391,6 +10153,28 @@ def _handle_do_v2(args: argparse.Namespace) -> None:
         payload = session.to_dict()
         recovery_hint = hint_for_continue_session(payload)
         _save_recovery_hint(Path.cwd(), recovery_hint)
+        try:
+            from engine.project_pack_usage import safe_record_pack_usage_event
+
+            safe_record_pack_usage_event(
+                Path.cwd(),
+                event_kind="used",
+                surface_kind="continue",
+                request=session.user_request,
+                request_class=(
+                    session.metrics_context.get("request_class")
+                    if isinstance(session.metrics_context, dict)
+                    else None
+                )
+                or ((session.intent or {}).get("intent_type") if isinstance(session.intent, dict) else None),
+                linked_session_id=session.session_id,
+                linked_session_ref=session.artifacts.get("session_path"),
+                linked_request_ref=session.artifacts.get("request_path"),
+                linked_bridge_reply_ref=session.bridge_context.get("reply_ref") if isinstance(session.bridge_context, dict) else None,
+                summary="active pack used in continue",
+            )
+        except Exception as exc:
+            logger.warning("pack usage continue event failed: %s", exc)
         if getattr(args, "json_output", False):
             print(json.dumps(_attach_recovery_payload(payload, recovery_hint), indent=2, ensure_ascii=False))
             return
@@ -6409,6 +10193,27 @@ def _handle_do_v2(args: argparse.Namespace) -> None:
     payload = session.to_dict()
     recovery_hint = hint_for_do_session(payload)
     _save_recovery_hint(Path.cwd(), recovery_hint)
+    try:
+        from engine.project_pack_usage import safe_record_pack_usage_event
+
+        safe_record_pack_usage_event(
+            Path.cwd(),
+            event_kind="used",
+            surface_kind="do",
+            request=session.user_request,
+            request_class=(
+                session.metrics_context.get("request_class")
+                if isinstance(session.metrics_context, dict)
+                else None
+            )
+            or ((session.intent or {}).get("intent_type") if isinstance(session.intent, dict) else None),
+            linked_session_id=session.session_id,
+            linked_session_ref=session.artifacts.get("session_path"),
+            linked_request_ref=session.artifacts.get("request_path"),
+            summary="active pack used in do",
+        )
+    except Exception as exc:
+        logger.warning("pack usage do event failed: %s", exc)
 
     if getattr(args, "json_output", False):
         print(json.dumps(_attach_recovery_payload(payload, recovery_hint), indent=2, ensure_ascii=False))
