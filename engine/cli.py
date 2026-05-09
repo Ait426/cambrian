@@ -343,16 +343,20 @@ def main() -> None:
 
     evolve_parser = subparsers.add_parser(
         "evolve",
-        help="스킬 1회 진화",
+        help="Skill evolution or evidence-based project evolution",
         parents=[common_parser],
     )
-    evolve_parser.add_argument("skill_id", help="진화시킬 스킬 ID")
+    evolve_parser.add_argument("skill_id", nargs="?", help="Skill ID or review/propose/preview/apply/rollback")
+    evolve_parser.add_argument("proposal_id", nargs="?", help="Proposal ID for preview/apply/rollback")
     evolve_parser.add_argument(
         "--input",
         "-i",
-        required=True,
-        help="벤치마크용 테스트 입력 (JSON 문자열)",
+        required=False,
+        help="Benchmark input JSON for legacy skill evolution",
     )
+    evolve_parser.add_argument("--recent", type=int, default=5, help="Recent job count for review")
+    evolve_parser.add_argument("--confirm", action="store_true", help="Confirm proposal apply or rollback")
+    evolve_parser.add_argument("--json", action="store_true", dest="json_output", help="JSON output")
 
     authority_parser = subparsers.add_parser(
         "authority",
@@ -2692,11 +2696,35 @@ def _handle_feedback(args: argparse.Namespace) -> None:
 
 
 def _handle_evolve(args: argparse.Namespace) -> None:
-    """cambrian evolve 처리.
+    mode = getattr(args, "skill_id", None)
+    if mode in {"review", "propose", "preview", "apply", "rollback"}:
+        from engine.project_evolution import (
+            apply_evolution,
+            preview_evolution,
+            propose_evolution,
+            review_evidence,
+            rollback_evolution,
+        )
 
-    Args:
-        args: argparse가 파싱한 네임스페이스
-    """
+        root = Path.cwd().resolve()
+        if mode == "review":
+            result = review_evidence(root, recent=int(getattr(args, "recent", 5) or 5))
+        elif mode == "propose":
+            result = propose_evolution(root)
+        elif mode == "preview":
+            result = preview_evolution(root, str(getattr(args, "proposal_id", "") or ""))
+        elif mode == "apply":
+            result = apply_evolution(root, str(getattr(args, "proposal_id", "") or ""), confirm=bool(getattr(args, "confirm", False)))
+        else:
+            result = rollback_evolution(root, str(getattr(args, "proposal_id", "") or ""), confirm=bool(getattr(args, "confirm", False)))
+        payload = result.to_dict()
+        _emit_cli_payload(payload, bool(getattr(args, "json_output", False)))
+        _exit_if_blocked(payload)
+        return
+
+    if not getattr(args, "input", None):
+        print("--input is required for legacy skill evolution", file=sys.stderr)
+        sys.exit(1)
     try:
         input_data = json.loads(args.input)
     except json.JSONDecodeError:
@@ -2711,7 +2739,7 @@ def _handle_evolve(args: argparse.Namespace) -> None:
     record = engine.evolve(args.skill_id, input_data)
 
     status = "adopted" if record.adopted else "discarded"
-    print(f"[OK] Evolution complete — variant {status}")
+    print(f"[OK] Evolution complete ? variant {status}")
     print(f"  Skill: {record.skill_id}")
     print(f"  Parent fitness: {record.parent_fitness:.4f}")
     print(f"  Child fitness:  {record.child_fitness:.4f}")
