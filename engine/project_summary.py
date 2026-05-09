@@ -144,6 +144,7 @@ class UsageSummary:
     active_work: list[dict]
     recent_journey: list[dict]
     next_actions: list[str]
+    template: dict = field(default_factory=dict)
     warnings: list[str] = field(default_factory=list)
     errors: list[str] = field(default_factory=list)
 
@@ -183,6 +184,7 @@ class ProjectUsageSummaryStore:
             active_work=list(payload.get("active_work", [])),
             recent_journey=list(payload.get("recent_journey", [])),
             next_actions=[str(item) for item in payload.get("next_actions", []) if item],
+            template=dict(payload.get("template", {}) if isinstance(payload.get("template"), dict) else {}),
             warnings=[str(item) for item in payload.get("warnings", []) if item],
             errors=[str(item) for item in payload.get("errors", []) if item],
         )
@@ -283,6 +285,7 @@ class ProjectUsageSummaryBuilder:
             initialized=bool(project_payload),
             active_work=active_work,
         )
+        template = self._build_template(root=root, warnings=warnings)
 
         project_name = None
         if isinstance(project_payload, dict):
@@ -302,9 +305,24 @@ class ProjectUsageSummaryBuilder:
             active_work=active_work,
             recent_journey=recent_journey,
             next_actions=next_actions,
+            template=template,
             warnings=_dedupe(warnings),
             errors=_dedupe(errors),
         )
+
+    @staticmethod
+    def _build_template(*, root: Path, warnings: list[str]) -> dict:
+        """템플릿 origin과 bootstrap provenance를 요약한다."""
+        current = _load_yaml(root / ".cambrian" / "templates" / "current_template.yaml", warnings) or {}
+        bootstrap = _load_yaml(root / ".cambrian" / "templates" / "bootstrap_record.yaml", warnings) or {}
+        if not current and not bootstrap:
+            return {}
+        return {
+            "current_template_name": current.get("name"),
+            "current_template_origin": current.get("origin") or ("bootstrap" if current.get("bootstrapped_at") else "apply" if current else None),
+            "bootstrap_template_name": bootstrap.get("template_name"),
+            "bootstrap_record_ref": ".cambrian/templates/bootstrap_record.yaml" if bootstrap else None,
+        }
 
     @staticmethod
     def _load_records(paths: list[Path], loader, warnings: list[str]) -> list[tuple[Path, dict]]:
@@ -687,6 +705,17 @@ def render_usage_summary(summary: UsageSummary) -> str:
         "",
         "Project:",
         f"  {summary.project_name or '(unknown)'}",
+    ]
+    template = summary.template if isinstance(summary.template, dict) else {}
+    if template.get("bootstrap_template_name") or template.get("current_template_name"):
+        lines.extend([
+            "",
+            "Template:",
+            f"  current  : {template.get('current_template_name') or 'none'}",
+        ])
+        if template.get("bootstrap_template_name"):
+            lines.append(f"  bootstrap: {template.get('bootstrap_template_name')}")
+    lines.extend([
         "",
         "Work so far:",
         f"  sessions        : {summary.counts.get('sessions', 0)}",
@@ -698,7 +727,7 @@ def render_usage_summary(summary: UsageSummary) -> str:
         f"  automatic adoption : {'on' if summary.safety.get('automatic_adoption_enabled', False) else 'off'}",
         f"  source changes     : {summary.safety.get('source_mutation_policy', 'only explicit patch apply/adoption')}",
         f"  unvalidated proposals: {summary.safety.get('unvalidated_proposals', 0)}",
-    ]
+    ])
     if summary.safety.get("failed_apply_records", 0):
         lines.append(f"  failed applies       : {summary.safety.get('failed_apply_records', 0)}")
 

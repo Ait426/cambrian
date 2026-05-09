@@ -1152,7 +1152,7 @@ def main() -> None:
 
     init_parser = subparsers.add_parser(
         "init",
-        help="프로젝트 하네스를 초기화",
+        help="시작: 프로젝트에 Cambrian 맞추기",
         parents=[common_parser],
     )
     init_parser.add_argument(
@@ -1189,6 +1189,22 @@ def main() -> None:
     )
     init_parser.add_argument(
         "--force", action="store_true", help="기존 .cambrian 설정 덮어쓰기",
+    )
+    init_parser.add_argument(
+        "--template",
+        type=str,
+        default=None,
+        help="초기 bootstrap에 사용할 harness template 이름",
+    )
+    init_parser.add_argument(
+        "--use-recommended-template",
+        action="store_true",
+        help="현재 프로젝트 신호로 추천된 template를 init bootstrap에 사용",
+    )
+    init_parser.add_argument(
+        "--skip-template",
+        action="store_true",
+        help="template 추천/선택 없이 기존 init 흐름으로 진행",
     )
     init_parser.add_argument(
         "--json", action="store_true", dest="json_output", help="JSON 출력",
@@ -1986,6 +2002,373 @@ def main() -> None:
     alpha_check_parser.add_argument(
         "--json", action="store_true", dest="json_output", help="JSON 출력",
     )
+
+    template_parser = subparsers.add_parser(
+        "template",
+        help="하네스/팀 운영 템플릿 저장과 적용",
+        parents=[common_parser],
+    )
+    template_subparsers = template_parser.add_subparsers(
+        dest="template_command",
+        help="template 하위 명령",
+    )
+    template_save_parser = template_subparsers.add_parser(
+        "save",
+        help="현재 하네스와 팀 정책을 reusable template으로 저장",
+        parents=[common_parser],
+    )
+    template_save_parser.add_argument("name", help="template name")
+    template_save_parser.add_argument("--description", default=None, help="template description")
+    template_save_parser.add_argument("--tag", action="append", default=[], dest="template_tags", help="template tag")
+    template_save_parser.add_argument("--json", action="store_true", dest="json_output", help="JSON output")
+    template_list_parser = template_subparsers.add_parser(
+        "list",
+        help="저장된 template 목록",
+        parents=[common_parser],
+    )
+    template_list_parser.add_argument("--json", action="store_true", dest="json_output", help="JSON output")
+    template_show_parser = template_subparsers.add_parser(
+        "show",
+        help="template 상세 보기",
+        parents=[common_parser],
+    )
+    template_show_parser.add_argument("name", help="template name or id")
+    template_show_parser.add_argument("--json", action="store_true", dest="json_output", help="JSON output")
+    template_apply_parser = template_subparsers.add_parser(
+        "apply",
+        help="template을 현재 프로젝트의 안전한 초기 운영값으로 적용",
+        parents=[common_parser],
+    )
+    template_apply_parser.add_argument("name", help="template name or id")
+    template_apply_parser.add_argument("--force", action="store_true", help="이미 적용된 template origin 교체 허용")
+    template_apply_parser.add_argument("--json", action="store_true", dest="json_output", help="JSON output")
+    template_diff_parser = template_subparsers.add_parser(
+        "diff",
+        help="현재 하네스와 template 적용 preview 차이를 비교",
+        parents=[common_parser],
+    )
+    template_diff_parser.add_argument("name", help="template name or id")
+    template_diff_parser.add_argument("--save", action="store_true", help="diff report 저장")
+    template_diff_parser.add_argument("--json", action="store_true", dest="json_output", help="JSON output")
+    template_review_parser = template_subparsers.add_parser(
+        "review",
+        help="template 적용 전 승인 검토 문서를 생성",
+        parents=[common_parser],
+    )
+    template_review_parser.add_argument("name", help="template name or id")
+    template_review_parser.add_argument("--save", action="store_true", help="review artifact 저장")
+    template_review_parser.add_argument("--json", action="store_true", dest="json_output", help="JSON output")
+    template_accept_parser = template_subparsers.add_parser(
+        "accept",
+        help="template를 적용 후보로 승인 기록",
+        parents=[common_parser],
+    )
+    template_accept_parser.add_argument("name", help="template name or id")
+    template_accept_parser.add_argument("--resolution", default=None, help="accept 이유 또는 메모")
+    template_accept_parser.add_argument("--json", action="store_true", dest="json_output", help="JSON output")
+    template_dismiss_parser = template_subparsers.add_parser(
+        "dismiss",
+        help="template를 이번 프로젝트에서 기각 기록",
+        parents=[common_parser],
+    )
+    template_dismiss_parser.add_argument("name", help="template name or id")
+    template_dismiss_parser.add_argument("--resolution", default=None, help="dismiss 이유")
+    template_dismiss_parser.add_argument("--json", action="store_true", dest="json_output", help="JSON output")
+    template_decisions_parser = template_subparsers.add_parser(
+        "decisions",
+        help="template approval decision 목록",
+        parents=[common_parser],
+    )
+    template_decisions_parser.add_argument("--status", choices=["accepted", "dismissed"], default=None)
+    template_decisions_parser.add_argument("--json", action="store_true", dest="json_output", help="JSON output")
+    template_recommend_parser = template_subparsers.add_parser(
+        "recommend",
+        help="현재 프로젝트에 가장 잘 맞는 template 추천",
+        parents=[common_parser],
+    )
+    template_recommend_parser.add_argument("--request", default=None, help="request-aware template recommendation")
+    template_recommend_parser.add_argument("--save", action="store_true", help="recommendation report 저장")
+    template_recommend_parser.add_argument("--json", action="store_true", dest="json_output", help="JSON output")
+    template_board_parser = template_subparsers.add_parser(
+        "board",
+        help="local template library standing board 보기",
+        parents=[common_parser],
+    )
+    template_board_parser.add_argument("--request", default=None, help="request-aware template library board")
+    template_board_parser.add_argument("--save", action="store_true", help="library board report 저장")
+    template_board_parser.add_argument("--json", action="store_true", dest="json_output", help="JSON output")
+    template_qualify_parser = template_subparsers.add_parser(
+        "qualify",
+        help="template derivative를 parent/reference와 같은 workset에서 안전 비교",
+        parents=[common_parser],
+    )
+    template_qualify_parser.add_argument("name", help="candidate template name or id")
+    template_qualify_parser.add_argument("--workset", required=True, help="benchmark workset name")
+    template_qualify_parser.add_argument("--against", default=None, help="reference template name or id")
+    template_qualify_parser.add_argument("--mode", choices=["guided", "full", "both"], default="both")
+    template_qualify_parser.add_argument("--save", action="store_true", help="qualification report 저장")
+    template_qualify_parser.add_argument("--json", action="store_true", dest="json_output", help="JSON output")
+    template_qualify_show_parser = template_subparsers.add_parser(
+        "qualify-show",
+        help="template qualification 상세 보기",
+        parents=[common_parser],
+    )
+    template_qualify_show_parser.add_argument("qualification_ref", help="qualification id 또는 path")
+    template_qualify_show_parser.add_argument("--json", action="store_true", dest="json_output", help="JSON output")
+    template_qualify_accept_parser = template_subparsers.add_parser(
+        "qualify-accept",
+        help="candidate_stronger qualification을 운영 결정으로 채택",
+        parents=[common_parser],
+    )
+    template_qualify_accept_parser.add_argument("qualification_ref", help="qualification id 또는 path")
+    template_qualify_accept_parser.add_argument("--set-lane-default", action="store_true", help="strongest lane 기본 템플릿으로 지정")
+    template_qualify_accept_parser.add_argument(
+        "--parent-action",
+        choices=["keep_as_backup", "retire", "none"],
+        default="keep_as_backup",
+        help="reference/parent template 처리 방식",
+    )
+    template_qualify_accept_parser.add_argument("--resolution", default=None, help="accept 이유 또는 메모")
+    template_qualify_accept_parser.add_argument("--force", action="store_true", help="candidate_stronger가 아니어도 경고와 함께 accept")
+    template_qualify_accept_parser.add_argument("--json", action="store_true", dest="json_output", help="JSON output")
+    template_qualify_dismiss_parser = template_subparsers.add_parser(
+        "qualify-dismiss",
+        help="qualification 채택을 기각",
+        parents=[common_parser],
+    )
+    template_qualify_dismiss_parser.add_argument("qualification_ref", help="qualification id 또는 path")
+    template_qualify_dismiss_parser.add_argument("--resolution", default=None, help="dismiss 이유 또는 메모")
+    template_qualify_dismiss_parser.add_argument("--json", action="store_true", dest="json_output", help="JSON output")
+    template_qualify_decisions_parser = template_subparsers.add_parser(
+        "qualify-decisions",
+        help="qualification 기반 운영 결정 목록",
+        parents=[common_parser],
+    )
+    template_qualify_decisions_parser.add_argument("--status", choices=["accepted", "dismissed"], default=None, help="결정 상태 필터")
+    template_qualify_decisions_parser.add_argument("--json", action="store_true", dest="json_output", help="JSON output")
+    template_qualify_adoptions_parser = template_subparsers.add_parser(
+        "qualify-adoptions",
+        help="qualification accept로 적용된 adoption snapshot 목록",
+        parents=[common_parser],
+    )
+    template_qualify_adoptions_parser.add_argument("--status", choices=["applied", "reverted"], default=None, help="adoption 상태 필터")
+    template_qualify_adoptions_parser.add_argument("--json", action="store_true", dest="json_output", help="JSON output")
+    template_qualify_revert_parser = template_subparsers.add_parser(
+        "qualify-revert",
+        help="qualification adoption을 snapshot 기준으로 되돌리기",
+        parents=[common_parser],
+    )
+    template_qualify_revert_parser.add_argument("adoption_ref", help="adoption id 또는 path")
+    template_qualify_revert_parser.add_argument("--resolution", default=None, help="revert 이유 또는 메모")
+    template_qualify_revert_parser.add_argument("--json", action="store_true", dest="json_output", help="JSON output")
+    template_qualify_stage_parser = template_subparsers.add_parser(
+        "qualify-stage",
+        help="candidate_stronger qualification을 안전한 lane canary로 stage",
+        parents=[common_parser],
+    )
+    template_qualify_stage_parser.add_argument("qualification_ref", help="qualification id 또는 path")
+    template_qualify_stage_parser.add_argument("--reason", default=None, help="canary stage 이유")
+    template_qualify_stage_parser.add_argument("--force", action="store_true", help="candidate_stronger가 아니어도 경고와 함께 stage")
+    template_qualify_stage_parser.add_argument("--json", action="store_true", dest="json_output", help="JSON output")
+    template_canary_parser = template_subparsers.add_parser(
+        "canary",
+        help="strongest lane canary template 상태 보기",
+        parents=[common_parser],
+    )
+    template_canary_parser.add_argument("--json", action="store_true", dest="json_output", help="JSON output")
+    template_canary_ledger_parser = template_subparsers.add_parser(
+        "canary-ledger",
+        help="active canary template exposure/selection ledger 보기",
+        parents=[common_parser],
+    )
+    template_canary_ledger_parser.add_argument("name", nargs="?", default=None, help="canary template name")
+    template_canary_ledger_parser.add_argument("--save", action="store_true", help="canary ledger summary 저장")
+    template_canary_ledger_parser.add_argument("--json", action="store_true", dest="json_output", help="JSON output")
+    template_canary_events_parser = template_subparsers.add_parser(
+        "canary-events",
+        help="canary raw exposure/selection events 보기",
+        parents=[common_parser],
+    )
+    template_canary_events_parser.add_argument("name", nargs="?", default=None, help="canary template name")
+    template_canary_events_parser.add_argument("--limit", type=int, default=20, help="표시할 최근 event 수")
+    template_canary_events_parser.add_argument(
+        "--kind",
+        choices=["surfaced", "selected", "skipped", "applied", "replayed", "validated", "blocked", "bootstrapped"],
+        default=None,
+        help="event kind 필터",
+    )
+    template_canary_events_parser.add_argument("--json", action="store_true", dest="json_output", help="JSON output")
+    template_canary_outcomes_parser = template_subparsers.add_parser(
+        "canary-outcomes",
+        help="canary 선택 이후 validated/adopted outcome attribution 보기",
+        parents=[common_parser],
+    )
+    template_canary_outcomes_parser.add_argument("name", nargs="?", default=None, help="canary template name")
+    template_canary_outcomes_parser.add_argument("--save", action="store_true", help="canary outcome attribution 저장")
+    template_canary_outcomes_parser.add_argument("--json", action="store_true", dest="json_output", help="JSON output")
+    template_canary_links_parser = template_subparsers.add_parser(
+        "canary-links",
+        help="canary selected-to-outcome attribution link 목록 보기",
+        parents=[common_parser],
+    )
+    template_canary_links_parser.add_argument("name", nargs="?", default=None, help="canary template name")
+    template_canary_links_parser.add_argument("--limit", type=int, default=20, help="표시할 최근 link 수")
+    template_canary_links_parser.add_argument("--json", action="store_true", dest="json_output", help="JSON output")
+    template_canary_review_parser = template_subparsers.add_parser(
+        "canary-review",
+        help="canary evidence freshness review 보기",
+        parents=[common_parser],
+    )
+    template_canary_review_parser.add_argument("name", nargs="?", default=None, help="canary template name")
+    template_canary_review_parser.add_argument("--save", action="store_true", help="canary review report 저장")
+    template_canary_review_parser.add_argument("--json", action="store_true", dest="json_output", help="JSON output")
+    template_canary_review_show_parser = template_subparsers.add_parser(
+        "canary-review-show",
+        help="canary freshness review 상세 보기",
+        parents=[common_parser],
+    )
+    template_canary_review_show_parser.add_argument("review_ref", help="canary review id 또는 path")
+    template_canary_review_show_parser.add_argument("--json", action="store_true", dest="json_output", help="JSON output")
+    template_canary_report_parser = template_subparsers.add_parser(
+        "canary-report",
+        help="active canary template burn-in evidence report 생성",
+        parents=[common_parser],
+    )
+    template_canary_report_parser.add_argument("name", nargs="?", default=None, help="canary template name")
+    template_canary_report_parser.add_argument("--workset", default=None, help="burn-in evidence workset hint")
+    template_canary_report_parser.add_argument("--save", action="store_true", help="canary report 저장")
+    template_canary_report_parser.add_argument("--json", action="store_true", dest="json_output", help="JSON output")
+    template_canary_report_show_parser = template_subparsers.add_parser(
+        "canary-report-show",
+        help="canary burn-in report 상세 보기",
+        parents=[common_parser],
+    )
+    template_canary_report_show_parser.add_argument("report_ref", help="canary report id 또는 path")
+    template_canary_report_show_parser.add_argument("--json", action="store_true", dest="json_output", help="JSON output")
+    template_canary_promote_parser = template_subparsers.add_parser(
+        "canary-promote",
+        help="promote_ready canary를 stable lane default로 승격",
+        parents=[common_parser],
+    )
+    template_canary_promote_parser.add_argument("name", help="canary template name")
+    template_canary_promote_parser.add_argument(
+        "--previous-default-action",
+        choices=["keep_as_backup", "retire", "none"],
+        default="keep_as_backup",
+        help="기존 stable default 처리 방식",
+    )
+    template_canary_promote_parser.add_argument("--resolution", default=None, help="promotion 이유 또는 메모")
+    template_canary_promote_parser.add_argument("--force", action="store_true", help="warming/review_due gate를 경고와 함께 승격")
+    template_canary_promote_parser.add_argument("--json", action="store_true", dest="json_output", help="JSON output")
+    template_qualify_unstage_parser = template_subparsers.add_parser(
+        "qualify-unstage",
+        help="active lane canary template 제거",
+        parents=[common_parser],
+    )
+    template_qualify_unstage_parser.add_argument("qualification_ref", help="qualification id 또는 path")
+    template_qualify_unstage_parser.add_argument("--resolution", default=None, help="unstage 이유 또는 메모")
+    template_qualify_unstage_parser.add_argument("--json", action="store_true", dest="json_output", help="JSON output")
+    template_challenge_matrix_parser = template_subparsers.add_parser(
+        "challenge-matrix",
+        help="stable/canary/queued challengers를 같은 workset에서 replay 비교",
+        parents=[common_parser],
+    )
+    template_challenge_matrix_parser.add_argument("--workset", required=True, help="benchmark workset name")
+    template_challenge_matrix_parser.add_argument("--mode", choices=["guided", "full", "both"], default="both")
+    template_challenge_matrix_parser.add_argument("--save", action="store_true", help="challenge matrix report 저장")
+    template_challenge_matrix_parser.add_argument("--json", action="store_true", dest="json_output", help="JSON output")
+    template_challenge_matrix_show_parser = template_subparsers.add_parser(
+        "challenge-matrix-show",
+        help="challenge matrix report 상세 보기",
+        parents=[common_parser],
+    )
+    template_challenge_matrix_show_parser.add_argument("matrix_ref", help="challenge matrix id 또는 path")
+    template_challenge_matrix_show_parser.add_argument("--json", action="store_true", dest="json_output", help="JSON output")
+    template_challenge_board_parser = template_subparsers.add_parser(
+        "challenge-board",
+        help="matrix-backed challenger board 보기",
+        parents=[common_parser],
+    )
+    template_challenge_board_parser.add_argument("--json", action="store_true", dest="json_output", help="JSON output")
+    template_challengers_parser = template_subparsers.add_parser(
+        "challengers",
+        help="queued challenger와 matrix rank 보기",
+        parents=[common_parser],
+    )
+    template_challengers_parser.add_argument("--json", action="store_true", dest="json_output", help="JSON output")
+    template_lineage_parser = template_subparsers.add_parser(
+        "lineage",
+        help="template parent/root lineage와 qualification 요약 보기",
+        parents=[common_parser],
+    )
+    template_lineage_parser.add_argument("name", help="template name or id")
+    template_lineage_parser.add_argument("--json", action="store_true", dest="json_output", help="JSON output")
+    for library_decision_command, library_decision_help in [
+        ("promote", "template를 local library preferred로 승격 기록"),
+        ("keep", "template를 local library 유지 상태로 기록"),
+        ("backup", "template를 local library backup으로 기록"),
+        ("watch", "template를 local library watch 대상으로 기록"),
+        ("retire", "template를 local library retire 후보로 기록"),
+    ]:
+        library_decision_parser = template_subparsers.add_parser(
+            library_decision_command,
+            help=library_decision_help,
+            parents=[common_parser],
+        )
+        library_decision_parser.add_argument("name", help="template name or id")
+        library_decision_parser.add_argument("--resolution", default=None, help="decision 이유 또는 메모")
+        library_decision_parser.add_argument("--from", dest="source_ref", default=None, help="source board/history path")
+        library_decision_parser.add_argument("--json", action="store_true", dest="json_output", help="JSON output")
+    template_library_decisions_parser = template_subparsers.add_parser(
+        "library-decisions",
+        help="template library curation decision 목록",
+        parents=[common_parser],
+    )
+    template_library_decisions_parser.add_argument("--json", action="store_true", dest="json_output", help="JSON output")
+    template_export_parser = template_subparsers.add_parser(
+        "export",
+        help="template를 portable YAML 파일로 내보내기",
+        parents=[common_parser],
+    )
+    template_export_parser.add_argument("name", help="template name or id")
+    template_export_parser.add_argument("--out", default=None, help="export output path")
+    template_export_parser.add_argument("--json", action="store_true", dest="json_output", help="JSON output")
+    template_import_parser = template_subparsers.add_parser(
+        "import",
+        help="portable template YAML 파일을 현재 프로젝트 local library로 가져오기",
+        parents=[common_parser],
+    )
+    template_import_parser.add_argument("file", help="template export YAML path")
+    template_import_parser.add_argument("--as", dest="as_name", default=None, help="import under a new template name")
+    template_import_parser.add_argument("--json", action="store_true", dest="json_output", help="JSON output")
+    template_history_parser = template_subparsers.add_parser(
+        "history",
+        help="template passport history 보기",
+        parents=[common_parser],
+    )
+    template_history_parser.add_argument("name", help="template name or id")
+    template_history_parser.add_argument("--limit", type=int, default=12, help="출력할 recent record 수")
+    template_history_parser.add_argument("--json", action="store_true", dest="json_output", help="JSON output")
+    template_retrospective_parser = template_subparsers.add_parser(
+        "retrospective",
+        help="template 사용 후 retrospective 남기기",
+        parents=[common_parser],
+    )
+    template_retrospective_parser.add_argument("name", help="template name or id")
+    template_retrospective_parser.add_argument("text", help="retrospective text")
+    template_retrospective_parser.add_argument("--rating", choices=["strong", "good", "mixed", "weak"], default="good")
+    template_retrospective_parser.add_argument("--kind", choices=["bootstrap", "fit", "safety", "team", "policy"], default="fit")
+    template_retrospective_parser.add_argument("--tag", action="append", default=[], dest="retrospective_tags")
+    template_retrospective_parser.add_argument("--json", action="store_true", dest="json_output", help="JSON output")
+    template_retrospectives_parser = template_subparsers.add_parser(
+        "retrospectives",
+        help="template retrospective 목록 보기",
+        parents=[common_parser],
+    )
+    template_retrospectives_parser.add_argument("name", help="template name or id")
+    template_retrospectives_parser.add_argument("--rating", choices=["strong", "good", "mixed", "weak"], default=None)
+    template_retrospectives_parser.add_argument("--status", choices=["open", "acknowledged"], default=None)
+    template_retrospectives_parser.add_argument("--json", action="store_true", dest="json_output", help="JSON output")
 
     bridge_parser = subparsers.add_parser(
         "bridge",
@@ -3757,6 +4140,8 @@ def main() -> None:
             _handle_status(args)
         elif args.command == "summary":
             _handle_summary(args)
+        elif args.command == "template":
+            _handle_template(args)
         elif args.command == "bridge":
             _handle_bridge(args)
         elif args.command == "notes":
@@ -6522,6 +6907,21 @@ def _handle_init(args: argparse.Namespace) -> None:
         get_bundled_skills_dir,
     )
     from engine.project_mode import ProjectInitializer, render_init_summary
+    from engine.project_template_bootstrap import (
+        apply_template_bootstrap,
+        render_initialized_template_block,
+        render_template_bootstrap_apply,
+        template_init_defaults,
+    )
+    from engine.project_template_bootstrap_select import (
+        BootstrapTemplateChoice,
+        TemplateBootstrapSelector,
+        default_template_bootstrap_choice_path,
+        render_bootstrap_choice_result,
+        render_bootstrap_recommendation_prompt,
+        save_template_bootstrap_choice,
+    )
+    from engine.project_template_bootstrap_compare import render_bootstrap_template_compare
     from engine.project_wizard import (
         ProjectWizard,
         ProjectWizardResult,
@@ -6532,24 +6932,340 @@ def _handle_init(args: argparse.Namespace) -> None:
     target = Path(args.dir).resolve()
     result: object
     is_wizard = bool(getattr(args, "wizard", False))
+    explicit_template_name = str(getattr(args, "template", "") or "").strip() or None
+    use_recommended_template = bool(getattr(args, "use_recommended_template", False))
+    skip_template = bool(getattr(args, "skip_template", False))
+    template_name = explicit_template_name
+    template_defaults: dict = {}
+    template_bootstrap_result: dict | None = None
+    template_choice: BootstrapTemplateChoice | None = None
+    selector = TemplateBootstrapSelector()
+    answers_file = getattr(args, "answers_file", None)
+    preloaded_answers: dict | None = None
+    answers_file_error: Exception | None = None
+    if answers_file:
+        try:
+            preloaded_answers = load_answers_file(Path(answers_file).resolve())
+        except (OSError, ValueError, yaml.YAMLError) as exc:
+            answers_file_error = exc
+    answers_selection_mode = str(
+        (preloaded_answers or {}).get("template_selection_mode", "")
+        if isinstance(preloaded_answers, dict)
+        else ""
+    ).strip()
+    answers_selected_template = str(
+        (preloaded_answers or {}).get("selected_template_name", "")
+        if isinstance(preloaded_answers, dict)
+        else ""
+    ).strip() or None
+    answers_manual_template = (
+        answers_selected_template
+        if answers_selection_mode == "manual_choice" and answers_selected_template
+        else None
+    )
+    answers_use_recommended = answers_selection_mode == "recommended"
+    answers_skip_template = answers_selection_mode in {"skipped", "skip"}
+    cli_selection_flags = [
+        bool(explicit_template_name),
+        use_recommended_template,
+        skip_template,
+    ]
+
+    if sum(1 for item in cli_selection_flags if item) > 1:
+        print(
+            "Template bootstrap option conflict.\n\nUse only one of:\n"
+            "  --template <name>\n"
+            "  --use-recommended-template\n"
+            "  --skip-template",
+            file=sys.stderr,
+        )
+        sys.exit(1)
+
+    selection_requested = any(cli_selection_flags) or bool(
+        answers_manual_template or answers_use_recommended or answers_skip_template
+    )
+    if selection_requested and (target / ".cambrian" / "project.yaml").exists():
+        blocked_name = template_name or "recommended-template"
+        next_actions = [
+            f"cambrian template diff {blocked_name}",
+            f"cambrian template review {blocked_name}",
+            f"cambrian template accept {blocked_name}",
+            f"cambrian template apply {blocked_name}",
+        ]
+        if getattr(args, "json_output", False):
+            print(
+                json.dumps(
+                    {
+                        "status": "blocked",
+                        "template_name": template_name,
+                        "errors": ["Cambrian is already fitted to this project."],
+                        "next_actions": next_actions,
+                    },
+                    indent=2,
+                    ensure_ascii=False,
+                )
+            )
+        else:
+            print(render_initialized_template_block(blocked_name), file=sys.stderr)
+        sys.exit(1)
+
+    def _save_choice(choice: BootstrapTemplateChoice) -> None:
+        choice_path = save_template_bootstrap_choice(target, choice)
+        if choice.errors:
+            if getattr(args, "json_output", False):
+                print(
+                    json.dumps(
+                        {
+                            "status": "blocked",
+                            "template_bootstrap_choice": choice.to_dict(),
+                            "choice_path": str(choice_path.relative_to(target)).replace("\\", "/"),
+                            "errors": choice.errors,
+                        },
+                        indent=2,
+                        ensure_ascii=False,
+                    )
+                )
+            else:
+                print(render_bootstrap_choice_result(choice), file=sys.stderr)
+                print()
+                print("Run:", file=sys.stderr)
+                print("  cambrian template list", file=sys.stderr)
+            sys.exit(1)
+
+    def _recommend_choice_context() -> dict:
+        try:
+            return selector.recommend_for_bootstrap(target)
+        except Exception as exc:
+            logging.getLogger(__name__).warning("template bootstrap recommendation failed: %s", exc)
+            return {
+                "report": None,
+                "saved_path": None,
+                "compare": None,
+                "compare_path": None,
+                "template_library_policy_context": {},
+                "best_template_name": None,
+                "available_templates": [],
+                "considered_templates": [],
+                "warnings": [f"template recommendation failed: {exc}"],
+                "errors": [],
+            }
+
+    def _selection_refs(context: dict) -> tuple[str | None, str | None]:
+        saved_path = context.get("saved_path")
+        compare_path = context.get("compare_path")
+        source_ref = (
+            str(saved_path.relative_to(target)).replace("\\", "/")
+            if isinstance(saved_path, Path)
+            else None
+        )
+        compare_ref = (
+            str(compare_path.relative_to(target)).replace("\\", "/")
+            if isinstance(compare_path, Path)
+            else None
+        )
+        return source_ref, compare_ref
+
+    def _policy_context(context: dict) -> dict:
+        value = context.get("template_library_policy_context")
+        return dict(value) if isinstance(value, dict) else {}
+
+    if explicit_template_name:
+        context = _recommend_choice_context()
+        source_ref, compare_ref = _selection_refs(context)
+        template_choice = selector.choose(
+            target,
+            recommended_template_name=context.get("best_template_name"),
+            selected_template_name=explicit_template_name,
+            use_recommended=False,
+            skip_template=False,
+            available_templates=list(context.get("available_templates", []) or []),
+            considered_templates=list(context.get("considered_templates", []) or []),
+            source_recommendation_ref=source_ref,
+            source_compare_ref=compare_ref,
+            template_library_policy_context=_policy_context(context),
+            selection_mode="explicit",
+        )
+        template_choice.warnings.extend(str(item) for item in context.get("warnings", []) if item)
+        _save_choice(template_choice)
+        template_name = template_choice.selected_template_name
+    elif answers_manual_template:
+        context = _recommend_choice_context()
+        source_ref, compare_ref = _selection_refs(context)
+        template_choice = selector.choose(
+            target,
+            recommended_template_name=context.get("best_template_name"),
+            selected_template_name=answers_manual_template,
+            use_recommended=False,
+            skip_template=False,
+            available_templates=list(context.get("available_templates", []) or []),
+            considered_templates=list(context.get("considered_templates", []) or []),
+            source_recommendation_ref=source_ref,
+            source_compare_ref=compare_ref,
+            template_library_policy_context=_policy_context(context),
+            selection_mode="manual_choice",
+        )
+        template_choice.warnings.extend(str(item) for item in context.get("warnings", []) if item)
+        _save_choice(template_choice)
+        template_name = template_choice.selected_template_name
+    elif use_recommended_template or answers_use_recommended:
+        context = _recommend_choice_context()
+        source_ref, compare_ref = _selection_refs(context)
+        template_choice = selector.choose(
+            target,
+            recommended_template_name=context.get("best_template_name"),
+            selected_template_name=None,
+            use_recommended=True,
+            skip_template=False,
+            available_templates=list(context.get("available_templates", []) or []),
+            considered_templates=list(context.get("considered_templates", []) or []),
+            source_recommendation_ref=source_ref,
+            source_compare_ref=compare_ref,
+            template_library_policy_context=_policy_context(context),
+        )
+        template_choice.warnings.extend(str(item) for item in context.get("warnings", []) if item)
+        _save_choice(template_choice)
+        template_name = template_choice.selected_template_name
+    elif skip_template or answers_skip_template:
+        context = _recommend_choice_context()
+        source_ref, compare_ref = _selection_refs(context)
+        template_choice = selector.choose(
+            target,
+            recommended_template_name=context.get("best_template_name"),
+            selected_template_name=None,
+            use_recommended=False,
+            skip_template=True,
+            available_templates=list(context.get("available_templates", []) or []),
+            considered_templates=list(context.get("considered_templates", []) or []),
+            source_recommendation_ref=source_ref,
+            source_compare_ref=compare_ref,
+            template_library_policy_context=_policy_context(context),
+        )
+        template_choice.warnings.extend(str(item) for item in context.get("warnings", []) if item)
+        _save_choice(template_choice)
+        template_name = None
+    elif is_wizard and not getattr(args, "non_interactive", False) and not getattr(args, "answers_file", None):
+        context = _recommend_choice_context()
+        report = context.get("report")
+        available = list(context.get("available_templates", []) or [])
+        considered = list(context.get("considered_templates", []) or [])
+        if report is not None and available:
+            source_ref, compare_ref = _selection_refs(context)
+            while True:
+                print(render_bootstrap_recommendation_prompt(report))
+                answer = input("Select template option [1/2/3/4, default 4]: ").strip()
+                if answer == "3":
+                    compare = context.get("compare")
+                    if compare is not None:
+                        print()
+                        print(render_bootstrap_template_compare(compare))
+                        print()
+                    continue
+                break
+            if answer == "1":
+                template_choice = selector.choose(
+                    target,
+                    recommended_template_name=context.get("best_template_name"),
+                    selected_template_name=None,
+                    use_recommended=True,
+                    skip_template=False,
+                    available_templates=available,
+                    considered_templates=considered,
+                    source_recommendation_ref=source_ref,
+                    source_compare_ref=compare_ref,
+                    template_library_policy_context=_policy_context(context),
+                )
+            elif answer == "2":
+                shortlist = considered or available
+                print("Template shortlist:")
+                for index, name in enumerate(shortlist[:4], start=1):
+                    print(f"  {index}. {name}")
+                selected_answer = input("Template name or number: ").strip()
+                if selected_answer.isdigit() and 1 <= int(selected_answer) <= len(shortlist[:4]):
+                    selected = shortlist[int(selected_answer) - 1]
+                else:
+                    selected = selected_answer
+                template_choice = selector.choose(
+                    target,
+                    recommended_template_name=context.get("best_template_name"),
+                    selected_template_name=selected,
+                    use_recommended=False,
+                    skip_template=False,
+                    available_templates=available,
+                    considered_templates=considered,
+                    source_recommendation_ref=source_ref,
+                    source_compare_ref=compare_ref,
+                    template_library_policy_context=_policy_context(context),
+                    selection_mode="manual_choice",
+                )
+            else:
+                template_choice = selector.choose(
+                    target,
+                    recommended_template_name=context.get("best_template_name"),
+                    selected_template_name=None,
+                    use_recommended=False,
+                    skip_template=True,
+                    available_templates=available,
+                    considered_templates=considered,
+                    source_recommendation_ref=source_ref,
+                    source_compare_ref=compare_ref,
+                    template_library_policy_context=_policy_context(context),
+                )
+            template_choice.warnings.extend(str(item) for item in context.get("warnings", []) if item)
+            _save_choice(template_choice)
+            template_name = template_choice.selected_template_name
+
+    if template_name:
+        try:
+            template_defaults = template_init_defaults(target, template_name)
+        except KeyError as exc:
+            print(f"Template not found: {exc.args[0]}\n\nRun:\n  cambrian template list", file=sys.stderr)
+            sys.exit(1)
+        except Exception as exc:
+            print(f"Template bootstrap blocked: {exc}", file=sys.stderr)
+            sys.exit(1)
+
+    def _template_answers() -> dict:
+        answers: dict = {}
+        if getattr(args, "name", None):
+            answers["project_name"] = getattr(args, "name")
+        if getattr(args, "project_type", None):
+            answers["project_type"] = getattr(args, "project_type")
+        elif template_defaults.get("project_type"):
+            answers["project_type"] = template_defaults.get("project_type")
+        if getattr(args, "stack", None):
+            answers["stack"] = getattr(args, "stack")
+        elif template_defaults.get("stack"):
+            answers["stack"] = template_defaults.get("stack")
+        if getattr(args, "test_cmd", None):
+            answers["test_command"] = getattr(args, "test_cmd")
+        elif template_defaults.get("test_command"):
+            answers["test_command"] = template_defaults.get("test_command")
+        if template_defaults.get("primary_use_cases"):
+            answers["primary_use_cases"] = template_defaults.get("primary_use_cases")
+        if template_defaults.get("mode"):
+            answers["mode"] = template_defaults.get("mode")
+        return {key: value for key, value in answers.items() if value is not None}
 
     if is_wizard:
         answers_payload: dict | None = None
         answers_file = getattr(args, "answers_file", None)
         if answers_file:
-            try:
-                answers_payload = load_answers_file(Path(answers_file).resolve())
-            except (OSError, ValueError, yaml.YAMLError) as exc:
+            if answers_file_error is not None:
                 result = ProjectWizardResult(
                     status="blocked",
                     answers=None,
                     created_files=[],
                     skipped_files=[],
                     warnings=[],
-                    errors=[f"answers-file 로드 실패: {exc}"],
+                    errors=[f"answers-file 로드 실패: {answers_file_error}"],
                     next_actions=["answers-file 경로와 YAML 형식을 확인하세요."],
                 )
             else:
+                answers_payload = preloaded_answers or {}
+                answers_payload = {
+                    **_template_answers(),
+                    **answers_payload,
+                }
                 detected = ProjectInitializer._detect(target)
                 result = ProjectWizard().run(
                     project_root=target,
@@ -6559,22 +7275,33 @@ def _handle_init(args: argparse.Namespace) -> None:
                     interactive=False,
                 )
         elif getattr(args, "non_interactive", False):
-            result = ProjectWizardResult(
-                status="blocked",
-                answers=None,
-                created_files=[],
-                skipped_files=[],
-                warnings=[],
-                errors=["--wizard 와 --non-interactive 를 함께 쓰려면 --answers-file 이 필요합니다."],
-                next_actions=["cambrian init --wizard --answers-file answers.yaml"],
-            )
+            if template_name or skip_template:
+                detected = ProjectInitializer._detect(target)
+                result = ProjectWizard().run(
+                    project_root=target,
+                    detected=detected,
+                    answers=_template_answers(),
+                    force=bool(getattr(args, "force", False)),
+                    interactive=False,
+                )
+            else:
+                result = ProjectWizardResult(
+                    status="blocked",
+                    answers=None,
+                    created_files=[],
+                    skipped_files=[],
+                    warnings=[],
+                    errors=["--wizard 와 --non-interactive 를 함께 쓰려면 --answers-file 이 필요합니다."],
+                    next_actions=["cambrian init --wizard --answers-file answers.yaml"],
+                )
         else:
             detected = ProjectInitializer._detect(target)
             answers_payload = {
-                "project_name": getattr(args, "name", None),
-                "project_type": getattr(args, "project_type", None),
-                "stack": getattr(args, "stack", None),
-                "test_command": getattr(args, "test_cmd", None),
+                **_template_answers(),
+                "project_name": getattr(args, "name", None) or _template_answers().get("project_name"),
+                "project_type": getattr(args, "project_type", None) or _template_answers().get("project_type"),
+                "stack": getattr(args, "stack", None) or _template_answers().get("stack"),
+                "test_command": getattr(args, "test_cmd", None) or _template_answers().get("test_command"),
             }
             result = ProjectWizard().run(
                 project_root=target,
@@ -6587,13 +7314,38 @@ def _handle_init(args: argparse.Namespace) -> None:
         result = ProjectInitializer().init(
             project_root=target,
             name=getattr(args, "name", None),
-            project_type=getattr(args, "project_type", None),
-            stack=getattr(args, "stack", None),
-            test_cmd=getattr(args, "test_cmd", None),
+            project_type=getattr(args, "project_type", None) or template_defaults.get("project_type"),
+            stack=getattr(args, "stack", None) or template_defaults.get("stack"),
+            test_cmd=getattr(args, "test_cmd", None) or template_defaults.get("test_command"),
             force=bool(getattr(args, "force", False)),
         )
 
+    if template_name and getattr(result, "status", None) in {"initialized", "completed"}:
+        try:
+            template_bootstrap_result = apply_template_bootstrap(target, template_name)
+        except Exception as exc:
+            message = f"template bootstrap failed: {exc}"
+            if hasattr(result, "warnings"):
+                result.warnings.append(message)
+            logging.getLogger(__name__).warning(message)
+        else:
+            if hasattr(result, "warnings"):
+                result.warnings.extend(template_bootstrap_result.get("warnings", []))
+            record_path = template_bootstrap_result.get("bootstrap_record_path")
+            if record_path:
+                if hasattr(result, "created_files"):
+                    result.created_files.append(record_path)
+                elif hasattr(result, "config_paths") and isinstance(result.config_paths, dict):
+                    result.config_paths["template_bootstrap"] = str(target / record_path)
+
     # 기존 init 테스트 호환: 별도 대상 디렉토리를 줄 때는 예전 스캐폴드도 유지한다.
+    if template_choice is not None and getattr(result, "status", None) in {"initialized", "completed"}:
+        choice_rel = str(default_template_bootstrap_choice_path(target).relative_to(target)).replace("\\", "/")
+        if hasattr(result, "created_files") and choice_rel not in result.created_files:
+            result.created_files.append(choice_rel)
+        elif hasattr(result, "config_paths") and isinstance(result.config_paths, dict):
+            result.config_paths["template_bootstrap_choice"] = str(target / choice_rel)
+
     if getattr(result, "status", None) in {"initialized", "completed"} and target != Path.cwd().resolve():
         src_skills = Path(args.skills)
         if not src_skills.exists():
@@ -6634,14 +7386,1305 @@ def _handle_init(args: argparse.Namespace) -> None:
                 shutil.copy2(bundled_policy, policy_dst)
 
     if getattr(args, "json_output", False):
-        print(json.dumps(result.to_dict(), indent=2, ensure_ascii=False))
+        payload = result.to_dict()
+        if template_choice is not None:
+            payload["template_bootstrap_choice"] = template_choice.to_dict()
+        if template_bootstrap_result:
+            payload["template_bootstrap"] = template_bootstrap_result
+        print(json.dumps(payload, indent=2, ensure_ascii=False))
         return
 
     if is_wizard:
         print(render_wizard_summary(result))
+        if template_choice is not None:
+            print()
+            print(render_bootstrap_choice_result(template_choice))
+        if template_bootstrap_result:
+            print()
+            print(render_template_bootstrap_apply(template_bootstrap_result))
         return
 
     print(render_init_summary(result))
+    if template_choice is not None:
+        print()
+        print(render_bootstrap_choice_result(template_choice))
+    if template_bootstrap_result:
+        print()
+        print(render_template_bootstrap_apply(template_bootstrap_result))
+
+
+def _handle_template(args: argparse.Namespace) -> None:
+    """cambrian template 처리."""
+    from engine.project_templates import (
+        HarnessTemplateApplier,
+        HarnessTemplateBuilder,
+        HarnessTemplateStore,
+        default_templates_path,
+        render_template_apply,
+        render_template_list,
+        render_template_show,
+    )
+    from engine.project_template_recommend import (
+        TemplateRecommendationBuilder,
+        TemplateRecommendationStore,
+        default_request_template_recommendation_path,
+        default_template_recommendation_path,
+        render_template_recommendation,
+    )
+    from engine.project_template_diff import (
+        TemplateDiffBuilder,
+        TemplateDiffStore,
+        default_template_diff_path,
+        render_template_diff,
+    )
+    from engine.project_template_apply_guardrails import (
+        TemplateApplyGuardrailBuilder,
+        TemplateApplyGuardrailStore,
+        default_template_apply_guardrails_path,
+        load_template_apply_guardrail_summary,
+        render_template_apply_guardrails,
+        render_template_apply_guardrail_summary,
+    )
+    from engine.project_template_decisions import (
+        TemplateDecisionStore,
+        TemplateReviewBuilder,
+        TemplateReviewStore,
+        build_template_decision,
+        default_template_decisions_path,
+        default_template_reviews_dir,
+        load_template_decision_summary,
+        render_template_decision,
+        render_template_decision_summary,
+        render_template_decisions,
+        render_template_review,
+    )
+    from engine.project_template_transfer import (
+        HarnessTemplateExporter,
+        HarnessTemplateImporter,
+        imported_template_record_path,
+        render_template_export,
+        render_template_import,
+    )
+    from engine.project_template_history import (
+        TemplateHistoryBuilder,
+        TemplatePassportStore,
+        TemplateRetrospectiveStore,
+        build_template_retrospective,
+        default_template_passport_path,
+        default_template_retrospectives_dir,
+        load_template_history_summary,
+        render_template_history,
+        render_template_history_summary,
+        render_template_retrospective_saved,
+        render_template_retrospectives,
+    )
+    from engine.project_template_library import (
+        TemplateLibraryBoardBuilder,
+        TemplateLibraryBoardStore,
+        default_template_library_board_path,
+        load_template_library_standing_summary,
+        render_template_library_board,
+        render_template_library_standing,
+    )
+    from engine.project_template_library_decisions import (
+        TemplateLibraryDecisionStore,
+        build_template_library_decision,
+        default_template_library_decisions_path,
+        load_template_library_decision_summary,
+        render_template_library_decision,
+        render_template_library_decision_summary,
+        render_template_library_decisions,
+    )
+    from engine.project_template_library_policy import (
+        build_and_save_template_library_policy_overlay,
+        load_template_library_policy_summary,
+        render_template_library_policy_summary,
+    )
+    from engine.project_template_qualification import (
+        TemplateQualificationBuilder,
+        TemplateQualificationStore,
+        default_template_qualification_path,
+        load_latest_template_qualification_summary,
+        render_template_lineage,
+        render_template_qualification,
+        render_template_qualification_summary,
+        resolve_template_qualification_path,
+    )
+    from engine.project_template_qualification_decisions import (
+        QualificationAcceptBlockedError,
+        TemplateQualificationDecisionStore,
+        accept_qualification,
+        dismiss_qualification,
+        load_lane_playbook_summary,
+        load_qualification_decision_summary,
+        qualification_decisions_path,
+        render_lane_playbook_summary,
+        render_qualification_accepted,
+        render_qualification_decisions,
+        render_qualification_dismissed,
+    )
+    from engine.project_template_qualification_rollback import (
+        QualificationAdoptionRollbackBlockedError,
+        TemplateQualificationAdoptionStore,
+        load_qualification_adoption_summary,
+        qualification_adoptions_dir,
+        render_qualification_adoption_summary,
+        render_qualification_adoptions,
+        render_qualification_reverted,
+        revert_qualification_adoption,
+    )
+    from engine.project_template_canary import (
+        TemplateCanaryStageBlockedError,
+        active_canary_stage,
+        load_template_canary_summary,
+        qualification_stages_path,
+        render_template_canary,
+        render_template_canary_cleared,
+        render_template_canary_staged,
+        render_template_canary_summary,
+        stage_qualification_as_canary,
+        unstage_qualification_canary,
+    )
+    from engine.project_template_canary_report import (
+        CanaryPromotionBlockedError,
+        CanaryReportBlockedError,
+        TemplateCanaryReportBuilder,
+        TemplateCanaryReportStore,
+        default_canary_report_path,
+        load_latest_canary_report_summary,
+        promote_canary_template,
+        render_canary_promoted,
+        render_canary_report,
+        render_canary_report_summary,
+        resolve_canary_report_path,
+    )
+    from engine.project_template_canary_ledger import (
+        CanaryEventStore,
+        CanaryLedgerBlockedError,
+        CanaryLedgerBuilder,
+        CanaryLedgerStore,
+        canary_events_dir,
+        default_canary_ledger_path,
+        load_canary_ledger_summary,
+        record_canary_recommendation_surface,
+        render_canary_events,
+        render_canary_ledger,
+        render_canary_ledger_summary,
+    )
+    from engine.project_template_canary_outcomes import (
+        CanaryOutcomeBlockedError,
+        CanaryOutcomeLinkBuilder,
+        CanaryOutcomeSummaryBuilder,
+        build_and_save_canary_outcomes,
+        load_canary_outcome_summary,
+        render_canary_links,
+        render_canary_outcome_summary,
+        render_canary_outcomes,
+    )
+    from engine.project_template_canary_review import (
+        CanaryReviewBlockedError,
+        TemplateCanaryReviewBuilder,
+        TemplateCanaryReviewStore,
+        default_canary_review_path,
+        load_canary_review_summary,
+        render_canary_review,
+        render_canary_review_summary,
+        resolve_canary_review_path,
+    )
+    from engine.project_template_challenge_matrix import (
+        TemplateChallengeMatrixBuilder,
+        TemplateChallengeMatrixStore,
+        build_challenge_board_summary,
+        default_challenge_matrix_path,
+        load_challenge_matrix_summary,
+        load_challenger_queue_summary,
+        render_challenge_board,
+        render_challenge_matrix,
+        render_challenge_matrix_summary,
+        render_challengers,
+        resolve_challenge_matrix_path,
+    )
+
+    root = Path.cwd()
+    command = getattr(args, "template_command", None)
+    if not command:
+        print("template 하위 명령이 필요합니다. 예: cambrian template list", file=sys.stderr)
+        sys.exit(1)
+    templates_path = default_templates_path(root)
+    store = HarnessTemplateStore()
+    template_decisions_path = default_template_decisions_path(root)
+
+    if command == "save":
+        try:
+            template = HarnessTemplateBuilder().from_current_project(
+                root,
+                str(getattr(args, "name")),
+                description=getattr(args, "description", None),
+                tags=list(getattr(args, "template_tags", []) or []),
+            )
+            saved_path = store.add(templates_path, template)
+        except FileNotFoundError:
+            print("Template save requires a fitted harness.\n\nRun:\n  cambrian harness fit", file=sys.stderr)
+            sys.exit(1)
+        except ValueError as exc:
+            print(f"Template save blocked: {exc}", file=sys.stderr)
+            sys.exit(1)
+        payload = {"status": "saved", "template": template.to_dict(), "saved_path": str(saved_path)}
+        if getattr(args, "json_output", False):
+            print(json.dumps(payload, indent=2, ensure_ascii=False))
+            return
+        print("Template saved.")
+        print()
+        print(render_template_show(template))
+        print()
+        print(f"Saved:\n  {saved_path}")
+        return
+
+    if command == "list":
+        model = store.load(templates_path)
+        if getattr(args, "json_output", False):
+            print(json.dumps(model.to_dict(), indent=2, ensure_ascii=False))
+            return
+        print(render_template_list(model))
+        return
+
+    if command == "show":
+        model = store.load(templates_path)
+        try:
+            template = store.find(model, str(getattr(args, "name")))
+        except KeyError as exc:
+            print(f"Template not found: {exc.args[0]}\n\nRun:\n  cambrian template list", file=sys.stderr)
+            sys.exit(1)
+        decision_summary = load_template_decision_summary(root, template.name)
+        guardrail_summary = load_template_apply_guardrail_summary(root)
+        if guardrail_summary.get("template_name") != template.name:
+            guardrail_summary = {}
+        history_summary = load_template_history_summary(root, template.name)
+        library_standing = load_template_library_standing_summary(root, template.name)
+        library_decision_summary = load_template_library_decision_summary(root, template.name)
+        library_policy_summary = load_template_library_policy_summary(root, template.name)
+        qualification_summary = load_latest_template_qualification_summary(root, template.name)
+        qualification_decision_summary = load_qualification_decision_summary(root, template.name)
+        qualification_adoption_summary = load_qualification_adoption_summary(root, template.name)
+        template_canary_summary = load_template_canary_summary(root, template.name)
+        canary_report_summary = load_latest_canary_report_summary(root, template.name)
+        canary_ledger_summary = load_canary_ledger_summary(root, template.name)
+        canary_outcome_summary = load_canary_outcome_summary(root, template.name)
+        canary_review_summary = load_canary_review_summary(root, template.name)
+        challenge_matrix_summary = load_challenge_matrix_summary(root, template.name)
+        if getattr(args, "json_output", False):
+            payload = template.to_dict()
+            payload["decision_summary"] = decision_summary
+            payload["apply_guardrail_summary"] = guardrail_summary
+            payload["history_summary"] = history_summary
+            payload["library_standing"] = library_standing
+            payload["library_decision_summary"] = library_decision_summary
+            payload["library_policy_summary"] = library_policy_summary
+            payload["qualification_summary"] = qualification_summary
+            payload["qualification_decision_summary"] = qualification_decision_summary
+            payload["qualification_adoption_summary"] = qualification_adoption_summary
+            payload["template_canary_summary"] = template_canary_summary
+            payload["canary_report_summary"] = canary_report_summary
+            payload["canary_ledger_summary"] = canary_ledger_summary
+            payload["canary_outcome_summary"] = canary_outcome_summary
+            payload["canary_review_summary"] = canary_review_summary
+            payload["challenge_matrix_summary"] = challenge_matrix_summary
+            print(json.dumps(payload, indent=2, ensure_ascii=False))
+            return
+        print(render_template_show(template))
+        if qualification_summary:
+            print()
+            print(render_template_qualification_summary(qualification_summary))
+        if qualification_decision_summary and qualification_decision_summary.get("latest_status"):
+            print()
+            print("Qualification decision:")
+            print(f"  status : {qualification_decision_summary.get('latest_status')}")
+            print(f"  verdict: {qualification_decision_summary.get('latest_verdict') or 'unknown'}")
+            actions = qualification_decision_summary.get("latest_actions") if isinstance(qualification_decision_summary.get("latest_actions"), dict) else {}
+            if actions.get("set_lane_default"):
+                print("  lane   : default switched")
+        if qualification_adoption_summary:
+            print()
+            print(render_qualification_adoption_summary(qualification_adoption_summary))
+        if template_canary_summary:
+            print()
+            print(render_template_canary_summary(template_canary_summary))
+        if canary_report_summary:
+            print()
+            print(render_canary_report_summary(canary_report_summary))
+        if canary_ledger_summary:
+            print()
+            print(render_canary_ledger_summary(canary_ledger_summary))
+        if canary_outcome_summary:
+            print()
+            print(render_canary_outcome_summary(canary_outcome_summary))
+        if canary_review_summary:
+            print()
+            print(render_canary_review_summary(canary_review_summary))
+        if challenge_matrix_summary:
+            print()
+            print(render_challenge_matrix_summary(challenge_matrix_summary))
+        if history_summary and history_summary.get("template_name"):
+            print()
+            print(render_template_history_summary(history_summary))
+        if library_standing:
+            print()
+            print(render_template_library_standing(library_standing))
+        if library_decision_summary and library_decision_summary.get("latest_kind"):
+            print()
+            print(render_template_library_decision_summary(library_decision_summary))
+        if library_policy_summary and library_policy_summary.get("standing"):
+            print()
+            print(render_template_library_policy_summary(library_policy_summary))
+        if decision_summary.get("latest_status"):
+            print()
+            print(render_template_decision_summary(decision_summary))
+        if guardrail_summary:
+            print()
+            print(render_template_apply_guardrail_summary(guardrail_summary))
+        return
+
+    if command == "apply":
+        template_name = str(getattr(args, "name"))
+        guardrail_report = TemplateApplyGuardrailBuilder().build(root, template_name)
+        guardrail_path = TemplateApplyGuardrailStore().save(
+            guardrail_report,
+            default_template_apply_guardrails_path(root),
+        )
+        force = bool(getattr(args, "force", False))
+        hard_blocked = guardrail_report.status == "blocked"
+        warning_blocked = guardrail_report.status == "safe_with_warnings" and not force
+        if hard_blocked or warning_blocked:
+            payload = {
+                "status": "blocked",
+                "guardrails": guardrail_report.to_dict(),
+                "guardrails_path": str(guardrail_path.relative_to(root)).replace("\\", "/"),
+                "force_allowed": guardrail_report.status == "safe_with_warnings",
+            }
+            if getattr(args, "json_output", False):
+                print(json.dumps(payload, indent=2, ensure_ascii=False))
+            else:
+                print(render_template_apply_guardrails(guardrail_report))
+                print()
+                print("Saved:")
+                print(f"  {guardrail_path.relative_to(root)}")
+            sys.exit(1)
+        try:
+            result = HarnessTemplateApplier().apply(
+                root,
+                template_name,
+                force=force,
+            )
+        except FileNotFoundError as exc:
+            print(f"Template apply requires an initialized project: {exc}", file=sys.stderr)
+            sys.exit(1)
+        except KeyError as exc:
+            print(f"Template not found: {exc.args[0]}\n\nRun:\n  cambrian template list", file=sys.stderr)
+            sys.exit(1)
+        except ValueError as exc:
+            print(f"Template apply blocked: {exc}", file=sys.stderr)
+            sys.exit(1)
+        result["guardrails"] = guardrail_report.to_dict()
+        result["guardrails_path"] = str(guardrail_path.relative_to(root)).replace("\\", "/")
+        if getattr(args, "json_output", False):
+            print(json.dumps(result, indent=2, ensure_ascii=False))
+            return
+        print(render_template_apply_guardrails(guardrail_report))
+        print()
+        print("Applying template...")
+        print()
+        print(render_template_apply(result))
+        return
+
+    if command == "recommend":
+        request = getattr(args, "request", None)
+        report = TemplateRecommendationBuilder().build(root, request=request)
+        saved_path = None
+        if bool(getattr(args, "save", False)):
+            target_path = (
+                default_request_template_recommendation_path(root)
+                if request
+                else default_template_recommendation_path(root)
+            )
+            saved_path = TemplateRecommendationStore().save(report, target_path)
+        canary_events = []
+        try:
+            canary_events = record_canary_recommendation_surface(
+                root,
+                report,
+                surface_kind="recommend",
+                source_ref=str(saved_path.relative_to(root)).replace("\\", "/") if saved_path is not None else None,
+            )
+        except Exception as exc:
+            logging.getLogger(__name__).warning("canary recommend ledger event failed: %s", exc)
+        payload = report.to_dict()
+        if saved_path is not None:
+            payload["saved_path"] = str(saved_path.relative_to(root)).replace("\\", "/")
+        if canary_events:
+            payload["canary_events"] = [event.to_dict() for event in canary_events]
+        if getattr(args, "json_output", False):
+            print(json.dumps(payload, indent=2, ensure_ascii=False))
+            return
+        print(render_template_recommendation(report))
+        if saved_path is not None:
+            print()
+            print("Saved:")
+            print(f"  {saved_path.relative_to(root)}")
+        return
+
+    if command == "board":
+        request = getattr(args, "request", None)
+        report = TemplateLibraryBoardBuilder().build(root, request=request)
+        saved_path = None
+        if bool(getattr(args, "save", False)):
+            saved_path = TemplateLibraryBoardStore().save(report, default_template_library_board_path(root))
+        canary_events = []
+        try:
+            canary_events = record_canary_recommendation_surface(
+                root,
+                report,
+                surface_kind="board",
+                source_ref=str(saved_path.relative_to(root)).replace("\\", "/") if saved_path is not None else None,
+            )
+        except Exception as exc:
+            logging.getLogger(__name__).warning("canary board ledger event failed: %s", exc)
+        payload = report.to_dict()
+        if saved_path is not None:
+            payload["saved_path"] = str(saved_path.relative_to(root)).replace("\\", "/")
+        if canary_events:
+            payload["canary_events"] = [event.to_dict() for event in canary_events]
+        if getattr(args, "json_output", False):
+            print(json.dumps(payload, indent=2, ensure_ascii=False))
+            return
+        print(render_template_library_board(report))
+        if saved_path is not None:
+            print()
+            print("Saved:")
+            print(f"  {saved_path.relative_to(root)}")
+        return
+
+    if command == "qualify":
+        modes = ["both"] if getattr(args, "mode", "both") == "both" else [str(getattr(args, "mode"))]
+        try:
+            report = TemplateQualificationBuilder().build(
+                root,
+                str(getattr(args, "name")),
+                str(getattr(args, "workset")),
+                reference_template_name=getattr(args, "against", None),
+                modes=modes,
+            )
+        except KeyError as exc:
+            print(f"Template not found: {exc.args[0]}\n\nRun:\n  cambrian template list", file=sys.stderr)
+            sys.exit(1)
+        except (FileNotFoundError, ValueError) as exc:
+            print(f"Template qualification blocked: {exc}", file=sys.stderr)
+            sys.exit(1)
+        saved_path = None
+        if bool(getattr(args, "save", False)):
+            saved_path = TemplateQualificationStore().save(report, default_template_qualification_path(root, report))
+        payload = report.to_dict()
+        if saved_path is not None:
+            payload["saved_path"] = str(saved_path.relative_to(root)).replace("\\", "/")
+        if getattr(args, "json_output", False):
+            print(json.dumps(payload, indent=2, ensure_ascii=False))
+            return
+        print(render_template_qualification(
+            report,
+            saved_path=str(saved_path.relative_to(root)).replace("\\", "/") if saved_path is not None else None,
+        ))
+        return
+
+    if command == "qualify-show":
+        try:
+            qualification_path = resolve_template_qualification_path(root, str(getattr(args, "qualification_ref")))
+        except FileNotFoundError as exc:
+            print(f"Template qualification not found: {exc}", file=sys.stderr)
+            sys.exit(1)
+        report = TemplateQualificationStore().load(qualification_path)
+        if getattr(args, "json_output", False):
+            payload = report.to_dict()
+            payload["qualification_path"] = str(qualification_path.relative_to(root)).replace("\\", "/")
+            print(json.dumps(payload, indent=2, ensure_ascii=False))
+            return
+        print(render_template_qualification(report, saved_path=str(qualification_path.relative_to(root)).replace("\\", "/")))
+        return
+
+    if command == "qualify-accept":
+        try:
+            decision, playbook, library_decisions, adoption, adoption_path = accept_qualification(
+                root,
+                str(getattr(args, "qualification_ref")),
+                set_lane_default=bool(getattr(args, "set_lane_default", False)),
+                parent_action=str(getattr(args, "parent_action", "keep_as_backup")),
+                resolution=getattr(args, "resolution", None),
+                force=bool(getattr(args, "force", False)),
+            )
+        except QualificationAcceptBlockedError as exc:
+            print(
+                "Qualification verdict is not candidate_stronger.\n\n"
+                f"Current verdict:\n  {exc.verdict or 'unknown'}\n\n"
+                "Use:\n"
+                f"  cambrian template qualify-show {exc.qualification_ref}\n"
+                "or:\n"
+                f"  cambrian template qualify-accept {exc.qualification_ref} --force",
+                file=sys.stderr,
+            )
+            sys.exit(1)
+        except (FileNotFoundError, KeyError, ValueError) as exc:
+            print(f"Template qualification accept blocked: {exc}", file=sys.stderr)
+            sys.exit(1)
+        payload = {
+            "status": "accepted",
+            "decision": decision.to_dict(),
+            "lane_playbook": playbook.to_dict() if playbook is not None else None,
+            "library_decisions": [item.to_dict() for item in library_decisions],
+            "adoption": adoption.to_dict(),
+            "adoption_path": str(adoption_path.relative_to(root)).replace("\\", "/"),
+            "decisions_path": str(qualification_decisions_path(root).relative_to(root)).replace("\\", "/"),
+        }
+        if getattr(args, "json_output", False):
+            print(json.dumps(payload, indent=2, ensure_ascii=False))
+            return
+        print(render_qualification_accepted(
+            decision,
+            playbook,
+            library_decisions,
+            adoption_ref=str(adoption_path.relative_to(root)).replace("\\", "/"),
+        ))
+        return
+
+    if command == "qualify-dismiss":
+        try:
+            decision = dismiss_qualification(
+                root,
+                str(getattr(args, "qualification_ref")),
+                resolution=getattr(args, "resolution", None),
+            )
+        except (FileNotFoundError, KeyError, ValueError) as exc:
+            print(f"Template qualification dismiss blocked: {exc}", file=sys.stderr)
+            sys.exit(1)
+        payload = {
+            "status": "dismissed",
+            "decision": decision.to_dict(),
+            "decisions_path": str(qualification_decisions_path(root).relative_to(root)).replace("\\", "/"),
+        }
+        if getattr(args, "json_output", False):
+            print(json.dumps(payload, indent=2, ensure_ascii=False))
+            return
+        print(render_qualification_dismissed(decision))
+        return
+
+    if command == "qualify-decisions":
+        model = TemplateQualificationDecisionStore().load(qualification_decisions_path(root))
+        decisions = list(model.decisions)
+        status_filter = getattr(args, "status", None)
+        if status_filter:
+            decisions = [decision for decision in decisions if decision.status == status_filter]
+        if getattr(args, "json_output", False):
+            payload = model.to_dict()
+            if status_filter:
+                payload["decisions"] = [decision.to_dict() for decision in decisions]
+            payload["lane_playbook_summary"] = load_lane_playbook_summary(root)
+            print(json.dumps(payload, indent=2, ensure_ascii=False))
+            return
+        print(render_qualification_decisions(decisions))
+        lane_summary = load_lane_playbook_summary(root)
+        if lane_summary:
+            print()
+            print(render_lane_playbook_summary(lane_summary))
+        return
+
+    if command == "qualify-adoptions":
+        adoptions = TemplateQualificationAdoptionStore().list(qualification_adoptions_dir(root))
+        status_filter = getattr(args, "status", None)
+        if status_filter:
+            adoptions = [adoption for adoption in adoptions if adoption.status == status_filter]
+        if getattr(args, "json_output", False):
+            print(json.dumps({
+                "schema_version": "1.0.0",
+                "adoptions": [adoption.to_dict() for adoption in adoptions],
+            }, indent=2, ensure_ascii=False))
+            return
+        print(render_qualification_adoptions(adoptions))
+        return
+
+    if command == "qualify-revert":
+        try:
+            rollback, adoption, rollback_path, library_decisions = revert_qualification_adoption(
+                root,
+                str(getattr(args, "adoption_ref")),
+                resolution=getattr(args, "resolution", None),
+            )
+        except QualificationAdoptionRollbackBlockedError as exc:
+            print(f"Template qualification rollback blocked: {exc}", file=sys.stderr)
+            sys.exit(1)
+        except (FileNotFoundError, KeyError, ValueError) as exc:
+            print(f"Template qualification rollback failed: {exc}", file=sys.stderr)
+            sys.exit(1)
+        payload = {
+            "status": "reverted",
+            "rollback": rollback.to_dict(),
+            "adoption": adoption.to_dict(),
+            "library_decisions": [item.to_dict() for item in library_decisions],
+            "rollback_path": str(rollback_path.relative_to(root)).replace("\\", "/"),
+        }
+        if getattr(args, "json_output", False):
+            print(json.dumps(payload, indent=2, ensure_ascii=False))
+            return
+        print(render_qualification_reverted(rollback, rollback_path, root))
+        return
+
+    if command == "qualify-stage":
+        try:
+            stage, playbook, stages_path = stage_qualification_as_canary(
+                root,
+                str(getattr(args, "qualification_ref")),
+                reason=getattr(args, "reason", None),
+                force=bool(getattr(args, "force", False)),
+            )
+        except TemplateCanaryStageBlockedError as exc:
+            print(
+                "Template canary stage blocked.\n\n"
+                f"Why:\n  {exc}\n\n"
+                "Use:\n"
+                "  cambrian template canary\n"
+                "  cambrian template qualify-unstage <qualification>\n"
+                "or:\n"
+                f"  cambrian template qualify-stage {exc.qualification_ref or '<qualification>'} --force",
+                file=sys.stderr,
+            )
+            sys.exit(1)
+        except (FileNotFoundError, KeyError, ValueError) as exc:
+            print(f"Template canary stage failed: {exc}", file=sys.stderr)
+            sys.exit(1)
+        payload = {
+            "status": "active",
+            "stage": stage.to_dict(),
+            "lane_playbook": playbook.to_dict(),
+            "stages_path": str(stages_path.relative_to(root)).replace("\\", "/"),
+        }
+        if getattr(args, "json_output", False):
+            print(json.dumps(payload, indent=2, ensure_ascii=False))
+            return
+        print(render_template_canary_staged(stage, playbook, stages_path, root))
+        return
+
+    if command == "canary":
+        stage = active_canary_stage(root)
+        playbook = None
+        try:
+            from engine.project_template_qualification_decisions import LanePlaybookStore, lane_playbook_path
+
+            playbook = LanePlaybookStore().load(lane_playbook_path(root))
+        except Exception:
+            playbook = None
+        payload = {
+            "stage": stage.to_dict() if stage is not None else None,
+            "lane_playbook": playbook.to_dict() if playbook is not None else None,
+            "stages_path": str(qualification_stages_path(root).relative_to(root)).replace("\\", "/"),
+            "canary_ledger_summary": load_canary_ledger_summary(root),
+            "canary_outcome_summary": load_canary_outcome_summary(root),
+            "canary_review_summary": load_canary_review_summary(root),
+        }
+        if getattr(args, "json_output", False):
+            print(json.dumps(payload, indent=2, ensure_ascii=False))
+            return
+        print(render_template_canary(stage, playbook))
+        ledger_summary = payload.get("canary_ledger_summary") if isinstance(payload.get("canary_ledger_summary"), dict) else {}
+        if ledger_summary:
+            print()
+            print(render_canary_ledger_summary(ledger_summary))
+        outcome_summary = payload.get("canary_outcome_summary") if isinstance(payload.get("canary_outcome_summary"), dict) else {}
+        if outcome_summary:
+            print()
+            print(render_canary_outcome_summary(outcome_summary))
+        review_summary = payload.get("canary_review_summary") if isinstance(payload.get("canary_review_summary"), dict) else {}
+        if review_summary:
+            print()
+            print(render_canary_review_summary(review_summary))
+        return
+
+    if command == "canary-ledger":
+        try:
+            summary = CanaryLedgerBuilder().build(root, template_name=getattr(args, "name", None))
+        except CanaryLedgerBlockedError as exc:
+            print(f"Template canary ledger blocked: {exc}", file=sys.stderr)
+            sys.exit(1)
+        except (FileNotFoundError, KeyError, ValueError) as exc:
+            print(f"Template canary ledger failed: {exc}", file=sys.stderr)
+            sys.exit(1)
+        saved_path = None
+        if bool(getattr(args, "save", False)):
+            saved_path = CanaryLedgerStore().save(summary, default_canary_ledger_path(root, summary))
+        payload = summary.to_dict()
+        if saved_path is not None:
+            payload["saved_path"] = str(saved_path.relative_to(root)).replace("\\", "/")
+        if getattr(args, "json_output", False):
+            print(json.dumps(payload, indent=2, ensure_ascii=False))
+            return
+        print(render_canary_ledger(
+            summary,
+            str(saved_path.relative_to(root)).replace("\\", "/") if saved_path is not None else None,
+        ))
+        return
+
+    if command == "canary-events":
+        events = CanaryEventStore().list_events(canary_events_dir(root), getattr(args, "name", None))
+        kind_filter = getattr(args, "kind", None)
+        if kind_filter:
+            events = [event for event in events if event.event_kind == kind_filter]
+        limit = int(getattr(args, "limit", 20) or 20)
+        if getattr(args, "json_output", False):
+            print(json.dumps({
+                "schema_version": "1.0.0",
+                "events": [event.to_dict() for event in events[: max(1, limit)]],
+            }, indent=2, ensure_ascii=False))
+            return
+        print(render_canary_events(events, limit=limit))
+        return
+
+    if command == "canary-outcomes":
+        try:
+            if bool(getattr(args, "save", False)):
+                summary, links, summary_path = build_and_save_canary_outcomes(root, getattr(args, "name", None))
+            else:
+                summary = CanaryOutcomeSummaryBuilder().build(root, template_name=getattr(args, "name", None))
+                links = CanaryOutcomeLinkBuilder().build_links(root, summary.template_name)
+                summary_path = None
+        except CanaryOutcomeBlockedError as exc:
+            print(f"Template canary outcomes blocked: {exc}", file=sys.stderr)
+            sys.exit(1)
+        except (FileNotFoundError, KeyError, ValueError) as exc:
+            print(f"Template canary outcomes failed: {exc}", file=sys.stderr)
+            sys.exit(1)
+        payload = summary.to_dict()
+        payload["links"] = [link.to_dict() for link in links]
+        if summary_path is not None:
+            payload["saved_path"] = str(summary_path.relative_to(root)).replace("\\", "/")
+        if getattr(args, "json_output", False):
+            print(json.dumps(payload, indent=2, ensure_ascii=False))
+            return
+        print(render_canary_outcomes(
+            summary,
+            str(summary_path.relative_to(root)).replace("\\", "/") if summary_path is not None else None,
+        ))
+        return
+
+    if command == "canary-links":
+        try:
+            summary = CanaryOutcomeSummaryBuilder().build(root, template_name=getattr(args, "name", None))
+            links = CanaryOutcomeLinkBuilder().build_links(root, summary.template_name)
+        except CanaryOutcomeBlockedError as exc:
+            print(f"Template canary links blocked: {exc}", file=sys.stderr)
+            sys.exit(1)
+        except (FileNotFoundError, KeyError, ValueError) as exc:
+            print(f"Template canary links failed: {exc}", file=sys.stderr)
+            sys.exit(1)
+        limit = int(getattr(args, "limit", 20) or 20)
+        if getattr(args, "json_output", False):
+            print(json.dumps({
+                "schema_version": "1.0.0",
+                "template_name": summary.template_name,
+                "links": [link.to_dict() for link in links[: max(1, limit)]],
+            }, indent=2, ensure_ascii=False))
+            return
+        print(render_canary_links(links, limit=limit))
+        return
+
+    if command == "canary-review":
+        try:
+            report = TemplateCanaryReviewBuilder().build(root, template_name=getattr(args, "name", None))
+        except CanaryReviewBlockedError as exc:
+            print(
+                f"Template canary review blocked: {exc}\n\nRun:\n  cambrian template canary",
+                file=sys.stderr,
+            )
+            sys.exit(1)
+        except (FileNotFoundError, KeyError, ValueError) as exc:
+            print(f"Template canary review failed: {exc}", file=sys.stderr)
+            sys.exit(1)
+        saved_path = None
+        if bool(getattr(args, "save", False)):
+            saved_path = TemplateCanaryReviewStore().save(report, default_canary_review_path(root, report))
+        payload = report.to_dict()
+        if saved_path is not None:
+            payload["saved_path"] = str(saved_path.relative_to(root)).replace("\\", "/")
+        if getattr(args, "json_output", False):
+            print(json.dumps(payload, indent=2, ensure_ascii=False))
+            return
+        print(render_canary_review(
+            report,
+            str(saved_path.relative_to(root)).replace("\\", "/") if saved_path is not None else None,
+        ))
+        return
+
+    if command == "canary-review-show":
+        try:
+            review_path = resolve_canary_review_path(root, str(getattr(args, "review_ref")))
+            report = TemplateCanaryReviewStore().load(review_path)
+        except (FileNotFoundError, ValueError) as exc:
+            print(f"Template canary review show failed: {exc}", file=sys.stderr)
+            sys.exit(1)
+        if getattr(args, "json_output", False):
+            payload = report.to_dict()
+            payload["path"] = str(review_path.relative_to(root)).replace("\\", "/")
+            print(json.dumps(payload, indent=2, ensure_ascii=False))
+            return
+        print(render_canary_review(report, str(review_path.relative_to(root)).replace("\\", "/")))
+        return
+
+    if command == "canary-report":
+        try:
+            report = TemplateCanaryReportBuilder().build(
+                root,
+                template_name=getattr(args, "name", None),
+                workset_name=getattr(args, "workset", None),
+            )
+        except CanaryReportBlockedError as exc:
+            print(
+                f"Template canary report blocked: {exc}\n\nRun:\n  cambrian template canary",
+                file=sys.stderr,
+            )
+            sys.exit(1)
+        except (FileNotFoundError, KeyError, ValueError) as exc:
+            print(f"Template canary report failed: {exc}", file=sys.stderr)
+            sys.exit(1)
+        saved_path = None
+        if bool(getattr(args, "save", False)):
+            saved_path = TemplateCanaryReportStore().save(report, default_canary_report_path(root, report))
+        payload = report.to_dict()
+        if saved_path is not None:
+            payload["saved_path"] = str(saved_path.relative_to(root)).replace("\\", "/")
+        if getattr(args, "json_output", False):
+            print(json.dumps(payload, indent=2, ensure_ascii=False))
+            return
+        print(render_canary_report(report, str(saved_path.relative_to(root)).replace("\\", "/") if saved_path else None))
+        return
+
+    if command == "canary-report-show":
+        try:
+            report_path = resolve_canary_report_path(root, str(getattr(args, "report_ref")))
+            report = TemplateCanaryReportStore().load(report_path)
+        except (FileNotFoundError, ValueError) as exc:
+            print(f"Template canary report show failed: {exc}", file=sys.stderr)
+            sys.exit(1)
+        if getattr(args, "json_output", False):
+            payload = report.to_dict()
+            payload["path"] = str(report_path.relative_to(root)).replace("\\", "/")
+            print(json.dumps(payload, indent=2, ensure_ascii=False))
+            return
+        print(render_canary_report(report, str(report_path.relative_to(root)).replace("\\", "/")))
+        return
+
+    if command == "canary-promote":
+        try:
+            payload = promote_canary_template(
+                root,
+                str(getattr(args, "name")),
+                previous_default_action=str(getattr(args, "previous_default_action") or "keep_as_backup"),
+                resolution=getattr(args, "resolution", None),
+                force=bool(getattr(args, "force", False)),
+            )
+        except CanaryPromotionBlockedError as exc:
+            print(
+                f"Template canary promotion blocked: {exc}\n\n"
+                f"Verdict:\n  {exc.verdict or 'unknown'}",
+                file=sys.stderr,
+            )
+            if exc.next_action:
+                print(f"\nUse:\n  {exc.next_action}", file=sys.stderr)
+            sys.exit(1)
+        except (FileNotFoundError, KeyError, ValueError) as exc:
+            print(f"Template canary promotion failed: {exc}", file=sys.stderr)
+            sys.exit(1)
+        if getattr(args, "json_output", False):
+            print(json.dumps(payload, indent=2, ensure_ascii=False))
+            return
+        print(render_canary_promoted(payload))
+        return
+
+    if command == "qualify-unstage":
+        try:
+            stage, playbook, _stages_path = unstage_qualification_canary(
+                root,
+                str(getattr(args, "qualification_ref")),
+                resolution=getattr(args, "resolution", None),
+            )
+        except TemplateCanaryStageBlockedError as exc:
+            print(f"Template canary unstage blocked: {exc}", file=sys.stderr)
+            sys.exit(1)
+        except (FileNotFoundError, KeyError, ValueError) as exc:
+            print(f"Template canary unstage failed: {exc}", file=sys.stderr)
+            sys.exit(1)
+        payload = {
+            "status": "cleared",
+            "stage": stage.to_dict(),
+            "lane_playbook": playbook.to_dict(),
+        }
+        if getattr(args, "json_output", False):
+            print(json.dumps(payload, indent=2, ensure_ascii=False))
+            return
+        print(render_template_canary_cleared(stage, playbook))
+        return
+
+    if command == "challenge-matrix":
+        try:
+            mode_arg = str(getattr(args, "mode", "both") or "both")
+            modes = ["cambrian_guided", "cambrian_full"] if mode_arg == "both" else [mode_arg]
+            report = TemplateChallengeMatrixBuilder().build(
+                root,
+                str(getattr(args, "workset")),
+                modes=modes,
+            )
+        except (FileNotFoundError, KeyError, ValueError) as exc:
+            print(f"Template challenge matrix failed: {exc}", file=sys.stderr)
+            sys.exit(1)
+        saved_path = None
+        if bool(getattr(args, "save", False)):
+            saved_path = TemplateChallengeMatrixStore().save(report, default_challenge_matrix_path(root, report))
+        payload = report.to_dict()
+        if saved_path is not None:
+            payload["saved_path"] = str(saved_path.relative_to(root)).replace("\\", "/")
+        if getattr(args, "json_output", False):
+            print(json.dumps(payload, indent=2, ensure_ascii=False))
+            return
+        print(render_challenge_matrix(
+            report,
+            str(saved_path.relative_to(root)).replace("\\", "/") if saved_path is not None else None,
+        ))
+        return
+
+    if command == "challenge-matrix-show":
+        try:
+            matrix_path = resolve_challenge_matrix_path(root, str(getattr(args, "matrix_ref")))
+            report = TemplateChallengeMatrixStore().load(matrix_path)
+        except (FileNotFoundError, ValueError) as exc:
+            print(f"Template challenge matrix show failed: {exc}", file=sys.stderr)
+            sys.exit(1)
+        if getattr(args, "json_output", False):
+            payload = report.to_dict()
+            payload["path"] = str(matrix_path.relative_to(root)).replace("\\", "/")
+            print(json.dumps(payload, indent=2, ensure_ascii=False))
+            return
+        print(render_challenge_matrix(report, str(matrix_path.relative_to(root)).replace("\\", "/")))
+        return
+
+    if command == "challenge-board":
+        summary = build_challenge_board_summary(root)
+        if getattr(args, "json_output", False):
+            print(json.dumps(summary, indent=2, ensure_ascii=False))
+            return
+        print(render_challenge_board(summary))
+        return
+
+    if command == "challengers":
+        summary = load_challenger_queue_summary(root)
+        if getattr(args, "json_output", False):
+            print(json.dumps(summary, indent=2, ensure_ascii=False))
+            return
+        print(render_challengers(summary))
+        return
+
+    if command == "lineage":
+        model = store.load(templates_path)
+        try:
+            template = store.find(model, str(getattr(args, "name")))
+        except KeyError as exc:
+            print(f"Template not found: {exc.args[0]}\n\nRun:\n  cambrian template list", file=sys.stderr)
+            sys.exit(1)
+        qualification_summary = load_latest_template_qualification_summary(root, template.name)
+        qualification_decision_summary = load_qualification_decision_summary(root, template.name)
+        qualification_adoption_summary = load_qualification_adoption_summary(root, template.name)
+        template_canary_summary = load_template_canary_summary(root, template.name)
+        canary_report_summary = load_latest_canary_report_summary(root, template.name)
+        canary_ledger_summary = load_canary_ledger_summary(root, template.name)
+        canary_outcome_summary = load_canary_outcome_summary(root, template.name)
+        canary_review_summary = load_canary_review_summary(root, template.name)
+        challenge_matrix_summary = load_challenge_matrix_summary(root, template.name)
+        if getattr(args, "json_output", False):
+            print(json.dumps({
+                "template": template.to_dict(),
+                "qualification_summary": qualification_summary,
+                "qualification_decision_summary": qualification_decision_summary,
+                "qualification_adoption_summary": qualification_adoption_summary,
+                "template_canary_summary": template_canary_summary,
+                "canary_report_summary": canary_report_summary,
+                "canary_ledger_summary": canary_ledger_summary,
+                "canary_outcome_summary": canary_outcome_summary,
+                "canary_review_summary": canary_review_summary,
+                "challenge_matrix_summary": challenge_matrix_summary,
+            }, indent=2, ensure_ascii=False))
+            return
+        print(render_template_lineage(root, template, qualification_summary))
+        if qualification_decision_summary and qualification_decision_summary.get("latest_status"):
+            print()
+            print("Latest qualification decision:")
+            print(f"  accepted: {'yes' if qualification_decision_summary.get('latest_status') == 'accepted' else 'no'}")
+            print(f"  status  : {qualification_decision_summary.get('latest_status')}")
+        if qualification_adoption_summary:
+            print()
+            print(render_qualification_adoption_summary(qualification_adoption_summary))
+        if template_canary_summary:
+            print()
+            print(render_template_canary_summary(template_canary_summary))
+        if canary_report_summary:
+            print()
+            print(render_canary_report_summary(canary_report_summary))
+        if canary_ledger_summary:
+            print()
+            print(render_canary_ledger_summary(canary_ledger_summary))
+        if canary_outcome_summary:
+            print()
+            print(render_canary_outcome_summary(canary_outcome_summary))
+        if canary_review_summary:
+            print()
+            print(render_canary_review_summary(canary_review_summary))
+        if challenge_matrix_summary:
+            print()
+            print(render_challenge_matrix_summary(challenge_matrix_summary))
+        return
+
+    if command in {"promote", "keep", "backup", "watch", "retire"}:
+        try:
+            decision = build_template_library_decision(
+                root,
+                str(getattr(args, "name")),
+                command,
+                source_ref=getattr(args, "source_ref", None),
+                resolution=getattr(args, "resolution", None),
+            )
+        except KeyError as exc:
+            print(f"Template not found: {exc.args[0]}\n\nRun:\n  cambrian template list", file=sys.stderr)
+            sys.exit(1)
+        except ValueError as exc:
+            print(f"Template library decision blocked: {exc}", file=sys.stderr)
+            sys.exit(1)
+        recorded_path = TemplateLibraryDecisionStore().add(default_template_library_decisions_path(root), decision)
+        policy_overlay, policy_path = build_and_save_template_library_policy_overlay(root)
+        payload = {
+            "status": "recorded",
+            "decision": decision.to_dict(),
+            "recorded_path": str(recorded_path.relative_to(root)).replace("\\", "/"),
+            "policy_overlay": policy_overlay.to_dict(),
+            "policy_overlay_path": str(policy_path.relative_to(root)).replace("\\", "/"),
+        }
+        if getattr(args, "json_output", False):
+            print(json.dumps(payload, indent=2, ensure_ascii=False))
+            return
+        print(render_template_library_decision(decision, payload["recorded_path"]))
+        return
+
+    if command == "library-decisions":
+        model = TemplateLibraryDecisionStore().load(default_template_library_decisions_path(root))
+        if getattr(args, "json_output", False):
+            print(json.dumps(model.to_dict(), indent=2, ensure_ascii=False))
+            return
+        print(render_template_library_decisions(model))
+        return
+
+    if command == "diff":
+        try:
+            report = TemplateDiffBuilder().build(root, str(getattr(args, "name")))
+        except KeyError as exc:
+            print(f"Template not found: {exc.args[0]}\n\nRun:\n  cambrian template list", file=sys.stderr)
+            sys.exit(1)
+        saved_path = None
+        if bool(getattr(args, "save", False)):
+            saved_path = TemplateDiffStore().save(report, default_template_diff_path(root))
+        payload = report.to_dict()
+        if saved_path is not None:
+            payload["saved_path"] = str(saved_path.relative_to(root)).replace("\\", "/")
+        if getattr(args, "json_output", False):
+            print(json.dumps(payload, indent=2, ensure_ascii=False))
+            return
+        print(render_template_diff(report))
+        if saved_path is not None:
+            print()
+            print("Saved:")
+            print(f"  {saved_path.relative_to(root)}")
+        return
+
+    if command == "review":
+        try:
+            review = TemplateReviewBuilder().build(root, str(getattr(args, "name")))
+        except KeyError as exc:
+            print(f"Template not found: {exc.args[0]}\n\nRun:\n  cambrian template list", file=sys.stderr)
+            sys.exit(1)
+        saved_path = None
+        if bool(getattr(args, "save", False)):
+            saved_path = TemplateReviewStore().save(review, default_template_reviews_dir(root))
+        payload = review.to_dict()
+        if saved_path is not None:
+            payload["saved_path"] = str(saved_path.relative_to(root)).replace("\\", "/")
+        if getattr(args, "json_output", False):
+            print(json.dumps(payload, indent=2, ensure_ascii=False))
+            return
+        print(render_template_review(review))
+        if saved_path is not None:
+            print()
+            print("Saved:")
+            print(f"  {saved_path.relative_to(root)}")
+        return
+
+    if command in {"accept", "dismiss"}:
+        try:
+            decision = build_template_decision(
+                root,
+                str(getattr(args, "name")),
+                status="accepted" if command == "accept" else "dismissed",
+                resolution=getattr(args, "resolution", None),
+            )
+        except KeyError as exc:
+            print(f"Template not found: {exc.args[0]}\n\nRun:\n  cambrian template list", file=sys.stderr)
+            sys.exit(1)
+        except ValueError as exc:
+            print(f"Template decision blocked: {exc}", file=sys.stderr)
+            sys.exit(1)
+        recorded_path = TemplateDecisionStore().add(template_decisions_path, decision)
+        payload = {
+            "status": decision.status,
+            "decision": decision.to_dict(),
+            "recorded_path": str(recorded_path.relative_to(root)).replace("\\", "/"),
+        }
+        if getattr(args, "json_output", False):
+            print(json.dumps(payload, indent=2, ensure_ascii=False))
+            return
+        print(render_template_decision(decision, payload["recorded_path"]))
+        return
+
+    if command == "decisions":
+        model = TemplateDecisionStore().load(template_decisions_path)
+        status_filter = getattr(args, "status", None)
+        if getattr(args, "json_output", False):
+            payload = model.to_dict()
+            if status_filter:
+                payload["decisions"] = [
+                    decision
+                    for decision in payload["decisions"]
+                    if decision.get("status") == status_filter
+                ]
+            print(json.dumps(payload, indent=2, ensure_ascii=False))
+            return
+        print(render_template_decisions(model, status=status_filter))
+        return
+
+    if command == "export":
+        try:
+            out_arg = getattr(args, "out", None)
+            exported_path = HarnessTemplateExporter().export(
+                root,
+                str(getattr(args, "name")),
+                out_path=Path(str(out_arg)) if out_arg else None,
+            )
+            exported_payload = yaml.safe_load(exported_path.read_text(encoding="utf-8")) or {}
+        except KeyError as exc:
+            print(f"Template not found: {exc.args[0]}\n\nRun:\n  cambrian template list", file=sys.stderr)
+            sys.exit(1)
+        except ValueError as exc:
+            print(f"Template export blocked: {exc}", file=sys.stderr)
+            sys.exit(1)
+        payload = {
+            "status": "exported",
+            "exported_path": str(exported_path),
+            "template": exported_payload,
+        }
+        if getattr(args, "json_output", False):
+            print(json.dumps(payload, indent=2, ensure_ascii=False))
+            return
+        print(render_template_export(exported_path, exported_payload))
+        return
+
+    if command == "import":
+        try:
+            record = HarnessTemplateImporter().import_template(
+                root,
+                Path(str(getattr(args, "file"))),
+                as_name=getattr(args, "as_name", None),
+            )
+        except FileNotFoundError as exc:
+            print(f"Template import file not found: {exc}", file=sys.stderr)
+            sys.exit(1)
+        except ValueError as exc:
+            print(f"Template import blocked: {exc}", file=sys.stderr)
+            sys.exit(1)
+        imported_path = imported_template_record_path(root, record.name)
+        payload = {
+            "status": "imported",
+            "record": record.to_dict(),
+            "imported_path": str(imported_path.relative_to(root)).replace("\\", "/"),
+        }
+        if getattr(args, "json_output", False):
+            print(json.dumps(payload, indent=2, ensure_ascii=False))
+            return
+        print(render_template_import(record, imported_path, root))
+        return
+
+    if command == "history":
+        try:
+            passport = TemplateHistoryBuilder().build_passport(root, str(getattr(args, "name")))
+        except KeyError as exc:
+            print(f"Template not found: {exc.args[0]}\n\nRun:\n  cambrian template list", file=sys.stderr)
+            sys.exit(1)
+        saved_path = TemplatePassportStore().save(passport, default_template_passport_path(root, passport.template_name))
+        payload = passport.to_dict()
+        payload["saved_path"] = str(saved_path.relative_to(root)).replace("\\", "/")
+        if getattr(args, "json_output", False):
+            print(json.dumps(payload, indent=2, ensure_ascii=False))
+            return
+        print(render_template_history(passport, limit=int(getattr(args, "limit", 12) or 12)))
+        print()
+        print("Saved:")
+        print(f"  {saved_path.relative_to(root)}")
+        return
+
+    if command == "retrospective":
+        try:
+            retrospective = build_template_retrospective(
+                root,
+                str(getattr(args, "name")),
+                str(getattr(args, "text")),
+                rating=str(getattr(args, "rating", "good")),
+                kind=str(getattr(args, "kind", "fit")),
+                tags=list(getattr(args, "retrospective_tags", []) or []),
+            )
+        except KeyError as exc:
+            print(f"Template not found: {exc.args[0]}\n\nRun:\n  cambrian template list", file=sys.stderr)
+            sys.exit(1)
+        except ValueError as exc:
+            print(f"Template retrospective blocked: {exc}", file=sys.stderr)
+            sys.exit(1)
+        saved_path = TemplateRetrospectiveStore().add(retrospective, default_template_retrospectives_dir(root))
+        payload = retrospective.to_dict()
+        payload["saved_path"] = str(saved_path.relative_to(root)).replace("\\", "/")
+        if getattr(args, "json_output", False):
+            print(json.dumps(payload, indent=2, ensure_ascii=False))
+            return
+        print(render_template_retrospective_saved(retrospective, saved_path, root))
+        return
+
+    if command == "retrospectives":
+        try:
+            template = store.find(store.load(templates_path), str(getattr(args, "name")))
+        except KeyError as exc:
+            print(f"Template not found: {exc.args[0]}\n\nRun:\n  cambrian template list", file=sys.stderr)
+            sys.exit(1)
+        retrospectives = TemplateRetrospectiveStore().list(default_template_retrospectives_dir(root), template.name)
+        rating_filter = getattr(args, "rating", None)
+        status_filter = getattr(args, "status", None)
+        filtered = [
+            item
+            for item in retrospectives
+            if (rating_filter is None or item.rating == rating_filter)
+            and (status_filter is None or item.status == status_filter)
+        ]
+        if getattr(args, "json_output", False):
+            print(json.dumps([item.to_dict() for item in filtered], indent=2, ensure_ascii=False))
+            return
+        print(render_template_retrospectives(retrospectives, template.name, rating=rating_filter, status=status_filter))
+        return
+
+    print("template 하위 명령이 필요합니다. 예: cambrian template save auth-bug-template", file=sys.stderr)
+    sys.exit(1)
 
 
 def _handle_bridge(args: argparse.Namespace) -> None:
