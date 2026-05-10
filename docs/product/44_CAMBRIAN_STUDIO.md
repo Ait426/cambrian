@@ -196,6 +196,29 @@ install:
 9. job validation 직후 proof card를 자동 갱신하고, 계약 검증 gap을 improvement queue와 derivative plan으로 연결
 10. `cambrian pack job-validate latest --criteria-status satisfied`로 사람이 검증 기준 판정을 기록하면 최신 proof card가 `satisfied`로 갱신
 11. 검증 기준이 남아 있으면 `job-validate` 결과의 next command와 `job-show`가 수동 판정 경로를 직접 안내
+12. `cambrian pack doctor <agent>`가 Studio agent contract preflight를 검사해 worker, 검증 기준, 금지/승인 행동, 안전 설치 기본값을 리포트로 표시
+13. `cambrian pack proof-export <agent>`가 privacy-safe proof snapshot에 `marketplace_readiness`를 남겨, 계약 검증 전에는 `blocked`, 검증 후 evidence가 부족하면 `draft_only`로 표시
+14. `cambrian pack marketplace-export <agent>`가 manifest metadata와 proof export를 묶어 업로드 전 로컬 listing draft를 생성
+15. `cambrian pack marketplace-show latest`로 저장된 listing draft를 다시 열어 심사 상태와 blocker를 확인
+16. `cambrian pack marketplace-review latest --decision needs_work`로 listing draft에 대한 로컬 심사 결정을 기록하고, `safe_to_publish`가 false이면 `accepted` 결정을 차단
+17. `cambrian pack marketplace-review-show latest`로 저장된 심사 결정을 다시 열어 listing draft와 심사 이력을 이어서 확인
+18. `cambrian pack marketplace-review-list`로 저장된 marketplace review decision 목록을 최신순으로 확인
+19. `cambrian pack marketplace-show latest`가 listing draft와 연결된 최신 review decision을 함께 표시
+20. `cambrian pack marketplace-status latest`가 listing draft와 최신 review decision을 하나의 운영 상태로 요약
+21. `cambrian pack marketplace-status-list`가 저장된 listing draft들의 운영 상태를 최신순 dashboard 목록으로 요약
+22. `cambrian pack marketplace-status-list --status needs_work`가 운영 상태별 summary와 필터링된 dashboard 목록을 제공
+23. `cambrian pack marketplace-status-list --save`가 Studio UI에서 읽을 수 있는 marketplace status dashboard snapshot을 로컬에 저장
+24. `cambrian pack marketplace-status-show latest`가 저장된 marketplace status dashboard snapshot을 다시 열어 Studio UI 입력을 재확인
+25. `cambrian pack marketplace-status-check latest`가 저장된 dashboard snapshot의 필수 필드와 summary 일관성을 검사
+26. `cambrian pack marketplace-status-check latest --save`가 dashboard snapshot 검증 결과를 check report로 저장
+27. `cambrian pack marketplace-status-check-show latest`가 저장된 dashboard snapshot check report를 다시 열어 검증 이력을 확인
+28. `cambrian pack marketplace-status-ready`가 저장된 dashboard snapshot과 check report를 묶어 Studio UI 입력 준비 상태를 판단
+29. `cambrian pack marketplace-status-ready --save`와 `marketplace-status-ready-show latest`가 Studio UI용 ready report를 저장하고 다시 연다
+30. `cambrian pack marketplace-status-ready-check latest`가 저장된 ready report의 필수 필드와 연결된 dashboard/check 참조를 검증
+31. `cambrian pack marketplace-status-studio`가 ready report와 ready-check report를 하나의 Studio UI handoff payload로 묶는다
+32. `cambrian pack marketplace-status-studio-check latest`가 최종 Studio handoff payload의 필수 필드와 내부 참조 일관성을 검증
+33. `cambrian pack marketplace-status-studio-refresh`가 dashboard부터 최종 Studio handoff check까지 한 번에 갱신
+34. `cambrian pack marketplace-status-studio-refresh-show latest`가 마지막 refresh report를 다시 열어 Studio 새로고침 이력을 확인
 
 ## 10. 최종 문장
 

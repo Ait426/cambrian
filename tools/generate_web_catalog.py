@@ -201,6 +201,8 @@ def _public_proof_payload(payload: dict[str, Any]) -> dict[str, Any]:
         "known_limits": payload.get("known_limits") or [],
         "web_summary": payload.get("web_summary"),
         "privacy_classification": payload.get("privacy_classification"),
+        "marketplace_readiness": payload.get("marketplace_readiness"),
+        "marketplace_blockers": payload.get("marketplace_blockers") or [],
     }
 
 
@@ -809,9 +811,11 @@ def _public_proof_html(proof: dict[str, Any] | None) -> str:
     metric_lines = "".join(f"<li>{_e(key)}: {_e(value)}</li>" for key, value in metrics.items() if value is not None)
     caveats = proof.get("caveats") if isinstance(proof.get("caveats"), list) else []
     caveat_lines = "".join(f"<li>{_e(item)}</li>" for item in caveats)
+    marketplace_readiness = proof.get("marketplace_readiness") or "draft_only"
     return f"""
         <h3>Local proof export:</h3>
         <p><strong>{_e(proof.get("proof_status"))}</strong> 쨌 verdict: {_e(proof.get("reputation_verdict"))}</p>
+        <p class="small">Marketplace readiness: {_e(marketplace_readiness)}</p>
         <p class="small">{_e(proof.get("web_summary") or "Local public proof export. Aggregate metrics only.")}</p>
         <ul>{metric_lines}</ul>
         <p class="small">Caveat: Local evidence. Not uploaded automatically.</p>

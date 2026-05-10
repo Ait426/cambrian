@@ -43,6 +43,8 @@ PUBLIC_METRIC_KEYS = {
     "validation_autonomy_rate",
     "median_time_to_validated_proposal",
     "outcome_coverage_rate",
+    "contract_validation_status",
+    "contract_validation_criteria_count",
 }
 BLOCKED_FIELD_NAMES = {
     "raw_request",
@@ -236,6 +238,9 @@ class PackProofExportSnapshot:
     blocked_fields: list[str] = field(default_factory=list)
     web_summary: str = ""
     install_command: str | None = None
+    marketplace_readiness: str = "draft_only"
+    marketplace_blockers: list[str] = field(default_factory=list)
+    marketplace_next_actions: list[str] = field(default_factory=list)
     warnings: list[str] = field(default_factory=list)
     errors: list[str] = field(default_factory=list)
     saved_ref: str | None = None
@@ -270,11 +275,19 @@ class PackProofExporter:
         caveats = _caveats(card, sample_size)
         proof_status = VERDICT_TO_STATUS.get(card.reputation_verdict, "unproven")
         classification = "blocked_sensitive" if blocked_fields else "public_safe"
+        marketplace_readiness, marketplace_blockers, marketplace_next_actions = _marketplace_readiness(
+            card,
+            classification,
+            proof_status,
+            sample_size,
+        )
         warnings: list[str] = []
         errors: list[str] = []
         if classification == "blocked_sensitive":
             errors.append("proof card contains sensitive raw fields that cannot be exported publicly")
             caveats.append("Sensitive local evidence was detected. Public copy was not written.")
+        if marketplace_blockers:
+            caveats.extend(marketplace_blockers)
         if not known_limits:
             warnings.append("no public known limits were available in the local proof card")
         web_summary = _web_summary(card, proof_status, sample_size)
@@ -305,6 +318,9 @@ class PackProofExporter:
             blocked_fields=_dedupe(blocked_fields),
             web_summary=web_summary,
             install_command=f"cambrian install pack {card.pack_id}",
+            marketplace_readiness=marketplace_readiness,
+            marketplace_blockers=_dedupe(marketplace_blockers),
+            marketplace_next_actions=_dedupe(marketplace_next_actions),
             warnings=_dedupe(warnings),
             errors=_dedupe(errors),
         )
@@ -410,12 +426,25 @@ def render_pack_proof_export(snapshot: PackProofExportSnapshot) -> str:
         "Proof status:",
         f"  {snapshot.proof_status}",
         "",
+        "Marketplace readiness:",
+        f"  {snapshot.marketplace_readiness}",
+    ]
+    if snapshot.marketplace_blockers:
+        lines.extend(["", "Marketplace blockers:"])
+        lines.extend([f"  - {item}" for item in snapshot.marketplace_blockers])
+    if snapshot.marketplace_next_actions:
+        lines.extend(["", "Marketplace next:"])
+        lines.extend([f"  {item}" for item in snapshot.marketplace_next_actions])
+    lines.extend(
+        [
+        "",
         "Sample size:",
         f"  used: {snapshot.sample_size.get('used_count', 0)}",
         f"  outcome-linked: {snapshot.sample_size.get('outcome_linked_count', 0)}",
         "",
         "Public metrics:",
-    ]
+        ]
+    )
     for metric in snapshot.public_metrics:
         value = "unknown" if metric.value is None else metric.value
         lines.append(f"  - {metric.key}: {value}")
@@ -517,6 +546,45 @@ def _public_metrics(card: PackProofCard) -> list[PackProofExportMetric]:
             )
         )
     return metrics
+
+
+def _marketplace_readiness(
+    card: PackProofCard,
+    privacy_classification: str,
+    proof_status: str,
+    sample_size: dict[str, Any],
+) -> tuple[str, list[str], list[str]]:
+    """proof export가 marketplace 공개 후보인지 보수적으로 판정한다."""
+    blockers: list[str] = []
+    next_actions: list[str] = []
+    if privacy_classification != "public_safe":
+        blockers.append("public export is blocked by privacy classification")
+    if str(card.pack_kind or "") == "agent":
+        contract_status = str(_metric_value(card, "contract_validation_status") or "not_recorded")
+        if contract_status != "satisfied":
+            blockers.append("agent contract validation must be satisfied before marketplace listing")
+            next_actions.append(
+                f'cambrian pack job-validate latest --criteria-status satisfied --criteria-notes "criteria reviewed"'
+            )
+    if blockers:
+        return "blocked", _dedupe(blockers), _dedupe(next_actions)
+
+    linked = int(sample_size.get("outcome_linked_count", 0) or 0)
+    if proof_status in {"useful", "strong"} and linked > 0:
+        return "proof_backed_candidate", [], [f"cambrian registry export --out dist/{_slug(card.pack_id)}-registry"]
+
+    next_actions.append(f"cambrian job start --pack {card.pack_id} \"<representative request>\"")
+    next_actions.append(
+        f'cambrian pack job-validate latest --criteria-status satisfied --criteria-notes "criteria reviewed"'
+    )
+    return "draft_only", [], _dedupe(next_actions)
+
+
+def _metric_value(card: PackProofCard, key: str) -> Any:
+    for metric in card.key_metrics:
+        if metric.key == key:
+            return metric.value
+    return None
 
 
 def _safe_strings(values: list[str], redacted_fields: list[str]) -> list[str]:
@@ -672,6 +740,9 @@ def _snapshot_from_dict(payload: dict[str, Any], path: Path | None = None) -> Pa
         blocked_fields=_as_list(payload.get("blocked_fields")),
         web_summary=str(payload.get("web_summary") or ""),
         install_command=str(payload.get("install_command")) if payload.get("install_command") is not None else None,
+        marketplace_readiness=str(payload.get("marketplace_readiness") or "draft_only"),
+        marketplace_blockers=_as_list(payload.get("marketplace_blockers")),
+        marketplace_next_actions=_as_list(payload.get("marketplace_next_actions")),
         warnings=_as_list(payload.get("warnings")),
         errors=_as_list(payload.get("errors")),
         saved_ref=str(payload.get("saved_ref")) if payload.get("saved_ref") is not None else (_relative(path, Path.cwd()) if path else None),

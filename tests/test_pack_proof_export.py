@@ -62,6 +62,7 @@ def test_export_useful_proof_public_safe(tmp_path: Path) -> None:
 
     assert snapshot.privacy_classification == "public_safe"
     assert snapshot.proof_status == "useful"
+    assert snapshot.marketplace_readiness == "proof_backed_candidate"
     assert snapshot.sample_size["outcome_linked_count"] == 3
     assert all(metric.public_safe for metric in snapshot.public_metrics)
     assert "source_refs" not in payload
@@ -95,6 +96,7 @@ def test_blocks_sensitive_export_when_raw_fields_exist(tmp_path: Path) -> None:
     snapshot = PackProofExporter().export(tmp_path, "auth-bug-core", source_proof_path=blocked_path)
 
     assert snapshot.privacy_classification == "blocked_sensitive"
+    assert snapshot.marketplace_readiness == "blocked"
     assert "raw_request" in snapshot.blocked_fields
     assert snapshot.errors
 
@@ -106,6 +108,7 @@ def test_insufficient_proof_export_has_caveat(tmp_path: Path) -> None:
 
     assert snapshot.privacy_classification == "public_safe"
     assert snapshot.proof_status == "insufficient"
+    assert snapshot.marketplace_readiness == "draft_only"
     assert any("insufficient" in item.lower() for item in snapshot.caveats)
 
 
@@ -120,6 +123,7 @@ def test_proof_export_show_works(tmp_path: Path) -> None:
     assert shown.returncode == 0, shown.stderr
     assert "Pack Proof Export" in shown.stdout
     assert "Classification:" in shown.stdout
+    assert "Marketplace readiness:" in shown.stdout
     assert "validated_proposal_rate" in shown.stdout
 
 
@@ -138,8 +142,10 @@ def test_web_sync_consumes_public_proof_export(tmp_path: Path) -> None:
     assert synced.returncode == 0, synced.stderr
     assert proof["source"] == "local_public_export"
     assert proof["proof_status"] == "useful"
+    assert proof["marketplace_readiness"] == "proof_backed_candidate"
     assert proof["metrics"]["validated_proposal_rate"] == 2 / 3
     assert "Local proof export:" in detail
+    assert "Marketplace readiness: proof_backed_candidate" in detail
     assert "Local evidence. Not uploaded automatically." in detail
 
 

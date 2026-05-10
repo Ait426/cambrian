@@ -25,6 +25,7 @@ from engine.project_pack_install import (
     PackManifestLoader,
     default_installed_packs_path,
     _as_list,
+    _as_dict,
     _load_yaml,
     _now,
     _relative,
@@ -289,6 +290,7 @@ class PackReadinessBuilder:
         test_check = _test_check(signals, compat)
         lane_check = _lane_check(signals, compat, metadata)
         checks.extend([stack_check, test_check, lane_check])
+        checks.append(_agent_contract_preflight_check(metadata, manifest))
         checks.append(_first_job_check(metadata, installed))
         checks.append(_proof_check(root, metadata))
         checks.append(_known_limits_check(metadata, catalog_entry, registry_pack, manifest))
@@ -762,6 +764,85 @@ def _artifact_check(verify_report: Any) -> PackReadinessCheck:
     return _check("artifact_refs", "Installed artifact refs", "pass", "workers, team, template, benchmark refs are present", details=details)
 
 
+def _agent_contract_preflight_check(metadata: dict[str, Any], manifest: PackManifest | None) -> PackReadinessCheck:
+    if str(metadata.get("pack_kind") or "") != "agent":
+        return _check("agent_contract_preflight", "Agent contract preflight", "skip", "pack is not a Studio agent")
+    if manifest is None:
+        return _check(
+            "agent_contract_preflight",
+            "Agent contract preflight",
+            "fail",
+            "agent manifest could not be loaded",
+            errors=["agent contract manifest is required for preflight"],
+        )
+
+    errors: list[str] = []
+    warnings: list[str] = []
+    details: list[str] = []
+    if not manifest.workers:
+        errors.append("agent contract requires at least one worker")
+    else:
+        details.append(f"workers: {len(manifest.workers)}")
+
+    contract_templates = [
+        item for item in manifest.templates if str(item.get("template_kind") or "") == "agent_contract"
+    ]
+    if not contract_templates:
+        errors.append("agent contract template is missing")
+    for template in contract_templates:
+        template_id = str(template.get("template_id") or template.get("name") or "agent_contract")
+        safety = _as_dict(template.get("safety_defaults"))
+        validation = _as_dict(template.get("validation_defaults"))
+        forbidden = _as_list(safety.get("forbidden_actions"))
+        approvals = _as_list(safety.get("approval_required_actions"))
+        criteria = _as_list(validation.get("validation_criteria"))
+        conflicts = sorted({item.lower() for item in forbidden} & {item.lower() for item in approvals})
+        details.append(
+            f"{template_id}: criteria={len(criteria)}, forbidden={len(forbidden)}, approval_required={len(approvals)}"
+        )
+        if not criteria:
+            errors.append(f"{template_id} validation criteria are missing")
+        if conflicts:
+            errors.append(f"{template_id} has conflicting forbidden and approval-required actions: {', '.join(conflicts)}")
+        if _bool_or_none(validation.get("success_metrics_available")) is True:
+            errors.append(f"{template_id} claims success metrics before runtime evidence")
+        if str(validation.get("proof_status") or "") != "preflight_only":
+            warnings.append(f"{template_id} proof status is not preflight_only")
+
+    install = _as_dict(manifest.install)
+    unsafe_flags = [
+        key
+        for key in ["auto_apply", "auto_bootstrap", "auto_promote", "auto_canary"]
+        if _bool_or_none(install.get(key)) is True
+    ]
+    if unsafe_flags:
+        errors.append("agent install policy enables unsafe automation: " + ", ".join(unsafe_flags))
+    else:
+        details.append("install policy: no auto apply/bootstrap/promote/canary")
+
+    if errors:
+        return _check(
+            "agent_contract_preflight",
+            "Agent contract preflight",
+            "fail",
+            "agent contract preflight failed",
+            details=details,
+            warnings=warnings,
+            errors=errors,
+            next_actions=[f"cambrian install manifest <fixed-{metadata.get('pack_id') or 'agent'}-manifest.yaml> --dry-run"],
+        )
+    status = "warn" if warnings else "pass"
+    summary = "agent contract is ready for local preflight" if status == "pass" else "agent contract is usable with preflight warnings"
+    return _check(
+        "agent_contract_preflight",
+        "Agent contract preflight",
+        status,
+        summary,
+        details=details,
+        warnings=warnings,
+    )
+
+
 def _first_job_check(metadata: dict[str, Any], installed: bool) -> PackReadinessCheck:
     if not installed:
         return _check(
@@ -772,6 +853,8 @@ def _first_job_check(metadata: dict[str, Any], installed: bool) -> PackReadiness
             next_actions=[f"cambrian install pack {metadata['pack_id']}"],
             errors=["pack must be installed before pack next can use it"],
         )
+    if metadata.get("pack_kind") == "agent" and metadata.get("default_template"):
+        return _check("first_job_ready", "First job readiness", "pass", "agent worker/template context is available")
     if metadata.get("default_team") and metadata.get("default_template"):
         return _check("first_job_ready", "First job readiness", "pass", "team/template context is available")
     return _check(
@@ -819,7 +902,7 @@ def _readiness_status(checks: list[PackReadinessCheck], installed: bool) -> str:
     failed_ids = {check.check_id for check in checks if check.status == "fail"}
     if "project_stack_fit" in failed_ids or "test_framework_fit" in failed_ids:
         return "unsupported"
-    if failed_ids & {"installed_state", "integrity_state", "artifact_refs", "first_job_ready"}:
+    if failed_ids & {"installed_state", "integrity_state", "artifact_refs", "agent_contract_preflight", "first_job_ready"}:
         return "blocked"
     warned_ids = {
         check.check_id
@@ -1030,6 +1113,19 @@ def _lane_value(lane: dict[str, Any], key: str) -> str | None:
 def _first(value: Any) -> str | None:
     items = _as_list(value)
     return items[0] if items else None
+
+
+def _bool_or_none(value: Any) -> bool | None:
+    if value is None:
+        return None
+    if isinstance(value, bool):
+        return value
+    text = str(value).strip().lower()
+    if text in {"1", "true", "yes", "passed", "pass", "ok"}:
+        return True
+    if text in {"0", "false", "no", "failed", "fail", "blocked"}:
+        return False
+    return None
 
 
 def _dedupe(items: list[str]) -> list[str]:

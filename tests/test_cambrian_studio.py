@@ -18,6 +18,7 @@ from engine.project_pack_improvements import (
 )
 from engine.project_pack_install import PackInstaller, PackManifestLoader
 from engine.project_pack_proof import PackProofBuilder, latest_pack_proof_card, save_pack_proof_card
+from engine.project_pack_proof_export import PackProofExporter
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -336,6 +337,33 @@ def test_studio_agent_pack_can_initialize_local_proof_card(tmp_path: Path) -> No
     assert latest.pack_id == "document-organizer-agent"
 
 
+def test_studio_agent_pack_doctor_surfaces_contract_preflight(tmp_path: Path) -> None:
+    manifest_path = tmp_path / "document-organizer-agent.cambrian-pack.yaml"
+    _write_yaml(manifest_path, _studio_agent_manifest())
+    PackInstaller().install(tmp_path, manifest_path)
+
+    result = _cli(tmp_path, "pack", "doctor", "document-organizer-agent", "--json")
+    payload = json.loads(result.stdout)
+    show = _cli(tmp_path, "pack", "doctor", "document-organizer-agent")
+    checks = {check["check_id"]: check for check in payload["checks"]}
+    preflight = checks["agent_contract_preflight"]
+    first_job = checks["first_job_ready"]
+
+    assert result.returncode == 0, result.stderr
+    assert payload["pack_kind"] == "agent"
+    assert payload["readiness_status"] == "partial"
+    assert preflight["status"] == "pass"
+    assert preflight["summary"] == "agent contract is ready for local preflight"
+    assert first_job["status"] == "pass"
+    assert first_job["summary"] == "agent worker/template context is available"
+    assert any("source trust is unknown" in warning for warning in payload["warnings"])
+    assert any("criteria=2" in detail for detail in preflight["details"])
+    assert any("install policy: no auto apply/bootstrap/promote/canary" in detail for detail in preflight["details"])
+    assert show.returncode == 0, show.stderr
+    assert "Agent contract preflight" in show.stdout
+    assert "criteria=2" in show.stdout
+
+
 def test_studio_agent_proof_gap_creates_approval_gated_evolution_plan(tmp_path: Path) -> None:
     manifest_path = tmp_path / "document-organizer-agent.cambrian-pack.yaml"
     _write_yaml(manifest_path, _studio_agent_manifest())
@@ -497,6 +525,85 @@ def test_studio_agent_proof_card_surfaces_latest_validation_evidence(tmp_path: P
     assert any("contract validation evidence is not satisfied" in item for item in card.known_limits)
 
 
+def test_studio_agent_proof_export_blocks_marketplace_until_contract_satisfied(tmp_path: Path) -> None:
+    manifest_path = tmp_path / "document-organizer-agent.cambrian-pack.yaml"
+    _write_yaml(manifest_path, _studio_agent_manifest())
+    PackInstaller().install(tmp_path, manifest_path)
+
+    start = _cli(
+        tmp_path,
+        "job",
+        "start",
+        "--pack",
+        "document-organizer-agent",
+        "organize my documents by topic",
+        "--json",
+    )
+    validate = _cli(tmp_path, "pack", "job-validate", "latest", "--json")
+    snapshot = PackProofExporter().export(tmp_path, "document-organizer-agent")
+
+    assert start.returncode == 0, start.stderr
+    assert validate.returncode != 0
+    assert snapshot.privacy_classification == "public_safe"
+    assert snapshot.marketplace_readiness == "blocked"
+    assert "agent contract validation must be satisfied before marketplace listing" in snapshot.marketplace_blockers
+    assert any("--criteria-status satisfied" in command for command in snapshot.marketplace_next_actions)
+
+
+def test_studio_agent_marketplace_listing_blocks_before_contract_satisfied(tmp_path: Path) -> None:
+    manifest_path = tmp_path / "document-organizer-agent.cambrian-pack.yaml"
+    _write_yaml(manifest_path, _studio_agent_manifest())
+    PackInstaller().install(tmp_path, manifest_path)
+
+    start = _cli(
+        tmp_path,
+        "job",
+        "start",
+        "--pack",
+        "document-organizer-agent",
+        "organize my documents by topic",
+        "--json",
+    )
+    validate = _cli(tmp_path, "pack", "job-validate", "latest", "--json")
+    listing = _cli(tmp_path, "pack", "marketplace-export", "document-organizer-agent", "--json")
+    payload = json.loads(listing.stdout)
+
+    assert start.returncode == 0, start.stderr
+    assert validate.returncode != 0
+    assert listing.returncode != 0
+    assert payload["listing_status"] == "blocked"
+    assert payload["marketplace_readiness"] == "blocked"
+    assert "agent contract validation must be satisfied before marketplace listing" in payload["marketplace_blockers"]
+    assert Path(tmp_path / payload["saved_ref"]).exists()
+
+
+def test_studio_agent_marketplace_show_reopens_blocked_listing(tmp_path: Path) -> None:
+    manifest_path = tmp_path / "document-organizer-agent.cambrian-pack.yaml"
+    _write_yaml(manifest_path, _studio_agent_manifest())
+    PackInstaller().install(tmp_path, manifest_path)
+
+    start = _cli(
+        tmp_path,
+        "job",
+        "start",
+        "--pack",
+        "document-organizer-agent",
+        "organize my documents by topic",
+        "--json",
+    )
+    validate = _cli(tmp_path, "pack", "job-validate", "latest", "--json")
+    listing = _cli(tmp_path, "pack", "marketplace-export", "document-organizer-agent", "--json")
+    shown = _cli(tmp_path, "pack", "marketplace-show", "latest")
+
+    assert start.returncode == 0, start.stderr
+    assert validate.returncode != 0
+    assert listing.returncode != 0
+    assert shown.returncode == 0, shown.stderr
+    assert "Pack Marketplace Listing Draft" in shown.stdout
+    assert "status: blocked" in shown.stdout
+    assert "agent contract validation must be satisfied before marketplace listing" in shown.stdout
+
+
 def test_studio_agent_manual_contract_review_satisfies_latest_proof(tmp_path: Path) -> None:
     manifest_path = tmp_path / "document-organizer-agent.cambrian-pack.yaml"
     manifest = _studio_agent_manifest()
@@ -559,6 +666,551 @@ def test_studio_agent_manual_contract_review_satisfies_latest_proof(tmp_path: Pa
     assert claims["agent_contract_validation"].verdict == "proven"
     assert latest.source_refs["latest_validation_evidence_ref"] == payload["evidence_ref"]
     assert "contract_validation_review_gap" not in source_signals
+
+
+def test_studio_agent_satisfied_contract_exports_marketplace_draft_only(tmp_path: Path) -> None:
+    manifest_path = tmp_path / "document-organizer-agent.cambrian-pack.yaml"
+    _write_yaml(manifest_path, _studio_agent_manifest())
+    PackInstaller().install(tmp_path, manifest_path)
+
+    start = _cli(
+        tmp_path,
+        "job",
+        "start",
+        "--pack",
+        "document-organizer-agent",
+        "organize my documents by topic",
+        "--json",
+    )
+    validate = _cli(
+        tmp_path,
+        "pack",
+        "job-validate",
+        "latest",
+        "--criteria-status",
+        "satisfied",
+        "--criteria-notes",
+        "local criteria reviewed",
+        "--json",
+    )
+    snapshot = PackProofExporter().export(tmp_path, "document-organizer-agent")
+    metric_values = {metric.key: metric.value for metric in snapshot.public_metrics}
+
+    assert start.returncode == 0, start.stderr
+    assert validate.returncode == 0, validate.stderr
+    assert snapshot.privacy_classification == "public_safe"
+    assert snapshot.marketplace_readiness == "draft_only"
+    assert snapshot.marketplace_blockers == []
+    assert metric_values["contract_validation_status"] == "satisfied"
+    assert any("representative request" in command for command in snapshot.marketplace_next_actions)
+
+
+def test_studio_agent_marketplace_listing_draft_preserves_manifest_metadata(tmp_path: Path) -> None:
+    manifest_path = tmp_path / "document-organizer-agent.cambrian-pack.yaml"
+    _write_yaml(manifest_path, _studio_agent_manifest())
+    PackInstaller().install(tmp_path, manifest_path)
+
+    start = _cli(
+        tmp_path,
+        "job",
+        "start",
+        "--pack",
+        "document-organizer-agent",
+        "organize my documents by topic",
+        "--json",
+    )
+    validate = _cli(
+        tmp_path,
+        "pack",
+        "job-validate",
+        "latest",
+        "--criteria-status",
+        "satisfied",
+        "--criteria-notes",
+        "local criteria reviewed",
+        "--json",
+    )
+    listing = _cli(tmp_path, "pack", "marketplace-export", "document-organizer-agent", "--json")
+    payload = json.loads(listing.stdout)
+    shown = _cli(tmp_path, "pack", "marketplace-show", "latest", "--json")
+    shown_payload = json.loads(shown.stdout)
+    status = _cli(tmp_path, "pack", "marketplace-status", "latest", "--json")
+    status_payload = json.loads(status.stdout)
+    status_list = _cli(tmp_path, "pack", "marketplace-status-list", "--json")
+    status_list_payload = json.loads(status_list.stdout)
+
+    assert start.returncode == 0, start.stderr
+    assert validate.returncode == 0, validate.stderr
+    assert listing.returncode == 0, listing.stderr
+    assert shown.returncode == 0, shown.stderr
+    assert status.returncode == 0, status.stderr
+    assert status_list.returncode == 0, status_list.stderr
+    assert payload["pack_id"] == "document-organizer-agent"
+    assert payload["pack_kind"] == "agent"
+    assert payload["author"] == "local-author"
+    assert payload["license"] == "personal_local"
+    assert payload["provenance"] == "studio_generated"
+    assert payload["public_visibility"] == "private"
+    assert payload["signature_status"] == "unsigned_local"
+    assert payload["marketplace_readiness"] == "draft_only"
+    assert payload["listing_status"] == "draft_only"
+    assert payload["safe_to_publish"] is False
+    assert payload["manifest_sha256"]
+    assert payload["proof_export_ref"]
+    assert "OCR이 필요한 스캔 PDF는 별도 도구가 필요할 수 있다." in payload["known_limits"]
+    assert Path(tmp_path / payload["saved_ref"]).exists()
+    assert shown_payload["listing_id"] == payload["listing_id"]
+    assert shown_payload["path"].endswith("latest.yaml")
+    assert shown_payload["latest_review"] is None
+    assert status_payload["listing_id"] == payload["listing_id"]
+    assert status_payload["operational_status"] == "draft_only"
+    assert status_payload["latest_review_decision"] is None
+    assert status_list_payload["count"] == 1
+    assert status_list_payload["summary"]["total"] == 1
+    assert status_list_payload["summary"]["draft_only"] == 1
+    assert status_list_payload["statuses"][0]["listing_id"] == payload["listing_id"]
+    assert status_list_payload["statuses"][0]["operational_status"] == "draft_only"
+
+
+def test_studio_agent_marketplace_review_records_needs_work(tmp_path: Path) -> None:
+    manifest_path = tmp_path / "document-organizer-agent.cambrian-pack.yaml"
+    _write_yaml(manifest_path, _studio_agent_manifest())
+    PackInstaller().install(tmp_path, manifest_path)
+
+    start = _cli(
+        tmp_path,
+        "job",
+        "start",
+        "--pack",
+        "document-organizer-agent",
+        "organize my documents by topic",
+        "--json",
+    )
+    validate = _cli(
+        tmp_path,
+        "pack",
+        "job-validate",
+        "latest",
+        "--criteria-status",
+        "satisfied",
+        "--criteria-notes",
+        "local criteria reviewed",
+        "--json",
+    )
+    listing = _cli(tmp_path, "pack", "marketplace-export", "document-organizer-agent", "--json")
+    review = _cli(
+        tmp_path,
+        "pack",
+        "marketplace-review",
+        "latest",
+        "--decision",
+        "needs_work",
+        "--notes",
+        "Collect more runtime evidence before public listing.",
+        "--reviewer",
+        "studio-owner",
+        "--json",
+    )
+    payload = json.loads(review.stdout)
+    shown = _cli(tmp_path, "pack", "marketplace-review-show", "latest", "--json")
+    shown_payload = json.loads(shown.stdout)
+    shown_by_path = _cli(tmp_path, "pack", "marketplace-review-show", payload["saved_ref"], "--json")
+    shown_by_path_payload = json.loads(shown_by_path.stdout)
+    shown_text = _cli(tmp_path, "pack", "marketplace-review-show", "latest")
+    listed = _cli(tmp_path, "pack", "marketplace-review-list", "--json")
+    listed_payload = json.loads(listed.stdout)
+    listed_text = _cli(tmp_path, "pack", "marketplace-review-list")
+    listing_with_review = _cli(tmp_path, "pack", "marketplace-show", "latest", "--json")
+    listing_with_review_payload = json.loads(listing_with_review.stdout)
+    listing_with_review_text = _cli(tmp_path, "pack", "marketplace-show", "latest")
+    status = _cli(tmp_path, "pack", "marketplace-status", "latest", "--json")
+    status_payload = json.loads(status.stdout)
+    status_text = _cli(tmp_path, "pack", "marketplace-status", "latest")
+    status_list = _cli(tmp_path, "pack", "marketplace-status-list", "--json")
+    status_list_payload = json.loads(status_list.stdout)
+    status_list_text = _cli(tmp_path, "pack", "marketplace-status-list")
+    filtered_status_list = _cli(tmp_path, "pack", "marketplace-status-list", "--status", "needs_work", "--json")
+    filtered_status_list_payload = json.loads(filtered_status_list.stdout)
+    empty_status_list = _cli(tmp_path, "pack", "marketplace-status-list", "--status", "ready_for_review", "--json")
+    empty_status_list_payload = json.loads(empty_status_list.stdout)
+    saved_status_list = _cli(
+        tmp_path,
+        "pack",
+        "marketplace-status-list",
+        "--status",
+        "needs_work",
+        "--save",
+        "--json",
+    )
+    saved_status_list_payload = json.loads(saved_status_list.stdout)
+    shown_status_dashboard = _cli(tmp_path, "pack", "marketplace-status-show", "latest", "--json")
+    shown_status_dashboard_payload = json.loads(shown_status_dashboard.stdout)
+    shown_status_dashboard_by_path = _cli(
+        tmp_path,
+        "pack",
+        "marketplace-status-show",
+        saved_status_list_payload["saved_ref"],
+        "--json",
+    )
+    shown_status_dashboard_by_path_payload = json.loads(shown_status_dashboard_by_path.stdout)
+    shown_status_dashboard_text = _cli(tmp_path, "pack", "marketplace-status-show", "latest")
+    checked_status_dashboard = _cli(tmp_path, "pack", "marketplace-status-check", "latest", "--json")
+    checked_status_dashboard_payload = json.loads(checked_status_dashboard.stdout)
+    checked_status_dashboard_by_path = _cli(
+        tmp_path,
+        "pack",
+        "marketplace-status-check",
+        saved_status_list_payload["saved_ref"],
+        "--json",
+    )
+    checked_status_dashboard_by_path_payload = json.loads(checked_status_dashboard_by_path.stdout)
+    checked_status_dashboard_text = _cli(tmp_path, "pack", "marketplace-status-check", "latest")
+    saved_status_dashboard_check = _cli(tmp_path, "pack", "marketplace-status-check", "latest", "--save", "--json")
+    saved_status_dashboard_check_payload = json.loads(saved_status_dashboard_check.stdout)
+    shown_status_dashboard_check = _cli(tmp_path, "pack", "marketplace-status-check-show", "latest", "--json")
+    shown_status_dashboard_check_payload = json.loads(shown_status_dashboard_check.stdout)
+    shown_status_dashboard_check_by_path = _cli(
+        tmp_path,
+        "pack",
+        "marketplace-status-check-show",
+        saved_status_dashboard_check_payload["saved_ref"],
+        "--json",
+    )
+    shown_status_dashboard_check_by_path_payload = json.loads(shown_status_dashboard_check_by_path.stdout)
+    shown_status_dashboard_check_text = _cli(tmp_path, "pack", "marketplace-status-check-show", "latest")
+    status_ready = _cli(tmp_path, "pack", "marketplace-status-ready", "--json")
+    status_ready_payload = json.loads(status_ready.stdout)
+    status_ready_text = _cli(tmp_path, "pack", "marketplace-status-ready")
+    saved_status_ready = _cli(tmp_path, "pack", "marketplace-status-ready", "--save", "--json")
+    saved_status_ready_payload = json.loads(saved_status_ready.stdout)
+    shown_status_ready = _cli(tmp_path, "pack", "marketplace-status-ready-show", "latest", "--json")
+    shown_status_ready_payload = json.loads(shown_status_ready.stdout)
+    shown_status_ready_by_path = _cli(
+        tmp_path,
+        "pack",
+        "marketplace-status-ready-show",
+        saved_status_ready_payload["saved_ref"],
+        "--json",
+    )
+    shown_status_ready_by_path_payload = json.loads(shown_status_ready_by_path.stdout)
+    shown_status_ready_text = _cli(tmp_path, "pack", "marketplace-status-ready-show", "latest")
+    checked_status_ready = _cli(tmp_path, "pack", "marketplace-status-ready-check", "latest", "--json")
+    checked_status_ready_payload = json.loads(checked_status_ready.stdout)
+    checked_status_ready_text = _cli(tmp_path, "pack", "marketplace-status-ready-check", "latest")
+    saved_status_ready_check = _cli(tmp_path, "pack", "marketplace-status-ready-check", "latest", "--save", "--json")
+    saved_status_ready_check_payload = json.loads(saved_status_ready_check.stdout)
+    shown_status_ready_check = _cli(tmp_path, "pack", "marketplace-status-ready-check-show", "latest", "--json")
+    shown_status_ready_check_payload = json.loads(shown_status_ready_check.stdout)
+    shown_status_ready_check_by_path = _cli(
+        tmp_path,
+        "pack",
+        "marketplace-status-ready-check-show",
+        saved_status_ready_check_payload["saved_ref"],
+        "--json",
+    )
+    shown_status_ready_check_by_path_payload = json.loads(shown_status_ready_check_by_path.stdout)
+    shown_status_ready_check_text = _cli(tmp_path, "pack", "marketplace-status-ready-check-show", "latest")
+    studio_handoff = _cli(tmp_path, "pack", "marketplace-status-studio", "--json")
+    studio_handoff_payload = json.loads(studio_handoff.stdout)
+    studio_handoff_text = _cli(tmp_path, "pack", "marketplace-status-studio")
+    saved_studio_handoff = _cli(tmp_path, "pack", "marketplace-status-studio", "--save", "--json")
+    saved_studio_handoff_payload = json.loads(saved_studio_handoff.stdout)
+    shown_studio_handoff = _cli(tmp_path, "pack", "marketplace-status-studio-show", "latest", "--json")
+    shown_studio_handoff_payload = json.loads(shown_studio_handoff.stdout)
+    shown_studio_handoff_by_path = _cli(
+        tmp_path,
+        "pack",
+        "marketplace-status-studio-show",
+        saved_studio_handoff_payload["saved_ref"],
+        "--json",
+    )
+    shown_studio_handoff_by_path_payload = json.loads(shown_studio_handoff_by_path.stdout)
+    shown_studio_handoff_text = _cli(tmp_path, "pack", "marketplace-status-studio-show", "latest")
+    checked_studio_handoff = _cli(tmp_path, "pack", "marketplace-status-studio-check", "latest", "--json")
+    checked_studio_handoff_payload = json.loads(checked_studio_handoff.stdout)
+    checked_studio_handoff_text = _cli(tmp_path, "pack", "marketplace-status-studio-check", "latest")
+    saved_studio_handoff_check = _cli(tmp_path, "pack", "marketplace-status-studio-check", "latest", "--save", "--json")
+    saved_studio_handoff_check_payload = json.loads(saved_studio_handoff_check.stdout)
+    shown_studio_handoff_check = _cli(tmp_path, "pack", "marketplace-status-studio-check-show", "latest", "--json")
+    shown_studio_handoff_check_payload = json.loads(shown_studio_handoff_check.stdout)
+    shown_studio_handoff_check_by_path = _cli(
+        tmp_path,
+        "pack",
+        "marketplace-status-studio-check-show",
+        saved_studio_handoff_check_payload["saved_ref"],
+        "--json",
+    )
+    shown_studio_handoff_check_by_path_payload = json.loads(shown_studio_handoff_check_by_path.stdout)
+    shown_studio_handoff_check_text = _cli(tmp_path, "pack", "marketplace-status-studio-check-show", "latest")
+    studio_refresh = _cli(tmp_path, "pack", "marketplace-status-studio-refresh", "--status", "needs_work", "--json")
+    studio_refresh_payload = json.loads(studio_refresh.stdout)
+    studio_refresh_text = _cli(tmp_path, "pack", "marketplace-status-studio-refresh", "--status", "needs_work")
+    shown_studio_refresh = _cli(tmp_path, "pack", "marketplace-status-studio-refresh-show", "latest", "--json")
+    shown_studio_refresh_payload = json.loads(shown_studio_refresh.stdout)
+    shown_studio_refresh_by_path = _cli(
+        tmp_path,
+        "pack",
+        "marketplace-status-studio-refresh-show",
+        studio_refresh_payload["saved_ref"],
+        "--json",
+    )
+    shown_studio_refresh_by_path_payload = json.loads(shown_studio_refresh_by_path.stdout)
+    shown_studio_refresh_text = _cli(tmp_path, "pack", "marketplace-status-studio-refresh-show", "latest")
+
+    assert start.returncode == 0, start.stderr
+    assert validate.returncode == 0, validate.stderr
+    assert listing.returncode == 0, listing.stderr
+    assert review.returncode == 0, review.stderr
+    assert shown.returncode == 0, shown.stderr
+    assert shown_by_path.returncode == 0, shown_by_path.stderr
+    assert shown_text.returncode == 0, shown_text.stderr
+    assert listed.returncode == 0, listed.stderr
+    assert listed_text.returncode == 0, listed_text.stderr
+    assert listing_with_review.returncode == 0, listing_with_review.stderr
+    assert listing_with_review_text.returncode == 0, listing_with_review_text.stderr
+    assert status.returncode == 0, status.stderr
+    assert status_text.returncode == 0, status_text.stderr
+    assert status_list.returncode == 0, status_list.stderr
+    assert status_list_text.returncode == 0, status_list_text.stderr
+    assert filtered_status_list.returncode == 0, filtered_status_list.stderr
+    assert empty_status_list.returncode == 0, empty_status_list.stderr
+    assert saved_status_list.returncode == 0, saved_status_list.stderr
+    assert shown_status_dashboard.returncode == 0, shown_status_dashboard.stderr
+    assert shown_status_dashboard_by_path.returncode == 0, shown_status_dashboard_by_path.stderr
+    assert shown_status_dashboard_text.returncode == 0, shown_status_dashboard_text.stderr
+    assert checked_status_dashboard.returncode == 0, checked_status_dashboard.stderr
+    assert checked_status_dashboard_by_path.returncode == 0, checked_status_dashboard_by_path.stderr
+    assert checked_status_dashboard_text.returncode == 0, checked_status_dashboard_text.stderr
+    assert saved_status_dashboard_check.returncode == 0, saved_status_dashboard_check.stderr
+    assert shown_status_dashboard_check.returncode == 0, shown_status_dashboard_check.stderr
+    assert shown_status_dashboard_check_by_path.returncode == 0, shown_status_dashboard_check_by_path.stderr
+    assert shown_status_dashboard_check_text.returncode == 0, shown_status_dashboard_check_text.stderr
+    assert status_ready.returncode == 0, status_ready.stderr
+    assert status_ready_text.returncode == 0, status_ready_text.stderr
+    assert saved_status_ready.returncode == 0, saved_status_ready.stderr
+    assert shown_status_ready.returncode == 0, shown_status_ready.stderr
+    assert shown_status_ready_by_path.returncode == 0, shown_status_ready_by_path.stderr
+    assert shown_status_ready_text.returncode == 0, shown_status_ready_text.stderr
+    assert checked_status_ready.returncode == 0, checked_status_ready.stderr
+    assert checked_status_ready_text.returncode == 0, checked_status_ready_text.stderr
+    assert saved_status_ready_check.returncode == 0, saved_status_ready_check.stderr
+    assert shown_status_ready_check.returncode == 0, shown_status_ready_check.stderr
+    assert shown_status_ready_check_by_path.returncode == 0, shown_status_ready_check_by_path.stderr
+    assert shown_status_ready_check_text.returncode == 0, shown_status_ready_check_text.stderr
+    assert studio_handoff.returncode == 0, studio_handoff.stderr
+    assert studio_handoff_text.returncode == 0, studio_handoff_text.stderr
+    assert saved_studio_handoff.returncode == 0, saved_studio_handoff.stderr
+    assert shown_studio_handoff.returncode == 0, shown_studio_handoff.stderr
+    assert shown_studio_handoff_by_path.returncode == 0, shown_studio_handoff_by_path.stderr
+    assert shown_studio_handoff_text.returncode == 0, shown_studio_handoff_text.stderr
+    assert checked_studio_handoff.returncode == 0, checked_studio_handoff.stderr
+    assert checked_studio_handoff_text.returncode == 0, checked_studio_handoff_text.stderr
+    assert saved_studio_handoff_check.returncode == 0, saved_studio_handoff_check.stderr
+    assert shown_studio_handoff_check.returncode == 0, shown_studio_handoff_check.stderr
+    assert shown_studio_handoff_check_by_path.returncode == 0, shown_studio_handoff_check_by_path.stderr
+    assert shown_studio_handoff_check_text.returncode == 0, shown_studio_handoff_check_text.stderr
+    assert studio_refresh.returncode == 0, studio_refresh.stderr
+    assert studio_refresh_text.returncode == 0, studio_refresh_text.stderr
+    assert shown_studio_refresh.returncode == 0, shown_studio_refresh.stderr
+    assert shown_studio_refresh_by_path.returncode == 0, shown_studio_refresh_by_path.stderr
+    assert shown_studio_refresh_text.returncode == 0, shown_studio_refresh_text.stderr
+    assert payload["decision"] == "needs_work"
+    assert payload["reviewer"] == "studio-owner"
+    assert payload["notes"] == "Collect more runtime evidence before public listing."
+    assert payload["safe_to_publish"] is False
+    assert payload["marketplace_readiness"] == "draft_only"
+    assert "listing visibility is not public" in payload["blockers"]
+    assert Path(tmp_path / payload["saved_ref"]).exists()
+    assert (tmp_path / ".cambrian" / "packs" / "marketplace" / "reviews" / "latest.yaml").exists()
+    assert shown_payload["review_id"] == payload["review_id"]
+    assert shown_payload["path"].endswith("latest.yaml")
+    assert shown_by_path_payload["review_id"] == payload["review_id"]
+    assert "Pack Marketplace Review" in shown_text.stdout
+    assert "needs_work" in shown_text.stdout
+    assert listed_payload["count"] == 1
+    assert listed_payload["reviews"][0]["review_id"] == payload["review_id"]
+    assert "Pack Marketplace Reviews" in listed_text.stdout
+    assert payload["review_id"] in listed_text.stdout
+    assert listing_with_review_payload["latest_review"]["review_id"] == payload["review_id"]
+    assert listing_with_review_payload["latest_review"]["decision"] == "needs_work"
+    assert "Latest review:" in listing_with_review_text.stdout
+    assert "decision: needs_work" in listing_with_review_text.stdout
+    assert status_payload["operational_status"] == "needs_work"
+    assert status_payload["latest_review_decision"] == "needs_work"
+    assert "listing visibility is not public" in status_payload["blockers"]
+    assert "Pack Marketplace Status" in status_text.stdout
+    assert "operational_status: needs_work" in status_text.stdout
+    assert status_list_payload["count"] == 1
+    assert status_list_payload["summary"]["total"] == 1
+    assert status_list_payload["summary"]["needs_work"] == 1
+    assert status_list_payload["statuses"][0]["operational_status"] == "needs_work"
+    assert status_list_payload["statuses"][0]["latest_review_decision"] == "needs_work"
+    assert "Pack Marketplace Status List" in status_list_text.stdout
+    assert "Summary:" in status_list_text.stdout
+    assert "needs_work" in status_list_text.stdout
+    assert filtered_status_list_payload["status_filter"] == "needs_work"
+    assert filtered_status_list_payload["count"] == 1
+    assert filtered_status_list_payload["summary"]["needs_work"] == 1
+    assert empty_status_list_payload["status_filter"] == "ready_for_review"
+    assert empty_status_list_payload["count"] == 0
+    assert empty_status_list_payload["summary"]["total"] == 0
+    assert saved_status_list_payload["status_filter"] == "needs_work"
+    assert saved_status_list_payload["summary"]["needs_work"] == 1
+    assert Path(tmp_path / saved_status_list_payload["saved_ref"]).exists()
+    assert (tmp_path / ".cambrian" / "packs" / "marketplace" / "status" / "latest.yaml").exists()
+    assert shown_status_dashboard_payload["status_filter"] == "needs_work"
+    assert shown_status_dashboard_payload["path"].endswith("latest.yaml")
+    assert shown_status_dashboard_payload["summary"]["needs_work"] == 1
+    assert shown_status_dashboard_by_path_payload["status_filter"] == "needs_work"
+    assert shown_status_dashboard_by_path_payload["statuses"][0]["operational_status"] == "needs_work"
+    assert "Pack Marketplace Status Dashboard" in shown_status_dashboard_text.stdout
+    assert "Status filter: needs_work" in shown_status_dashboard_text.stdout
+    assert checked_status_dashboard_payload["ok"] is True
+    assert checked_status_dashboard_payload["error_count"] == 0
+    assert checked_status_dashboard_payload["status_ref"].endswith("latest.yaml")
+    assert checked_status_dashboard_by_path_payload["ok"] is True
+    assert checked_status_dashboard_by_path_payload["error_count"] == 0
+    assert "Pack Marketplace Status Check" in checked_status_dashboard_text.stdout
+    assert "OK: true" in checked_status_dashboard_text.stdout
+    assert saved_status_dashboard_check_payload["ok"] is True
+    assert saved_status_dashboard_check_payload["saved_ref"].endswith(".yaml")
+    assert Path(tmp_path / saved_status_dashboard_check_payload["saved_ref"]).exists()
+    assert (tmp_path / ".cambrian" / "packs" / "marketplace" / "status" / "checks" / "latest.yaml").exists()
+    assert shown_status_dashboard_check_payload["ok"] is True
+    assert shown_status_dashboard_check_payload["path"].endswith("latest.yaml")
+    assert shown_status_dashboard_check_by_path_payload["ok"] is True
+    assert shown_status_dashboard_check_by_path_payload["saved_ref"] == saved_status_dashboard_check_payload["saved_ref"]
+    assert "Pack Marketplace Status Check" in shown_status_dashboard_check_text.stdout
+    assert "Saved:" in shown_status_dashboard_check_text.stdout
+    assert status_ready_payload["ready_for_studio"] is True
+    assert status_ready_payload["check_ok"] is True
+    assert status_ready_payload["dashboard"]["status_filter"] == "needs_work"
+    assert status_ready_payload["check"]["ok"] is True
+    assert "Pack Marketplace Status Ready" in status_ready_text.stdout
+    assert "Ready for Studio: true" in status_ready_text.stdout
+    assert saved_status_ready_payload["ready_for_studio"] is True
+    assert saved_status_ready_payload["saved_ref"].endswith(".yaml")
+    assert Path(tmp_path / saved_status_ready_payload["saved_ref"]).exists()
+    assert (tmp_path / ".cambrian" / "packs" / "marketplace" / "status" / "ready" / "latest.yaml").exists()
+    assert shown_status_ready_payload["ready_for_studio"] is True
+    assert shown_status_ready_payload["path"].endswith("latest.yaml")
+    assert shown_status_ready_by_path_payload["saved_ref"] == saved_status_ready_payload["saved_ref"]
+    assert shown_status_ready_by_path_payload["dashboard"]["status_filter"] == "needs_work"
+    assert "Pack Marketplace Status Ready" in shown_status_ready_text.stdout
+    assert "Saved:" in shown_status_ready_text.stdout
+    assert checked_status_ready_payload["ok"] is True
+    assert checked_status_ready_payload["ready_for_studio"] is True
+    assert checked_status_ready_payload["ready_ref"].endswith("latest.yaml")
+    assert checked_status_ready_payload["error_count"] == 0
+    assert "Pack Marketplace Status Ready Check" in checked_status_ready_text.stdout
+    assert "OK: true" in checked_status_ready_text.stdout
+    assert saved_status_ready_check_payload["ok"] is True
+    assert saved_status_ready_check_payload["saved_ref"].endswith(".yaml")
+    assert Path(tmp_path / saved_status_ready_check_payload["saved_ref"]).exists()
+    assert (tmp_path / ".cambrian" / "packs" / "marketplace" / "status" / "ready" / "checks" / "latest.yaml").exists()
+    assert shown_status_ready_check_payload["ok"] is True
+    assert shown_status_ready_check_payload["path"].endswith("latest.yaml")
+    assert shown_status_ready_check_by_path_payload["saved_ref"] == saved_status_ready_check_payload["saved_ref"]
+    assert shown_status_ready_check_by_path_payload["ready_for_studio"] is True
+    assert "Pack Marketplace Status Ready Check" in shown_status_ready_check_text.stdout
+    assert "Saved:" in shown_status_ready_check_text.stdout
+    assert studio_handoff_payload["studio_handoff_ready"] is True
+    assert studio_handoff_payload["ready_for_studio"] is True
+    assert studio_handoff_payload["ready_check_ok"] is True
+    assert studio_handoff_payload["dashboard"]["status_filter"] == "needs_work"
+    assert studio_handoff_payload["ready"]["ready_for_studio"] is True
+    assert studio_handoff_payload["ready_check"]["ok"] is True
+    assert "Pack Marketplace Status Studio Handoff" in studio_handoff_text.stdout
+    assert "Studio handoff ready: true" in studio_handoff_text.stdout
+    assert saved_studio_handoff_payload["studio_handoff_ready"] is True
+    assert saved_studio_handoff_payload["saved_ref"].endswith(".yaml")
+    assert Path(tmp_path / saved_studio_handoff_payload["saved_ref"]).exists()
+    assert (tmp_path / ".cambrian" / "packs" / "marketplace" / "status" / "studio" / "latest.yaml").exists()
+    assert shown_studio_handoff_payload["studio_handoff_ready"] is True
+    assert shown_studio_handoff_payload["path"].endswith("latest.yaml")
+    assert shown_studio_handoff_by_path_payload["saved_ref"] == saved_studio_handoff_payload["saved_ref"]
+    assert shown_studio_handoff_by_path_payload["ready_check"]["ok"] is True
+    assert "Pack Marketplace Status Studio Handoff" in shown_studio_handoff_text.stdout
+    assert "Saved:" in shown_studio_handoff_text.stdout
+    assert checked_studio_handoff_payload["ok"] is True
+    assert checked_studio_handoff_payload["studio_handoff_ready"] is True
+    assert checked_studio_handoff_payload["ready_for_studio"] is True
+    assert checked_studio_handoff_payload["handoff_ref"].endswith("latest.yaml")
+    assert checked_studio_handoff_payload["error_count"] == 0
+    assert "Pack Marketplace Status Studio Check" in checked_studio_handoff_text.stdout
+    assert "OK: true" in checked_studio_handoff_text.stdout
+    assert saved_studio_handoff_check_payload["ok"] is True
+    assert saved_studio_handoff_check_payload["saved_ref"].endswith(".yaml")
+    assert Path(tmp_path / saved_studio_handoff_check_payload["saved_ref"]).exists()
+    assert (tmp_path / ".cambrian" / "packs" / "marketplace" / "status" / "studio" / "checks" / "latest.yaml").exists()
+    assert shown_studio_handoff_check_payload["ok"] is True
+    assert shown_studio_handoff_check_payload["path"].endswith("latest.yaml")
+    assert shown_studio_handoff_check_by_path_payload["saved_ref"] == saved_studio_handoff_check_payload["saved_ref"]
+    assert shown_studio_handoff_check_by_path_payload["studio_handoff_ready"] is True
+    assert "Pack Marketplace Status Studio Check" in shown_studio_handoff_check_text.stdout
+    assert "Saved:" in shown_studio_handoff_check_text.stdout
+    assert studio_refresh_payload["studio_refresh_ok"] is True
+    assert studio_refresh_payload["studio_handoff_ready"] is True
+    assert studio_refresh_payload["studio_check_ok"] is True
+    assert studio_refresh_payload["status_filter"] == "needs_work"
+    assert studio_refresh_payload["count"] == 1
+    assert studio_refresh_payload["refs"]["dashboard"].endswith(".yaml")
+    assert studio_refresh_payload["refs"]["dashboard_check"].endswith(".yaml")
+    assert studio_refresh_payload["refs"]["ready"].endswith(".yaml")
+    assert studio_refresh_payload["refs"]["ready_check"].endswith(".yaml")
+    assert studio_refresh_payload["refs"]["studio_handoff"].endswith(".yaml")
+    assert studio_refresh_payload["refs"]["studio_check"].endswith(".yaml")
+    assert Path(tmp_path / studio_refresh_payload["refs"]["studio_handoff"]).exists()
+    assert Path(tmp_path / studio_refresh_payload["refs"]["studio_check"]).exists()
+    assert studio_refresh_payload["studio_handoff"]["studio_handoff_ready"] is True
+    assert studio_refresh_payload["studio_check"]["ok"] is True
+    assert studio_refresh_payload["saved_ref"].endswith(".yaml")
+    assert Path(tmp_path / studio_refresh_payload["saved_ref"]).exists()
+    assert (tmp_path / ".cambrian" / "packs" / "marketplace" / "status" / "studio" / "refreshes" / "latest.yaml").exists()
+    assert "Pack Marketplace Status Studio Refresh" in studio_refresh_text.stdout
+    assert "Refresh OK: true" in studio_refresh_text.stdout
+    assert "Saved:" in studio_refresh_text.stdout
+    assert shown_studio_refresh_payload["studio_refresh_ok"] is True
+    assert shown_studio_refresh_payload["path"].endswith("latest.yaml")
+    assert shown_studio_refresh_by_path_payload["saved_ref"] == studio_refresh_payload["saved_ref"]
+    assert shown_studio_refresh_by_path_payload["refs"]["studio_handoff"] == studio_refresh_payload["refs"]["studio_handoff"]
+    assert "Pack Marketplace Status Studio Refresh" in shown_studio_refresh_text.stdout
+    assert "Saved:" in shown_studio_refresh_text.stdout
+
+
+def test_studio_agent_marketplace_review_blocks_accept_before_publish_safe(tmp_path: Path) -> None:
+    manifest_path = tmp_path / "document-organizer-agent.cambrian-pack.yaml"
+    _write_yaml(manifest_path, _studio_agent_manifest())
+    PackInstaller().install(tmp_path, manifest_path)
+
+    start = _cli(
+        tmp_path,
+        "job",
+        "start",
+        "--pack",
+        "document-organizer-agent",
+        "organize my documents by topic",
+        "--json",
+    )
+    validate = _cli(
+        tmp_path,
+        "pack",
+        "job-validate",
+        "latest",
+        "--criteria-status",
+        "satisfied",
+        "--criteria-notes",
+        "local criteria reviewed",
+        "--json",
+    )
+    listing = _cli(tmp_path, "pack", "marketplace-export", "document-organizer-agent", "--json")
+    review = _cli(tmp_path, "pack", "marketplace-review", "latest", "--decision", "accepted", "--json")
+
+    assert start.returncode == 0, start.stderr
+    assert validate.returncode == 0, validate.stderr
+    assert listing.returncode == 0, listing.stderr
+    assert review.returncode != 0
+    assert "cannot be accepted until safe_to_publish is true" in review.stderr
 
 
 def test_studio_agent_manual_contract_review_failure_blocks_latest_proof(tmp_path: Path) -> None:
