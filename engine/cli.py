@@ -1916,6 +1916,93 @@ def main() -> None:
     metrics_week_parser.add_argument("--json", action="store_true", dest="json_output", help="JSON 출력")
 
 
+    improve_parser = subparsers.add_parser(
+        "improve",
+        help="주간 개선 루프 관리",
+        parents=[common_parser],
+    )
+    improve_subparsers = improve_parser.add_subparsers(
+        dest="improve_command",
+        help="improve 하위 명령",
+    )
+    improve_next_parser = improve_subparsers.add_parser(
+        "next",
+        help="가장 중요한 병목 하나로 improvement cycle 시작",
+        parents=[common_parser],
+    )
+    improve_next_parser.add_argument("workset_name", help="workset name")
+    improve_next_parser.add_argument("--bottleneck", default=None, help="명시적으로 선택할 bottleneck kind")
+    improve_next_parser.add_argument("--hypothesis", default=None, help="한 줄 개선 가설")
+    improve_next_parser.add_argument("--json", action="store_true", dest="json_output", help="JSON 출력")
+    improve_show_parser = improve_subparsers.add_parser(
+        "show",
+        help="improvement cycle 상세 보기",
+        parents=[common_parser],
+    )
+    improve_show_parser.add_argument("cycle_ref", help="cycle id 또는 path")
+    improve_show_parser.add_argument("--json", action="store_true", dest="json_output", help="JSON 출력")
+    improve_cycles_parser = improve_subparsers.add_parser(
+        "cycles",
+        help="improvement cycle 목록",
+        parents=[common_parser],
+    )
+    improve_cycles_parser.add_argument("--status", choices=["planned", "in_progress", "evaluated", "closed"], default=None)
+    improve_cycles_parser.add_argument("--json", action="store_true", dest="json_output", help="JSON 출력")
+    improve_evaluate_parser = improve_subparsers.add_parser(
+        "evaluate",
+        help="cycle before/after 평가",
+        parents=[common_parser],
+    )
+    improve_evaluate_parser.add_argument("cycle_ref", help="cycle id 또는 path")
+    improve_evaluate_parser.add_argument("--json", action="store_true", dest="json_output", help="JSON 출력")
+    improve_close_parser = improve_subparsers.add_parser(
+        "close",
+        help="cycle을 닫고 resolution 기록",
+        parents=[common_parser],
+    )
+    improve_close_parser.add_argument("cycle_ref", help="cycle id 또는 path")
+    improve_close_parser.add_argument("--resolution", default=None, help="닫는 이유 또는 적용한 fix 요약")
+    improve_close_parser.add_argument("--json", action="store_true", dest="json_output", help="JSON 출력")
+    improve_pack_parser = improve_subparsers.add_parser(
+        "pack",
+        help="cycle에서 안전한 intervention pack 생성",
+        parents=[common_parser],
+    )
+    improve_pack_parser.add_argument("cycle_ref", help="cycle id 또는 path")
+    improve_pack_parser.add_argument("--team", action="append", default=[], dest="intervention_teams", help="선호 team id/name")
+    improve_pack_parser.add_argument("--template", action="append", default=[], dest="intervention_templates", help="선호 template name")
+    improve_pack_parser.add_argument("--context-path", action="append", default=[], dest="context_paths", help="선호 source path")
+    improve_pack_parser.add_argument("--test-path", action="append", default=[], dest="test_paths", help="선호 test path")
+    improve_pack_parser.add_argument("--json", action="store_true", dest="json_output", help="JSON 출력")
+    improve_apply_parser = improve_subparsers.add_parser(
+        "apply",
+        help="intervention overlay 적용",
+        parents=[common_parser],
+    )
+    improve_apply_parser.add_argument("intervention_ref", help="intervention id 또는 path")
+    improve_apply_parser.add_argument("--json", action="store_true", dest="json_output", help="JSON 출력")
+    improve_revert_parser = improve_subparsers.add_parser(
+        "revert",
+        help="active intervention overlay 되돌리기",
+        parents=[common_parser],
+    )
+    improve_revert_parser.add_argument("intervention_ref", help="intervention id 또는 path")
+    improve_revert_parser.add_argument("--json", action="store_true", dest="json_output", help="JSON 출력")
+    improve_interventions_parser = improve_subparsers.add_parser(
+        "interventions",
+        help="improvement intervention 목록",
+        parents=[common_parser],
+    )
+    improve_interventions_parser.add_argument("--status", choices=["drafted", "applied", "reverted", "dismissed", "kept"], default=None)
+    improve_interventions_parser.add_argument("--json", action="store_true", dest="json_output", help="JSON 출력")
+    improve_intervention_show_parser = improve_subparsers.add_parser(
+        "intervention-show",
+        help="intervention 상세 보기",
+        parents=[common_parser],
+    )
+    improve_intervention_show_parser.add_argument("intervention_ref", help="intervention id 또는 path")
+    improve_intervention_show_parser.add_argument("--json", action="store_true", dest="json_output", help="JSON 출력")
+
     status_parser = subparsers.add_parser(
         "status",
         help="프로젝트 메모리와 최근 여정 조회",
@@ -4169,6 +4256,8 @@ def main() -> None:
             _handle_uninstall(args)
         elif args.command == "metrics":
             _handle_metrics(args)
+        elif args.command == "improve":
+            _handle_improve(args)
         elif args.command == "status":
             _handle_status(args)
         elif args.command == "summary":
@@ -11640,6 +11729,259 @@ def _handle_metrics(args: argparse.Namespace) -> None:
         print("")
         print("Saved:")
         print(f"  {saved_ref}")
+
+
+
+def _handle_improve(args: argparse.Namespace) -> None:
+    """cambrian improve 명령을 처리한다."""
+    from engine.project_improvement_loop import (
+        ActiveImprovementCycleError,
+        ImprovementCycleBuilder,
+        ImprovementCycleEvaluator,
+        ImprovementCycleStore,
+        close_cycle,
+        default_cycle_path,
+        default_cycles_dir,
+        render_cycle,
+        render_cycle_started,
+        render_cycles,
+        render_evaluation,
+        resolve_cycle_path,
+    )
+    from engine.project_improvement_interventions import (
+        ActiveInterventionError,
+        ImprovementInterventionBuilder,
+        ImprovementInterventionStore,
+        apply_intervention,
+        default_intervention_path,
+        default_interventions_dir,
+        render_intervention_applied,
+        render_intervention_pack_created,
+        render_interventions,
+        resolve_intervention_path,
+        revert_intervention,
+    )
+    from engine.project_improvement_decisions import (
+        ImprovementDecisionStore,
+        KeepBlockedError,
+        default_decisions_path,
+        default_persistent_overlay_path,
+        dismiss_intervention,
+        keep_intervention,
+        render_decision_dismissed,
+        render_decision_kept,
+        render_decisions,
+    )
+
+    root = Path.cwd().resolve()
+    command = getattr(args, "improve_command", None)
+    store = ImprovementCycleStore()
+
+    if command == "next":
+        try:
+            cycle = ImprovementCycleBuilder().build_next(
+                root,
+                args.workset_name,
+                bottleneck_kind=getattr(args, "bottleneck", None),
+                hypothesis=getattr(args, "hypothesis", None),
+            )
+        except ActiveImprovementCycleError as exc:
+            if getattr(args, "json_output", False):
+                print(json.dumps({
+                    "status": "blocked",
+                    "error": str(exc),
+                    "active_cycle_id": exc.cycle_id,
+                    "active_cycle_ref": exc.cycle_ref,
+                }, indent=2, ensure_ascii=False))
+                return
+            print("An improvement cycle is already active.", file=sys.stderr)
+            print("", file=sys.stderr)
+            print("Use:", file=sys.stderr)
+            print(f"  cambrian improve show {exc.cycle_id}", file=sys.stderr)
+            print(f"  cambrian improve evaluate {exc.cycle_id}", file=sys.stderr)
+            print(f"  cambrian improve close {exc.cycle_id}", file=sys.stderr)
+            sys.exit(1)
+        saved = store.save(cycle, default_cycle_path(root, cycle))
+        if getattr(args, "json_output", False):
+            payload = cycle.to_dict()
+            payload["saved_path"] = str(saved.resolve())
+            print(json.dumps(payload, indent=2, ensure_ascii=False))
+            return
+        print(render_cycle_started(cycle, saved, root))
+        return
+
+    if command == "show":
+        try:
+            cycle_path = resolve_cycle_path(root, args.cycle_ref)
+        except FileNotFoundError as exc:
+            print(f"Improvement cycle not found: {exc}", file=sys.stderr)
+            sys.exit(1)
+        cycle = store.load(cycle_path)
+        if getattr(args, "json_output", False):
+            payload = cycle.to_dict()
+            payload["cycle_path"] = _relative_cli(cycle_path, root)
+            print(json.dumps(payload, indent=2, ensure_ascii=False))
+            return
+        print(render_cycle(cycle))
+        return
+
+    if command == "cycles":
+        cycles = store.list(default_cycles_dir(root))
+        status_filter = getattr(args, "status", None)
+        if status_filter:
+            cycles = [cycle for cycle in cycles if cycle.status == status_filter]
+        if getattr(args, "json_output", False):
+            print(json.dumps({"cycles": [cycle.to_dict() for cycle in cycles]}, indent=2, ensure_ascii=False))
+            return
+        print(render_cycles(cycles))
+        return
+
+    if command == "evaluate":
+        try:
+            cycle_path = resolve_cycle_path(root, args.cycle_ref)
+        except FileNotFoundError as exc:
+            print(f"Improvement cycle not found: {exc}", file=sys.stderr)
+            sys.exit(1)
+        cycle = ImprovementCycleEvaluator().evaluate(root, cycle_path)
+        store.update(cycle_path, cycle)
+        if getattr(args, "json_output", False):
+            payload = cycle.to_dict()
+            payload["cycle_path"] = _relative_cli(cycle_path, root)
+            print(json.dumps(payload, indent=2, ensure_ascii=False))
+            return
+        print(render_evaluation(cycle))
+        return
+
+    if command == "close":
+        try:
+            cycle_path = resolve_cycle_path(root, args.cycle_ref)
+        except FileNotFoundError as exc:
+            print(f"Improvement cycle not found: {exc}", file=sys.stderr)
+            sys.exit(1)
+        cycle = close_cycle(root, cycle_path, resolution=getattr(args, "resolution", None))
+        if getattr(args, "json_output", False):
+            payload = cycle.to_dict()
+            payload["cycle_path"] = _relative_cli(cycle_path, root)
+            print(json.dumps(payload, indent=2, ensure_ascii=False))
+            return
+        print("Improvement cycle closed.")
+        print("")
+        print("Cycle:")
+        print(f"  {cycle.cycle_id}")
+        print("")
+        print("Status:")
+        print(f"  {cycle.status}")
+        if getattr(args, "resolution", None):
+            print("")
+            print("Resolution:")
+            print(f"  {getattr(args, 'resolution')}")
+        return
+
+    if command == "pack":
+        try:
+            cycle_path = resolve_cycle_path(root, args.cycle_ref)
+        except FileNotFoundError as exc:
+            print(f"Improvement cycle not found: {exc}", file=sys.stderr)
+            sys.exit(1)
+        intervention = ImprovementInterventionBuilder().from_cycle(
+            root,
+            cycle_path,
+            teams=list(getattr(args, "intervention_teams", []) or []),
+            templates=list(getattr(args, "intervention_templates", []) or []),
+            context_paths=list(getattr(args, "context_paths", []) or []),
+            test_paths=list(getattr(args, "test_paths", []) or []),
+        )
+        saved = ImprovementInterventionStore().save(intervention, default_intervention_path(root, intervention))
+        if getattr(args, "json_output", False):
+            payload = intervention.to_dict()
+            payload["saved_path"] = str(saved.resolve())
+            print(json.dumps(payload, indent=2, ensure_ascii=False))
+            return
+        print(render_intervention_pack_created(intervention, _relative_cli(saved, root)))
+        return
+
+    if command == "apply":
+        try:
+            intervention_path = resolve_intervention_path(root, args.intervention_ref)
+            intervention, overlay = apply_intervention(root, intervention_path)
+        except ActiveInterventionError as exc:
+            if getattr(args, "json_output", False):
+                print(json.dumps({
+                    "status": "blocked",
+                    "error": str(exc),
+                    "active_intervention_id": exc.intervention_id,
+                    "active_intervention_ref": exc.intervention_ref,
+                }, indent=2, ensure_ascii=False))
+                return
+            print("An improvement intervention is already active.", file=sys.stderr)
+            print("", file=sys.stderr)
+            print("Use:", file=sys.stderr)
+            print(f"  cambrian improve revert {exc.intervention_id}", file=sys.stderr)
+            sys.exit(1)
+        except FileNotFoundError as exc:
+            print(f"Improvement intervention not found: {exc}", file=sys.stderr)
+            sys.exit(1)
+        if getattr(args, "json_output", False):
+            print(json.dumps({
+                "status": "applied",
+                "intervention": intervention.to_dict(),
+                "overlay": overlay.to_dict(),
+            }, indent=2, ensure_ascii=False))
+            return
+        print(render_intervention_applied(intervention, overlay))
+        return
+
+    if command == "revert":
+        try:
+            intervention_path = resolve_intervention_path(root, args.intervention_ref)
+            intervention, overlay = revert_intervention(root, intervention_path)
+        except ActiveInterventionError as exc:
+            print(f"Different intervention is active: {exc.intervention_id}", file=sys.stderr)
+            sys.exit(1)
+        except FileNotFoundError as exc:
+            print(f"Improvement intervention not found: {exc}", file=sys.stderr)
+            sys.exit(1)
+        if getattr(args, "json_output", False):
+            print(json.dumps({
+                "status": "reverted",
+                "intervention": intervention.to_dict(),
+                "overlay": overlay.to_dict(),
+            }, indent=2, ensure_ascii=False))
+            return
+        print("Improvement intervention reverted.")
+        print("")
+        print("Intervention:")
+        print(f"  {intervention.intervention_id}")
+        return
+
+    if command == "interventions":
+        interventions = ImprovementInterventionStore().list(default_interventions_dir(root))
+        status_filter = getattr(args, "status", None)
+        if status_filter:
+            interventions = [item for item in interventions if item.status == status_filter]
+        if getattr(args, "json_output", False):
+            print(json.dumps({"interventions": [item.to_dict() for item in interventions]}, indent=2, ensure_ascii=False))
+            return
+        print(render_interventions(interventions))
+        return
+
+    if command == "intervention-show":
+        try:
+            intervention_path = resolve_intervention_path(root, args.intervention_ref)
+        except FileNotFoundError as exc:
+            print(f"Improvement intervention not found: {exc}", file=sys.stderr)
+            sys.exit(1)
+        intervention = ImprovementInterventionStore().load(intervention_path)
+        if getattr(args, "json_output", False):
+            payload = intervention.to_dict()
+            payload["intervention_path"] = _relative_cli(intervention_path, root)
+            print(json.dumps(payload, indent=2, ensure_ascii=False))
+            return
+        print(render_intervention_pack_created(intervention, _relative_cli(intervention_path, root)))
+        return
+
+    print("improve 하위 명령이 올바르지 않습니다. 예: cambrian improve next auth-bug-workset", file=sys.stderr)
+    sys.exit(1)
 
 
 

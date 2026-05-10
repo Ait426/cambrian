@@ -377,6 +377,18 @@ class ProjectContextScanner:
             list(result.next_actions),
             stage=result.status,
         )
+        try:
+            from engine.project_bridge_context import apply_bridge_context_hints_to_scan
+
+            result = apply_bridge_context_hints_to_scan(result, root)
+        except Exception as exc:
+            logger.warning("bridge context hint apply failed: %s", exc)
+        try:
+            from engine.project_improvement_interventions import apply_improvement_overlay_to_scan
+
+            result = apply_improvement_overlay_to_scan(result, root)
+        except Exception as exc:
+            logger.warning("improvement intervention overlay apply failed: %s", exc)
         return result
 
     def save(self, result: ContextScanResult, path: Path | str) -> Path:
