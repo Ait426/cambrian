@@ -37,6 +37,11 @@ def _stamp() -> str:
     return datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
 
 
+def _stamp_unique() -> str:
+    """?? ????? ???? ??? ? ??? UTC timestamp? ????."""
+    return datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S_%f")
+
+
 def _atomic_write_text(path: Path, content: str) -> None:
     """텍스트 파일을 원자적으로 저장한다."""
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -1085,7 +1090,7 @@ def default_marketplace_status_dir(project_root: Path) -> Path:
 
 def default_marketplace_status_path(project_root: Path) -> Path:
     """기본 marketplace status dashboard snapshot 경로."""
-    return default_marketplace_status_dir(project_root) / f"status_{_stamp()}.yaml"
+    return default_marketplace_status_dir(project_root) / f"status_{_stamp_unique()}.yaml"
 
 
 def default_marketplace_status_latest_path(project_root: Path) -> Path:
@@ -1100,7 +1105,7 @@ def default_marketplace_status_check_dir(project_root: Path) -> Path:
 
 def default_marketplace_status_check_path(project_root: Path) -> Path:
     """기본 marketplace status dashboard check report 경로."""
-    return default_marketplace_status_check_dir(project_root) / f"status_check_{_stamp()}.yaml"
+    return default_marketplace_status_check_dir(project_root) / f"status_check_{_stamp_unique()}.yaml"
 
 
 def default_marketplace_status_check_latest_path(project_root: Path) -> Path:
@@ -1115,7 +1120,7 @@ def default_marketplace_status_ready_dir(project_root: Path) -> Path:
 
 def default_marketplace_status_ready_path(project_root: Path) -> Path:
     """기본 Studio marketplace status ready report 경로."""
-    return default_marketplace_status_ready_dir(project_root) / f"status_ready_{_stamp()}.yaml"
+    return default_marketplace_status_ready_dir(project_root) / f"status_ready_{_stamp_unique()}.yaml"
 
 
 def default_marketplace_status_ready_latest_path(project_root: Path) -> Path:
@@ -1130,7 +1135,7 @@ def default_marketplace_status_ready_check_dir(project_root: Path) -> Path:
 
 def default_marketplace_status_ready_check_path(project_root: Path) -> Path:
     """기본 Studio marketplace status ready check report 경로."""
-    return default_marketplace_status_ready_check_dir(project_root) / f"status_ready_check_{_stamp()}.yaml"
+    return default_marketplace_status_ready_check_dir(project_root) / f"status_ready_check_{_stamp_unique()}.yaml"
 
 
 def default_marketplace_status_ready_check_latest_path(project_root: Path) -> Path:
@@ -1145,7 +1150,7 @@ def default_marketplace_status_studio_handoff_dir(project_root: Path) -> Path:
 
 def default_marketplace_status_studio_handoff_path(project_root: Path) -> Path:
     """기본 Studio marketplace status handoff payload 경로."""
-    return default_marketplace_status_studio_handoff_dir(project_root) / f"status_studio_{_stamp()}.yaml"
+    return default_marketplace_status_studio_handoff_dir(project_root) / f"status_studio_{_stamp_unique()}.yaml"
 
 
 def default_marketplace_status_studio_handoff_latest_path(project_root: Path) -> Path:
@@ -1160,7 +1165,7 @@ def default_marketplace_status_studio_check_dir(project_root: Path) -> Path:
 
 def default_marketplace_status_studio_check_path(project_root: Path) -> Path:
     """기본 Studio marketplace status handoff check report 경로."""
-    return default_marketplace_status_studio_check_dir(project_root) / f"status_studio_check_{_stamp()}.yaml"
+    return default_marketplace_status_studio_check_dir(project_root) / f"status_studio_check_{_stamp_unique()}.yaml"
 
 
 def default_marketplace_status_studio_check_latest_path(project_root: Path) -> Path:
@@ -1175,7 +1180,7 @@ def default_marketplace_status_studio_refresh_dir(project_root: Path) -> Path:
 
 def default_marketplace_status_studio_refresh_path(project_root: Path) -> Path:
     """기본 Studio marketplace status refresh report 경로."""
-    return default_marketplace_status_studio_refresh_dir(project_root) / f"status_studio_refresh_{_stamp()}.yaml"
+    return default_marketplace_status_studio_refresh_dir(project_root) / f"status_studio_refresh_{_stamp_unique()}.yaml"
 
 
 def default_marketplace_status_studio_refresh_latest_path(project_root: Path) -> Path:

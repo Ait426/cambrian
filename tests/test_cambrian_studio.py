@@ -1178,6 +1178,30 @@ def test_studio_agent_marketplace_review_records_needs_work(tmp_path: Path) -> N
     assert "Saved:" in shown_studio_refresh_text.stdout
 
 
+def test_marketplace_status_artifact_paths_are_unique_inside_same_second(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    from datetime import datetime as real_datetime
+    from datetime import timezone
+
+    from engine import project_pack_marketplace as marketplace
+
+    class SequenceDateTime:
+        tick = 0
+
+        @classmethod
+        def now(cls, tz=None):
+            cls.tick += 1
+            return real_datetime(2026, 5, 10, 1, 2, 3, cls.tick, tzinfo=timezone.utc)
+
+    monkeypatch.setattr(marketplace, "datetime", SequenceDateTime)
+
+    first = marketplace.default_marketplace_status_path(tmp_path)
+    second = marketplace.default_marketplace_status_path(tmp_path)
+
+    assert first != second
+    assert first.name == "status_20260510_010203_000001.yaml"
+    assert second.name == "status_20260510_010203_000002.yaml"
+
+
 def test_studio_agent_marketplace_review_blocks_accept_before_publish_safe(tmp_path: Path) -> None:
     manifest_path = tmp_path / "document-organizer-agent.cambrian-pack.yaml"
     _write_yaml(manifest_path, _studio_agent_manifest())
