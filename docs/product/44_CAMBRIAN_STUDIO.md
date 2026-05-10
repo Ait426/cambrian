@@ -219,6 +219,7 @@ install:
 32. `cambrian pack marketplace-status-studio-check latest`가 최종 Studio handoff payload의 필수 필드와 내부 참조 일관성을 검증
 33. `cambrian pack marketplace-status-studio-refresh`가 dashboard부터 최종 Studio handoff check까지 한 번에 갱신
 34. `cambrian pack marketplace-status-studio-refresh-show latest`가 마지막 refresh report를 다시 열어 Studio 새로고침 이력을 확인
+35. `cambrian pack marketplace-status-studio-refresh-check latest`가 refresh report의 refs와 내장 payload 일관성을 검증
 
 ## 10. 최종 문장
 

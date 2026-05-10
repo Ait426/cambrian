@@ -38,7 +38,7 @@ def _stamp() -> str:
 
 
 def _stamp_unique() -> str:
-    """?? ????? ???? ??? ? ??? UTC timestamp? ????."""
+    """연속 저장에서도 충돌하지 않도록 더 촘촘한 UTC timestamp를 반환한다."""
     return datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S_%f")
 
 
@@ -212,6 +212,27 @@ class PackMarketplaceStatusStudioCheck:
     ready_check_ref: str | None
     studio_handoff_ready: bool
     ready_for_studio: bool
+    checked_at: str
+    error_count: int
+    warning_count: int
+    errors: list[str] = field(default_factory=list)
+    warnings: list[str] = field(default_factory=list)
+    saved_ref: str | None = None
+
+    def to_dict(self) -> dict[str, Any]:
+        """직렬화용 dict로 변환한다."""
+        return asdict(self)
+
+
+@dataclass
+class PackMarketplaceStatusStudioRefreshCheck:
+    """Studio marketplace status refresh report 검증 결과."""
+
+    ok: bool
+    refresh_ref: str | None
+    studio_handoff_ref: str | None
+    studio_check_ref: str | None
+    studio_refresh_ok: bool
     checked_at: str
     error_count: int
     warning_count: int
@@ -955,6 +976,149 @@ def load_pack_marketplace_status_studio_refresh(project_root: Path, refresh_ref:
     return _load_yaml(path), path
 
 
+def check_pack_marketplace_status_studio_refresh(project_root: Path, refresh_ref: str) -> PackMarketplaceStatusStudioRefreshCheck:
+    """저장된 Studio marketplace status refresh report의 최소 무결성을 검사한다."""
+    root = Path(project_root).resolve()
+    payload, refresh_path = load_pack_marketplace_status_studio_refresh(root, refresh_ref)
+    errors: list[str] = []
+    warnings: list[str] = []
+    for key in [
+        "schema_version",
+        "generated_at",
+        "studio_refresh_ok",
+        "studio_handoff_ready",
+        "studio_check_ok",
+        "status_filter",
+        "count",
+        "errors",
+        "warnings",
+        "refs",
+        "dashboard",
+        "dashboard_check",
+        "ready",
+        "ready_check",
+        "studio_handoff",
+        "studio_check",
+    ]:
+        if key not in payload:
+            errors.append(f"missing required field: {key}")
+    studio_refresh_ok = payload.get("studio_refresh_ok")
+    if not isinstance(studio_refresh_ok, bool):
+        errors.append("studio_refresh_ok must be a boolean")
+        studio_refresh_ok = False
+    studio_handoff_ready = payload.get("studio_handoff_ready")
+    if not isinstance(studio_handoff_ready, bool):
+        errors.append("studio_handoff_ready must be a boolean")
+        studio_handoff_ready = False
+    studio_check_ok = payload.get("studio_check_ok")
+    if not isinstance(studio_check_ok, bool):
+        errors.append("studio_check_ok must be a boolean")
+        studio_check_ok = False
+    count = payload.get("count")
+    if not isinstance(count, int):
+        errors.append("count must be an integer")
+        count = 0
+    payload_errors = payload.get("errors")
+    if not isinstance(payload_errors, list):
+        errors.append("errors must be a list")
+    refresh_errors = _as_list(payload_errors)
+    payload_warnings = payload.get("warnings")
+    if not isinstance(payload_warnings, list):
+        errors.append("warnings must be a list")
+    refs = payload.get("refs")
+    if not isinstance(refs, dict):
+        errors.append("refs must be a mapping")
+        refs = {}
+    dashboard = payload.get("dashboard")
+    if not isinstance(dashboard, dict):
+        errors.append("dashboard must be a mapping")
+        dashboard = {}
+    dashboard_check = payload.get("dashboard_check")
+    if not isinstance(dashboard_check, dict):
+        errors.append("dashboard_check must be a mapping")
+        dashboard_check = {}
+    ready = payload.get("ready")
+    if not isinstance(ready, dict):
+        errors.append("ready must be a mapping")
+        ready = {}
+    ready_check = payload.get("ready_check")
+    if not isinstance(ready_check, dict):
+        errors.append("ready_check must be a mapping")
+        ready_check = {}
+    studio_handoff = payload.get("studio_handoff")
+    if not isinstance(studio_handoff, dict):
+        errors.append("studio_handoff must be a mapping")
+        studio_handoff = {}
+    studio_check = payload.get("studio_check")
+    if not isinstance(studio_check, dict):
+        errors.append("studio_check must be a mapping")
+        studio_check = {}
+    for key in ["dashboard", "dashboard_check", "ready", "ready_check", "studio_handoff", "studio_check"]:
+        ref = str(refs.get(key)) if refs.get(key) is not None else None
+        if not ref:
+            errors.append(f"refs.{key} is required")
+        elif not _project_ref_exists(root, ref):
+            errors.append(f"refs.{key} does not exist: {ref}")
+    _check_embedded_ref(errors, refs, "dashboard", dashboard)
+    _check_embedded_ref(errors, refs, "dashboard_check", dashboard_check)
+    _check_embedded_ref(errors, refs, "ready", ready)
+    _check_embedded_ref(errors, refs, "ready_check", ready_check)
+    _check_embedded_ref(errors, refs, "studio_handoff", studio_handoff)
+    _check_embedded_ref(errors, refs, "studio_check", studio_check)
+    dashboard_count = dashboard.get("count")
+    if isinstance(dashboard_count, int) and isinstance(count, int) and dashboard_count != count:
+        errors.append(f"dashboard.count does not match count: dashboard={dashboard_count}, count={count}")
+    if isinstance(studio_handoff.get("studio_handoff_ready"), bool) and studio_handoff.get("studio_handoff_ready") != bool(studio_handoff_ready):
+        errors.append("studio_handoff.studio_handoff_ready does not match studio_handoff_ready")
+    if isinstance(studio_check.get("ok"), bool) and studio_check.get("ok") != bool(studio_check_ok):
+        errors.append("studio_check.ok does not match studio_check_ok")
+    if bool(studio_refresh_ok) and refresh_errors:
+        errors.append("studio_refresh_ok cannot be true when errors are present")
+    if bool(studio_refresh_ok) and not bool(studio_handoff_ready):
+        errors.append("studio_refresh_ok cannot be true when studio_handoff_ready is false")
+    if bool(studio_refresh_ok) and not bool(studio_check_ok):
+        errors.append("studio_refresh_ok cannot be true when studio_check_ok is false")
+    if not bool(studio_refresh_ok) and not refresh_errors:
+        warnings.append("studio_refresh_ok is false but errors are empty")
+    refresh_path_ref = _relative(refresh_path, root)
+    return PackMarketplaceStatusStudioRefreshCheck(
+        ok=not errors,
+        refresh_ref=refresh_path_ref,
+        studio_handoff_ref=str(refs.get("studio_handoff")) if refs.get("studio_handoff") is not None else None,
+        studio_check_ref=str(refs.get("studio_check")) if refs.get("studio_check") is not None else None,
+        studio_refresh_ok=bool(studio_refresh_ok),
+        checked_at=_now(),
+        error_count=len(_dedupe(errors)),
+        warning_count=len(_dedupe(warnings)),
+        errors=_dedupe(errors),
+        warnings=_dedupe(warnings),
+    )
+
+
+def save_pack_marketplace_status_studio_refresh_check(
+    project_root: Path,
+    check: PackMarketplaceStatusStudioRefreshCheck,
+    out_path: Path | None = None,
+) -> PackMarketplaceStatusStudioRefreshCheck:
+    """Studio marketplace status refresh check report를 저장한다."""
+    root = Path(project_root).resolve()
+    target = Path(out_path) if out_path is not None else default_marketplace_status_studio_refresh_check_path(root)
+    if not target.is_absolute():
+        target = root / target
+    target = target.resolve()
+    check.saved_ref = _relative(target, root)
+    _save_yaml(target, check.to_dict())
+    _save_yaml(default_marketplace_status_studio_refresh_check_latest_path(root), check.to_dict())
+    return check
+
+
+def load_pack_marketplace_status_studio_refresh_check(project_root: Path, check_ref: str) -> tuple[PackMarketplaceStatusStudioRefreshCheck, Path]:
+    """저장된 Studio marketplace status refresh check report를 읽는다."""
+    root = Path(project_root).resolve()
+    path = resolve_pack_marketplace_status_studio_refresh_check_path(root, check_ref)
+    return _status_studio_refresh_check_from_dict(_load_yaml(path), path), path
+
+
 def refresh_pack_marketplace_status_studio_handoff(
     project_root: Path,
     *,
@@ -1188,6 +1352,21 @@ def default_marketplace_status_studio_refresh_latest_path(project_root: Path) ->
     return default_marketplace_status_studio_refresh_dir(project_root) / "latest.yaml"
 
 
+def default_marketplace_status_studio_refresh_check_dir(project_root: Path) -> Path:
+    """Studio marketplace status refresh check report 저장 디렉터리."""
+    return default_marketplace_status_studio_refresh_dir(project_root) / "checks"
+
+
+def default_marketplace_status_studio_refresh_check_path(project_root: Path) -> Path:
+    """기본 Studio marketplace status refresh check report 경로."""
+    return default_marketplace_status_studio_refresh_check_dir(project_root) / f"status_studio_refresh_check_{_stamp_unique()}.yaml"
+
+
+def default_marketplace_status_studio_refresh_check_latest_path(project_root: Path) -> Path:
+    """latest Studio marketplace status refresh check report 경로."""
+    return default_marketplace_status_studio_refresh_check_dir(project_root) / "latest.yaml"
+
+
 def resolve_pack_marketplace_listing_path(project_root: Path, listing_ref: str) -> Path:
     """listing id/path/latest를 실제 YAML 경로로 해석한다."""
     root = Path(project_root).resolve()
@@ -1393,6 +1572,29 @@ def resolve_pack_marketplace_status_studio_refresh_path(project_root: Path, refr
         if path.exists():
             return path
     raise FileNotFoundError(f"marketplace status studio refresh report not found: {refresh_ref}")
+
+
+def resolve_pack_marketplace_status_studio_refresh_check_path(project_root: Path, check_ref: str) -> Path:
+    """status studio refresh check report id/path/latest를 실제 YAML 경로로 해석한다."""
+    root = Path(project_root).resolve()
+    raw = Path(str(check_ref))
+    candidates: list[Path] = []
+    if raw.exists():
+        candidates.append(raw.resolve())
+    if not raw.is_absolute():
+        candidates.append((root / raw).resolve())
+    if str(check_ref).strip().lower() == "latest":
+        candidates.append(default_marketplace_status_studio_refresh_check_latest_path(root))
+    checks_dir = default_marketplace_status_studio_refresh_check_dir(root)
+    needle = _slug(str(check_ref), "status-studio-refresh-check")
+    if checks_dir.exists():
+        for path in sorted(checks_dir.glob("*.yaml"), key=lambda item: item.stat().st_mtime, reverse=True):
+            if needle in _slug(path.stem, "status-studio-refresh-check"):
+                candidates.append(path.resolve())
+    for path in candidates:
+        if path.exists():
+            return path
+    raise FileNotFoundError(f"marketplace status studio refresh check report not found: {check_ref}")
 
 
 def render_pack_marketplace_listing(
@@ -1775,6 +1977,31 @@ def render_pack_marketplace_status_studio_refresh(payload: dict[str, Any]) -> st
     return "\n".join(lines)
 
 
+def render_pack_marketplace_status_studio_refresh_check(check: PackMarketplaceStatusStudioRefreshCheck) -> str:
+    """Studio marketplace status refresh check report를 사람이 읽기 좋게 렌더링한다."""
+    lines = [
+        "Pack Marketplace Status Studio Refresh Check",
+        "==================================================",
+        "",
+        f"OK: {str(check.ok).lower()}",
+        f"Refresh OK: {str(check.studio_refresh_ok).lower()}",
+        f"Refresh ref: {check.refresh_ref or 'unknown'}",
+        f"Studio handoff ref: {check.studio_handoff_ref or 'unknown'}",
+        f"Studio check ref: {check.studio_check_ref or 'unknown'}",
+        f"Errors: {check.error_count}",
+        f"Warnings: {check.warning_count}",
+    ]
+    if check.saved_ref:
+        lines.extend(["", "Saved:", f"  {check.saved_ref}"])
+    if check.errors:
+        lines.extend(["", "Errors:"])
+        lines.extend([f"  - {item}" for item in check.errors])
+    if check.warnings:
+        lines.extend(["", "Warnings:"])
+        lines.extend([f"  - {item}" for item in check.warnings])
+    return "\n".join(lines)
+
+
 def _installed_record(root: Path, pack_ref: str) -> InstalledPackRecord:
     index = InstalledPackStore().load(default_installed_packs_path(root))
     return InstalledPackStore().find(index, pack_ref)
@@ -1939,6 +2166,22 @@ def _status_studio_check_from_dict(payload: dict[str, Any], path: Path | None = 
     )
 
 
+def _status_studio_refresh_check_from_dict(payload: dict[str, Any], path: Path | None = None) -> PackMarketplaceStatusStudioRefreshCheck:
+    return PackMarketplaceStatusStudioRefreshCheck(
+        ok=bool(payload.get("ok", False)),
+        refresh_ref=str(payload.get("refresh_ref")) if payload.get("refresh_ref") is not None else None,
+        studio_handoff_ref=str(payload.get("studio_handoff_ref")) if payload.get("studio_handoff_ref") is not None else None,
+        studio_check_ref=str(payload.get("studio_check_ref")) if payload.get("studio_check_ref") is not None else None,
+        studio_refresh_ok=bool(payload.get("studio_refresh_ok", False)),
+        checked_at=str(payload.get("checked_at") or _now()),
+        error_count=int(payload.get("error_count") or 0),
+        warning_count=int(payload.get("warning_count") or 0),
+        errors=_as_list(payload.get("errors")),
+        warnings=_as_list(payload.get("warnings")),
+        saved_ref=str(payload.get("saved_ref")) if payload.get("saved_ref") is not None else (_relative(path, Path.cwd()) if path else None),
+    )
+
+
 def _review_decision(decision: str) -> str:
     normalized = str(decision or "").strip().lower()
     if normalized not in {"needs_work", "rejected", "accepted"}:
@@ -2004,6 +2247,13 @@ def _project_ref_exists(root: Path, ref: str) -> bool:
     if raw.is_absolute():
         return raw.exists()
     return (Path(root).resolve() / raw).exists()
+
+
+def _check_embedded_ref(errors: list[str], refs: dict[str, Any], key: str, payload: dict[str, Any]) -> None:
+    expected = str(refs.get(key)) if refs.get(key) is not None else None
+    actual = str(payload.get("saved_ref")) if payload.get("saved_ref") is not None else None
+    if expected and actual and actual != expected:
+        errors.append(f"{key}.saved_ref points to {actual}, not {expected}")
 
 
 def _dedupe(values: list[Any]) -> list[str]:

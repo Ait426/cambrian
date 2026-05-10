@@ -956,6 +956,22 @@ def test_studio_agent_marketplace_review_records_needs_work(tmp_path: Path) -> N
     )
     shown_studio_refresh_by_path_payload = json.loads(shown_studio_refresh_by_path.stdout)
     shown_studio_refresh_text = _cli(tmp_path, "pack", "marketplace-status-studio-refresh-show", "latest")
+    checked_studio_refresh = _cli(tmp_path, "pack", "marketplace-status-studio-refresh-check", "latest", "--json")
+    checked_studio_refresh_payload = json.loads(checked_studio_refresh.stdout)
+    checked_studio_refresh_text = _cli(tmp_path, "pack", "marketplace-status-studio-refresh-check", "latest")
+    saved_studio_refresh_check = _cli(tmp_path, "pack", "marketplace-status-studio-refresh-check", "latest", "--save", "--json")
+    saved_studio_refresh_check_payload = json.loads(saved_studio_refresh_check.stdout)
+    shown_studio_refresh_check = _cli(tmp_path, "pack", "marketplace-status-studio-refresh-check-show", "latest", "--json")
+    shown_studio_refresh_check_payload = json.loads(shown_studio_refresh_check.stdout)
+    shown_studio_refresh_check_by_path = _cli(
+        tmp_path,
+        "pack",
+        "marketplace-status-studio-refresh-check-show",
+        saved_studio_refresh_check_payload["saved_ref"],
+        "--json",
+    )
+    shown_studio_refresh_check_by_path_payload = json.loads(shown_studio_refresh_check_by_path.stdout)
+    shown_studio_refresh_check_text = _cli(tmp_path, "pack", "marketplace-status-studio-refresh-check-show", "latest")
 
     assert start.returncode == 0, start.stderr
     assert validate.returncode == 0, validate.stderr
@@ -1014,6 +1030,12 @@ def test_studio_agent_marketplace_review_records_needs_work(tmp_path: Path) -> N
     assert shown_studio_refresh.returncode == 0, shown_studio_refresh.stderr
     assert shown_studio_refresh_by_path.returncode == 0, shown_studio_refresh_by_path.stderr
     assert shown_studio_refresh_text.returncode == 0, shown_studio_refresh_text.stderr
+    assert checked_studio_refresh.returncode == 0, checked_studio_refresh.stderr
+    assert checked_studio_refresh_text.returncode == 0, checked_studio_refresh_text.stderr
+    assert saved_studio_refresh_check.returncode == 0, saved_studio_refresh_check.stderr
+    assert shown_studio_refresh_check.returncode == 0, shown_studio_refresh_check.stderr
+    assert shown_studio_refresh_check_by_path.returncode == 0, shown_studio_refresh_check_by_path.stderr
+    assert shown_studio_refresh_check_text.returncode == 0, shown_studio_refresh_check_text.stderr
     assert payload["decision"] == "needs_work"
     assert payload["reviewer"] == "studio-owner"
     assert payload["notes"] == "Collect more runtime evidence before public listing."
@@ -1176,6 +1198,24 @@ def test_studio_agent_marketplace_review_records_needs_work(tmp_path: Path) -> N
     assert shown_studio_refresh_by_path_payload["refs"]["studio_handoff"] == studio_refresh_payload["refs"]["studio_handoff"]
     assert "Pack Marketplace Status Studio Refresh" in shown_studio_refresh_text.stdout
     assert "Saved:" in shown_studio_refresh_text.stdout
+    assert checked_studio_refresh_payload["ok"] is True
+    assert checked_studio_refresh_payload["studio_refresh_ok"] is True
+    assert checked_studio_refresh_payload["refresh_ref"].endswith("latest.yaml")
+    assert checked_studio_refresh_payload["studio_handoff_ref"].endswith(".yaml")
+    assert checked_studio_refresh_payload["studio_check_ref"].endswith(".yaml")
+    assert checked_studio_refresh_payload["error_count"] == 0
+    assert "Pack Marketplace Status Studio Refresh Check" in checked_studio_refresh_text.stdout
+    assert "OK: true" in checked_studio_refresh_text.stdout
+    assert saved_studio_refresh_check_payload["ok"] is True
+    assert saved_studio_refresh_check_payload["saved_ref"].endswith(".yaml")
+    assert Path(tmp_path / saved_studio_refresh_check_payload["saved_ref"]).exists()
+    assert (tmp_path / ".cambrian" / "packs" / "marketplace" / "status" / "studio" / "refreshes" / "checks" / "latest.yaml").exists()
+    assert shown_studio_refresh_check_payload["ok"] is True
+    assert shown_studio_refresh_check_payload["path"].endswith("latest.yaml")
+    assert shown_studio_refresh_check_by_path_payload["saved_ref"] == saved_studio_refresh_check_payload["saved_ref"]
+    assert shown_studio_refresh_check_by_path_payload["studio_refresh_ok"] is True
+    assert "Pack Marketplace Status Studio Refresh Check" in shown_studio_refresh_check_text.stdout
+    assert "Saved:" in shown_studio_refresh_check_text.stdout
 
 
 def test_marketplace_status_artifact_paths_are_unique_inside_same_second(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:

@@ -1912,6 +1912,22 @@ def main() -> None:
     )
     pack_marketplace_status_studio_refresh_show_parser.add_argument("refresh_ref", help="Studio refresh report id/path/latest")
     pack_marketplace_status_studio_refresh_show_parser.add_argument("--json", action="store_true", dest="json_output", help="JSON 출력")
+    pack_marketplace_status_studio_refresh_check_parser = pack_subparsers.add_parser(
+        "marketplace-status-studio-refresh-check",
+        help="저장된 Studio marketplace status refresh report 무결성 검사",
+        parents=[common_parser],
+    )
+    pack_marketplace_status_studio_refresh_check_parser.add_argument("refresh_ref", help="Studio refresh report id/path/latest")
+    pack_marketplace_status_studio_refresh_check_parser.add_argument("--save", action="store_true", help="Studio refresh check report 저장")
+    pack_marketplace_status_studio_refresh_check_parser.add_argument("--out", default=None, help="Studio refresh check report output path")
+    pack_marketplace_status_studio_refresh_check_parser.add_argument("--json", action="store_true", dest="json_output", help="JSON 출력")
+    pack_marketplace_status_studio_refresh_check_show_parser = pack_subparsers.add_parser(
+        "marketplace-status-studio-refresh-check-show",
+        help="저장된 Studio marketplace status refresh check report 다시 보기",
+        parents=[common_parser],
+    )
+    pack_marketplace_status_studio_refresh_check_show_parser.add_argument("check_ref", help="Studio refresh check id/path/latest")
+    pack_marketplace_status_studio_refresh_check_show_parser.add_argument("--json", action="store_true", dest="json_output", help="JSON 출력")
     pack_marketplace_review_parser = pack_subparsers.add_parser(
         "marketplace-review",
         help="marketplace listing draft에 대한 로컬 심사 결정 기록",
@@ -10161,6 +10177,7 @@ def _handle_pack(args: argparse.Namespace) -> None:
         check_pack_marketplace_status_dashboard,
         check_pack_marketplace_status_ready_report,
         check_pack_marketplace_status_studio_handoff,
+        check_pack_marketplace_status_studio_refresh,
         default_marketplace_review_dir,
         filter_pack_marketplace_statuses,
         latest_marketplace_review_for_listing,
@@ -10171,6 +10188,7 @@ def _handle_pack(args: argparse.Namespace) -> None:
         load_pack_marketplace_status_studio_check,
         load_pack_marketplace_status_studio_handoff,
         load_pack_marketplace_status_studio_refresh,
+        load_pack_marketplace_status_studio_refresh_check,
         pack_marketplace_status_dashboard_payload,
         refresh_pack_marketplace_status_studio_handoff,
         render_pack_marketplace_review,
@@ -10185,6 +10203,7 @@ def _handle_pack(args: argparse.Namespace) -> None:
         render_pack_marketplace_status_studio_check,
         render_pack_marketplace_status_studio_handoff,
         render_pack_marketplace_status_studio_refresh,
+        render_pack_marketplace_status_studio_refresh_check,
         resolve_pack_marketplace_listing_path,
         resolve_pack_marketplace_review_path,
         save_pack_marketplace_status_dashboard,
@@ -10194,6 +10213,7 @@ def _handle_pack(args: argparse.Namespace) -> None:
         save_pack_marketplace_status_studio_check,
         save_pack_marketplace_status_studio_handoff,
         save_pack_marketplace_status_studio_refresh,
+        save_pack_marketplace_status_studio_refresh_check,
         summarize_pack_marketplace_statuses,
     )
     from engine.project_pack_registry import (
@@ -11574,6 +11594,37 @@ def _handle_pack(args: argparse.Namespace) -> None:
             print(json.dumps(output_payload, indent=2, ensure_ascii=False))
             return
         print(render_pack_marketplace_status_studio_refresh(payload))
+        return
+
+    if command == "marketplace-status-studio-refresh-check":
+        try:
+            check = check_pack_marketplace_status_studio_refresh(root, str(getattr(args, "refresh_ref")))
+        except (FileNotFoundError, ValueError) as exc:
+            print(f"Pack marketplace status studio refresh check blocked: {exc}", file=sys.stderr)
+            sys.exit(1)
+        if getattr(args, "save", False) or getattr(args, "out", None):
+            out_arg = getattr(args, "out", None)
+            check = save_pack_marketplace_status_studio_refresh_check(root, check, Path(str(out_arg)) if out_arg else None)
+        if getattr(args, "json_output", False):
+            print(json.dumps(check.to_dict(), indent=2, ensure_ascii=False))
+        else:
+            print(render_pack_marketplace_status_studio_refresh_check(check))
+        if not check.ok:
+            sys.exit(1)
+        return
+
+    if command == "marketplace-status-studio-refresh-check-show":
+        try:
+            check, check_path = load_pack_marketplace_status_studio_refresh_check(root, str(getattr(args, "check_ref")))
+        except (FileNotFoundError, ValueError) as exc:
+            print(f"Pack marketplace status studio refresh check show blocked: {exc}", file=sys.stderr)
+            sys.exit(1)
+        if getattr(args, "json_output", False):
+            payload = check.to_dict()
+            payload["path"] = _relative_cli(check_path, root)
+            print(json.dumps(payload, indent=2, ensure_ascii=False))
+            return
+        print(render_pack_marketplace_status_studio_refresh_check(check))
         return
 
     if command == "marketplace-review":
