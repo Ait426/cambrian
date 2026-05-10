@@ -197,6 +197,11 @@ def test_apply_validated_proposal_success(tmp_path: Path) -> None:
     assert result.post_apply_tests is not None
     assert result.post_apply_tests["passed"] == 1
     assert Path(tmp_path / result.adoption_record_path).exists()
+    adoption = json.loads((tmp_path / result.adoption_record_path).read_text(encoding="utf-8"))
+    assert adoption["metrics_context"]["proposal_id"] == "patch-001"
+    assert adoption["metrics_context"]["adoption_succeeded"] is True
+    assert adoption["metrics_context"]["apply_tests_passed"] is True
+    assert adoption["metrics_context"]["applied_at"] == adoption["created_at"]
     assert latest.exists()
 
 

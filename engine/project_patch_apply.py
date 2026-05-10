@@ -705,11 +705,12 @@ class PatchApplier:
         post_apply_tests: dict,
     ) -> dict:
         """official adoption record를 생성한다."""
+        created_at = _now()
         return {
             "schema_version": SCHEMA_VERSION,
             "adoption_id": adoption_id,
             "adoption_type": ADOPTION_TYPE,
-            "created_at": _now(),
+            "created_at": created_at,
             "proposal_id": proposal.get("proposal_id"),
             "source_proposal_path": _relative(proposal_path, project_root),
             "source_diagnosis_ref": proposal.get("source_diagnosis_ref"),
@@ -722,6 +723,13 @@ class PatchApplier:
                 "validation_status": (proposal.get("validation") or {}).get("status"),
             },
             "post_apply_tests": post_apply_tests,
+            "metrics_context": {
+                "applied_at": created_at,
+                "adoption_succeeded": True,
+                "apply_tests_passed": self._post_apply_passed(post_apply_tests),
+                "proposal_id": proposal.get("proposal_id"),
+                "source_proposal_path": _relative(proposal_path, project_root),
+            },
             "applied_files": applied_files,
             "backup_dir": _relative(backup_dir, project_root),
             "adoption_status": "adopted",

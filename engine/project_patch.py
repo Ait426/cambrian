@@ -153,6 +153,7 @@ class PatchProposal:
     task_spec_path: str | None
     next_actions: list[str]
     memory_guidance_ref: dict | None = None
+    metrics_context: dict = field(default_factory=dict)
 
     def to_dict(self) -> dict:
         """직렬화용 dict."""
@@ -334,6 +335,15 @@ class PatchProposalBuilder:
             task_spec_path=None,
             next_actions=[],
             memory_guidance_ref=intent.memory_guidance_ref,
+            metrics_context={
+                "proposal_id": proposal_id,
+                "proposal_created_at": created_at,
+                "proposal_validated_at": None,
+                "validated_proposal": False,
+                "source_diagnosis_ref": intent.source_diagnosis_ref,
+                "source_context_ref": intent.source_context_ref,
+                "request_class": "unknown",
+            },
         )
 
         if proposal_status == "ready":
@@ -362,6 +372,8 @@ class PatchProposalBuilder:
             proposal.validation = validation
             if validation["status"] == "passed":
                 proposal.proposal_status = "validated"
+                proposal.metrics_context["proposal_validated_at"] = _now()
+                proposal.metrics_context["validated_proposal"] = True
                 proposal.next_actions = [
                     "Review proposal artifact",
                     "Apply/adopt explicitly when ready",

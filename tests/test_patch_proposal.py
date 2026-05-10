@@ -208,6 +208,9 @@ def test_execute_isolated_validation_passed(tmp_path: Path) -> None:
     assert proposal.validation is not None
     assert proposal.validation["status"] == "passed"
     assert saved_payload["validation"]["status"] == "passed"
+    assert saved_payload["metrics_context"]["proposal_id"] == proposal.proposal_id
+    assert saved_payload["metrics_context"]["validated_proposal"] is True
+    assert saved_payload["metrics_context"]["proposal_validated_at"]
     assert (tmp_path / proposal.validation["workspace_path"]).exists()
     assert _sha256(target) == before_hash
 
