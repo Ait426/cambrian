@@ -976,6 +976,51 @@ def load_pack_marketplace_status_studio_refresh(project_root: Path, refresh_ref:
     return _load_yaml(path), path
 
 
+def list_pack_marketplace_status_studio_refresh_reports(
+    project_root: Path,
+    *,
+    limit: int = 20,
+) -> dict[str, Any]:
+    """저장된 Studio marketplace status refresh report 목록을 최신순으로 만든다."""
+    root = Path(project_root).resolve()
+    refresh_dir = default_marketplace_status_studio_refresh_dir(root)
+    reports: list[dict[str, Any]] = []
+    if refresh_dir.exists():
+        for path in sorted(refresh_dir.glob("*.yaml"), key=lambda item: item.stat().st_mtime, reverse=True):
+            if path.name == "latest.yaml":
+                continue
+            payload = _load_yaml(path)
+            refs = payload.get("refs") if isinstance(payload.get("refs"), dict) else {}
+            errors = _as_list(payload.get("errors"))
+            warnings = _as_list(payload.get("warnings"))
+            reports.append(
+                {
+                    "path": _relative(path, root),
+                    "saved_ref": str(payload.get("saved_ref") or _relative(path, root)),
+                    "generated_at": str(payload.get("generated_at") or "unknown"),
+                    "studio_refresh_ok": bool(payload.get("studio_refresh_ok", False)),
+                    "studio_handoff_ready": bool(payload.get("studio_handoff_ready", False)),
+                    "studio_check_ok": bool(payload.get("studio_check_ok", False)),
+                    "status_filter": payload.get("status_filter"),
+                    "count": payload.get("count", 0),
+                    "studio_handoff_ref": refs.get("studio_handoff"),
+                    "studio_check_ref": refs.get("studio_check"),
+                    "error_count": len(errors),
+                    "warning_count": len(warnings),
+                }
+            )
+    resolved_limit = max(0, int(limit))
+    latest_ref = _relative(default_marketplace_status_studio_refresh_latest_path(root), root)
+    return {
+        "schema_version": SCHEMA_VERSION,
+        "generated_at": _now(),
+        "count": min(len(reports), resolved_limit),
+        "total": len(reports),
+        "latest_ref": latest_ref if default_marketplace_status_studio_refresh_latest_path(root).exists() else None,
+        "reports": reports[:resolved_limit],
+    }
+
+
 def check_pack_marketplace_status_studio_refresh(project_root: Path, refresh_ref: str) -> PackMarketplaceStatusStudioRefreshCheck:
     """저장된 Studio marketplace status refresh report의 최소 무결성을 검사한다."""
     root = Path(project_root).resolve()
@@ -1999,6 +2044,34 @@ def render_pack_marketplace_status_studio_refresh_check(check: PackMarketplaceSt
     if check.warnings:
         lines.extend(["", "Warnings:"])
         lines.extend([f"  - {item}" for item in check.warnings])
+    return "\n".join(lines)
+
+
+def render_pack_marketplace_status_studio_refresh_list(payload: dict[str, Any]) -> str:
+    """Studio marketplace status refresh report 목록을 사람이 읽기 좋게 렌더링한다."""
+    reports = payload.get("reports") if isinstance(payload.get("reports"), list) else []
+    lines = [
+        "Pack Marketplace Status Studio Refresh Reports",
+        "==================================================",
+        "",
+        f"Count: {payload.get('count', len(reports))}",
+        f"Total: {payload.get('total', len(reports))}",
+        f"Latest: {payload.get('latest_ref') or 'none'}",
+    ]
+    if not reports:
+        lines.extend(["", "No Studio refresh reports found."])
+        return "\n".join(lines)
+    lines.extend(["", "Reports:"])
+    for item in reports:
+        if not isinstance(item, dict):
+            continue
+        lines.append(
+            f"  - {item.get('saved_ref') or item.get('path')}: "
+            f"ok={str(bool(item.get('studio_refresh_ok'))).lower()} / "
+            f"count={item.get('count', 0)} / "
+            f"status_filter={item.get('status_filter') or 'none'} / "
+            f"studio_handoff={item.get('studio_handoff_ref') or 'unknown'}"
+        )
     return "\n".join(lines)
 
 

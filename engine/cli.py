@@ -1928,6 +1928,13 @@ def main() -> None:
     )
     pack_marketplace_status_studio_refresh_check_show_parser.add_argument("check_ref", help="Studio refresh check id/path/latest")
     pack_marketplace_status_studio_refresh_check_show_parser.add_argument("--json", action="store_true", dest="json_output", help="JSON 출력")
+    pack_marketplace_status_studio_refresh_list_parser = pack_subparsers.add_parser(
+        "marketplace-status-studio-refresh-list",
+        help="저장된 Studio marketplace status refresh report 목록 보기",
+        parents=[common_parser],
+    )
+    pack_marketplace_status_studio_refresh_list_parser.add_argument("--limit", type=int, default=20, help="최대 표시 개수")
+    pack_marketplace_status_studio_refresh_list_parser.add_argument("--json", action="store_true", dest="json_output", help="JSON 출력")
     pack_marketplace_review_parser = pack_subparsers.add_parser(
         "marketplace-review",
         help="marketplace listing draft에 대한 로컬 심사 결정 기록",
@@ -10189,6 +10196,7 @@ def _handle_pack(args: argparse.Namespace) -> None:
         load_pack_marketplace_status_studio_handoff,
         load_pack_marketplace_status_studio_refresh,
         load_pack_marketplace_status_studio_refresh_check,
+        list_pack_marketplace_status_studio_refresh_reports,
         pack_marketplace_status_dashboard_payload,
         refresh_pack_marketplace_status_studio_handoff,
         render_pack_marketplace_review,
@@ -10204,6 +10212,7 @@ def _handle_pack(args: argparse.Namespace) -> None:
         render_pack_marketplace_status_studio_handoff,
         render_pack_marketplace_status_studio_refresh,
         render_pack_marketplace_status_studio_refresh_check,
+        render_pack_marketplace_status_studio_refresh_list,
         resolve_pack_marketplace_listing_path,
         resolve_pack_marketplace_review_path,
         save_pack_marketplace_status_dashboard,
@@ -11625,6 +11634,14 @@ def _handle_pack(args: argparse.Namespace) -> None:
             print(json.dumps(payload, indent=2, ensure_ascii=False))
             return
         print(render_pack_marketplace_status_studio_refresh_check(check))
+        return
+
+    if command == "marketplace-status-studio-refresh-list":
+        payload = list_pack_marketplace_status_studio_refresh_reports(root, limit=int(getattr(args, "limit", 20) or 20))
+        if getattr(args, "json_output", False):
+            print(json.dumps(payload, indent=2, ensure_ascii=False))
+            return
+        print(render_pack_marketplace_status_studio_refresh_list(payload))
         return
 
     if command == "marketplace-review":
