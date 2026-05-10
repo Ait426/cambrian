@@ -2904,6 +2904,27 @@ def main() -> None:
         help="apply 이유",
     )
 
+    do_parser.add_argument(
+        "--safe-autonomy",
+        action="store_true",
+        dest="safe_autonomy",
+        help="강한 auth-bug win lane 안에서만 안전 자동 진행을 명시적으로 시도",
+    )
+
+    autonomy_parser = subparsers.add_parser(
+        "autonomy",
+        help="safe autonomy run artifact 조회",
+        parents=[common_parser],
+    )
+    autonomy_subparsers = autonomy_parser.add_subparsers(dest="autonomy_command", help="autonomy 하위 명령")
+    autonomy_show_parser = autonomy_subparsers.add_parser(
+        "show",
+        help="safe autonomy run 상세 보기",
+        parents=[common_parser],
+    )
+    autonomy_show_parser.add_argument("run_ref", help="autonomy run id 또는 path")
+    autonomy_show_parser.add_argument("--json", action="store_true", dest="json_output", help="JSON 출력")
+
     clarify_parser = subparsers.add_parser(
         "clarify",
         help="needs_context 요청에 필요한 선택을 채운다",
@@ -4031,6 +4052,8 @@ def main() -> None:
     )
 
     argv = sys.argv[1:]
+    if argv and argv[0] == "continue":
+        argv = ["do", "__continue__", "--continue", *argv[1:]]
     if argv and argv[0] == "do" and "--continue" in argv[1:]:
         options_with_values = {
             "--session",
@@ -4112,6 +4135,8 @@ def main() -> None:
             _handle_workforce(args)
         elif args.command == "lane":
             _handle_lane(args)
+        elif args.command == "autonomy":
+            _handle_autonomy(args)
         elif args.command == "agent":
             _handle_agent(args)
         elif args.command == "job":
@@ -4986,6 +5011,34 @@ def _handle_evolve(args: argparse.Namespace) -> None:
     print(f"  Parent fitness: {record.parent_fitness:.4f}")
     print(f"  Child fitness:  {record.child_fitness:.4f}")
     print(f"  Record ID: {record.id}")
+
+
+def _handle_autonomy(args: argparse.Namespace) -> None:
+    """cambrian autonomy 명령을 처리한다."""
+    from engine.project_safe_autonomy import (
+        SafeAutonomyStore,
+        render_safe_autonomy_run,
+        resolve_safe_autonomy_path,
+    )
+
+    root = Path.cwd().resolve()
+    command = getattr(args, "autonomy_command", None)
+    if command != "show":
+        print("autonomy 하위 명령이 필요합니다. 예: cambrian autonomy show autonomy-...", file=sys.stderr)
+        sys.exit(1)
+    try:
+        run_path = resolve_safe_autonomy_path(root, str(getattr(args, "run_ref")))
+        run = SafeAutonomyStore().load(run_path)
+    except FileNotFoundError as exc:
+        print(f"Safe autonomy run not found: {exc}", file=sys.stderr)
+        sys.exit(1)
+    saved_ref = str(run_path.relative_to(root)).replace("\\", "/") if run_path.is_relative_to(root) else str(run_path)
+    payload = run.to_dict()
+    payload["saved_path"] = saved_ref
+    if getattr(args, "json_output", False):
+        print(json.dumps(payload, indent=2, ensure_ascii=False))
+        return
+    print(render_safe_autonomy_run(run, saved_ref))
 
 
 def _handle_authority(args: argparse.Namespace) -> None:
@@ -12207,6 +12260,60 @@ def _handle_do_v2(args: argparse.Namespace) -> None:
         "execute": bool(getattr(args, "execute", False)),
         "no_scan": bool(getattr(args, "no_scan", False)),
     }
+
+    if getattr(args, "safe_autonomy", False):
+        from engine.project_safe_autonomy import (
+            SafeAutonomyCoordinator,
+            default_safe_autonomy_path,
+            render_safe_autonomy_run,
+        )
+
+        root = Path.cwd()
+        coordinator = SafeAutonomyCoordinator()
+        if getattr(args, "continue_session", False):
+            session_ref = getattr(args, "session", None)
+            if not session_ref:
+                print("Error: --safe-autonomy continue에는 --session 이 필요합니다.", file=sys.stderr)
+                sys.exit(1)
+            run = coordinator.run_continue(root, str(session_ref))
+        else:
+            request = getattr(args, "request", None)
+            if not request:
+                print("Error: do --safe-autonomy 요청 문장이 필요합니다.", file=sys.stderr)
+                sys.exit(1)
+            run = coordinator.run_request(
+                root,
+                str(request),
+                session_ref=getattr(args, "session", None),
+                source_mode="direct_do",
+            )
+        saved_path = default_safe_autonomy_path(root, run)
+        saved_ref = str(saved_path.relative_to(root)).replace("\\", "/") if saved_path.is_relative_to(root) else str(saved_path)
+        payload = run.to_dict()
+        payload["saved_path"] = saved_ref
+        try:
+            from engine.project_pack_usage import safe_record_pack_usage_event
+
+            safe_record_pack_usage_event(
+                root,
+                event_kind="used",
+                surface_kind="safe_autonomy",
+                request=run.request,
+                request_class=run.request_class,
+                linked_session_id=run.session_id,
+                linked_session_ref=run.session_ref,
+                linked_request_ref=run.linked_request_ref,
+                linked_bridge_reply_ref=run.linked_bridge_reply_ref,
+                linked_benchmark_replay_ref=saved_ref,
+                summary="active pack used in safe autonomy",
+            )
+        except Exception as exc:
+            logger.warning("pack usage safe autonomy event failed: %s", exc)
+        if getattr(args, "json_output", False):
+            print(json.dumps(payload, indent=2, ensure_ascii=False))
+            return
+        print(render_safe_autonomy_run(run, saved_ref))
+        return
 
     if getattr(args, "continue_session", False):
         session = ProjectDoContinuationRunner().run(
