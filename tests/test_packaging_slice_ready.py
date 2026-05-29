@@ -27,8 +27,9 @@ def test_packaging_slice_ready_records_validation_results() -> None:
     for phrase in [
         "python scripts/smoke_installed_wheel.py",
         "Result: PASS",
-        "60 passed in 73.78s",
+        "64 passed in 87.59s",
         ".launch_runs/installed_wheel_latest",
+        "wheel-build-dist",
         "GO for review/staging as Slice 1",
     ]:
         assert phrase in text

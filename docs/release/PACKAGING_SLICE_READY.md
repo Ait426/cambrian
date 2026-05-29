@@ -59,18 +59,19 @@ Smoke summary path:
 ### Packaging Test Gate
 
 ```bash
-python -m pytest -q tests/test_installed_wheel_pack_rc.py tests/test_alpha_packaging.py tests/test_pack_catalog.py tests/test_pack_install.py tests/test_pack_readiness.py tests/test_launch_golden_path.py tests/test_launch_surface.py
+python -m pytest -q tests/test_installed_wheel_pack_rc.py tests/test_alpha_packaging.py tests/test_pack_catalog.py tests/test_pack_install.py tests/test_pack_readiness.py tests/test_launch_golden_path.py tests/test_launch_surface.py tests/test_packaging_slice_ready.py
 ```
 
 Result:
 
 ```text
-60 passed in 73.78s
+64 passed in 87.59s
 ```
 
 ## Review Notes
 
 - Wheel install sees bundled pack catalog data.
+- Installed-wheel smoke writes its temporary wheel build output under `.launch_runs/installed_wheel_latest/wheel-build-dist` and does not delete release `dist/` artifacts.
 - Extracted wheel pack list/show works without source tree `packs/`.
 - Demo project includes `fixtures/ai_reply_patch_candidate.yaml`.
 - Auth Bug Core golden path remains the packaging smoke lane.

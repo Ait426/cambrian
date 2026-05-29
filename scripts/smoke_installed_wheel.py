@@ -37,6 +37,7 @@ def _run(
         capture_output=True,
         text=True,
         encoding="utf-8",
+        errors="replace",
         timeout=timeout,
         check=False,
     )
@@ -182,7 +183,7 @@ def run(out_dir: Path | None = None, keep_workdir: bool = False) -> dict[str, An
 
     tmp = Path(tempfile.mkdtemp(prefix="cambrian-wheel-smoke-")).resolve()
     try:
-        dist_dir = root / "dist"
+        dist_dir = output_dir / "wheel-build-dist"
         try:
             wheel, build_commands = _build_wheel(root, dist_dir)
             commands.extend(build_commands)

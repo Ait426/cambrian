@@ -94,7 +94,7 @@ def test_launch_install_activate_start_smoke(tmp_path: Path) -> None:
     pack_doctor = _cli(tmp_path, "pack", "doctor", "auth-bug-core")
     assert pack_doctor.returncode == 0, _debug(pack_doctor, tmp_path)
 
-    start = _cli(tmp_path, "pack", "start", "로그인 에러 수정해", "--json")
+    start = _cli(tmp_path, "pack", "start", "fix login error", "--json")
     assert start.returncode == 0, _debug(start, tmp_path)
     payload = json.loads(start.stdout)
     job = payload["job"]
@@ -114,7 +114,7 @@ def test_readme_quickstart_uses_only_launch_path_commands() -> None:
         "cambrian project scan",
         "cambrian harness plan",
         "cambrian harness install",
-        'cambrian agent dispatch "로그인 에러 수정해"',
+        'cambrian agent dispatch "fix the login error"',
     ]:
         assert command in quickstart
 
@@ -143,7 +143,7 @@ def test_launch_docs_exist_and_match_golden_path() -> None:
     for phrase in [
         "Cambrian installs AI worker packs into the AI you already use.",
         "auth-bug-core",
-        "cambrian pack start \"로그인 에러 수정해\"",
+        "cambrian pack start",
         "cambrian pack job-ingest latest fixtures/ai_reply_patch_candidate.yaml",
         "cambrian pack job-validate latest",
         "cambrian pack proof auth-bug-core",

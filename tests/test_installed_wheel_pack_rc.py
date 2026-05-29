@@ -155,3 +155,11 @@ def test_release_docs_describe_fresh_install_gate() -> None:
     assert "pack catalog not found" in install_guide
     assert "Result: PASS" in checklist
     assert "PASS" in verification
+
+
+def test_installed_wheel_smoke_keeps_release_dist_artifacts() -> None:
+    source = (ROOT / "scripts" / "smoke_installed_wheel.py").read_text(encoding="utf-8")
+
+    assert 'dist_dir = output_dir / "wheel-build-dist"' in source
+    assert 'dist_dir = root / "dist"' not in source
+    assert 'errors="replace"' in source

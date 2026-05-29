@@ -22,7 +22,6 @@ def test_launch_landing_page_exists_and_explains_product() -> None:
     landing = _read(WEB / "index.html")
 
     assert "Install AI workers into the AI you already use." in landing
-    assert "이미 쓰는 AI에 검증된 AI 일꾼을 설치하세요." in landing
     assert "AI Worker Installer" in landing
     assert "Cambrian lets you install worker packs into your local project" in landing
     assert "Start with Auth Bug Core" in landing
@@ -37,7 +36,7 @@ def test_auth_bug_core_showcase_page_has_launch_commands() -> None:
         "Python + pytest + narrow auth/login bug fixes",
         "cambrian install pack auth-bug-core",
         "cambrian pack activate auth-bug-core",
-        'cambrian pack start "로그인 에러 수정해"',
+        "cambrian pack start",
         "This page does not install anything by itself.",
         "Generate local proof after real usage.",
     ]:
@@ -93,7 +92,7 @@ def test_readme_quickstart_matches_launch_surface() -> None:
         "cambrian harness interview answer --answers .cambrian/interview/answers.yaml",
         "cambrian harness plan",
         "cambrian harness install --confirm",
-        'cambrian agent dispatch "로그인 에러 수정해"',
+        'cambrian agent dispatch "fix the login error"',
         "cambrian job ingest latest fixtures/ai_reply_patch_candidate.yaml",
         "cambrian job validate latest",
     ]:

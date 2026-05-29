@@ -5,11 +5,33 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "cambrian"
 version = "0.3.0"
+description = "Installable AI company runtime for project-local agents, harnesses, skills, evidence, and evolution."
+readme = "README.md"
 requires-python = ">=3.11"
+license = "MIT"
+authors = [
+    {name = "Cambrian"},
+]
+keywords = ["ai-agents", "automation", "harness", "skills", "local-first"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Environment :: Console",
+    "Intended Audience :: Developers",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Software Development :: Build Tools",
+]
 dependencies = [
     "pyyaml>=6.0",
     "jsonschema>=4.20.0",
 ]
+
+[project.urls]
+Homepage = "https://github.com/Ait426/cambrian"
+Documentation = "https://github.com/Ait426/cambrian#readme"
+Issues = "https://github.com/Ait426/cambrian/issues"
 
 [project.optional-dependencies]
 anthropic = ["anthropic>=0.40.0"]
@@ -27,6 +49,7 @@ dev = [
 
 [project.scripts]
 cambrian = "engine.cli:main"
+cambrian-mcp = "engine.project_mcp_server:main"
 
 [tool.setuptools]
 include-package-data = true
