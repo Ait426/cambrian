@@ -45,8 +45,12 @@ python -m pytest -q tests/test_authority_mode.py tests/test_auto_mode_state.py t
 Result:
 
 ```text
-83 passed in 167.47s
+93 passed in 270.48s
 ```
+
+The same focused gate first hit the local 120s interactive timeout. The
+extended run passed, so this is classified as `SPLIT_RUN_REQUIRED` in the
+release gate, not as a product failure.
 
 ## Review Notes
 

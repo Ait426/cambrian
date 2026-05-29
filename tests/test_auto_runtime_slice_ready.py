@@ -28,7 +28,8 @@ def test_auto_runtime_slice_ready_records_validation_results() -> None:
         "tests/test_authority_mode.py",
         "tests/test_auto_release_gate.py",
         "tests/test_auto_loop_dogfood.py",
-        "83 passed in 167.47s",
+        "93 passed in 270.48s",
+        "SPLIT_RUN_REQUIRED",
         "GO for review/staging as Slice 2",
     ]:
         assert phrase in text

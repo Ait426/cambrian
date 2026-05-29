@@ -36,13 +36,18 @@ def test_auto_next_archives_done_loop_and_starts_new_goal(tmp_path: Path) -> Non
     assert payload["source_code_modified"] is False
     assert payload["provider_api_called"] is False
     assert payload["iteration_ref"].endswith("iteration.yaml")
+    assert payload["mission_ref"] == ".cambrian/auto/mission.yaml"
     assert payload["archived_refs"]
+    assert any(ref.endswith("mission.yaml") for ref in payload["archived_refs"])
 
     state = yaml.safe_load((tmp_path / ".cambrian" / "auto" / "state.yaml").read_text(encoding="utf-8"))
     assert state["goal"] == "build the next bounded product step"
     assert state["previous_goal"]
     assert state["state"] == "PRODUCT_CHARTER"
     assert state["previous_iteration_archive"]
+    mission = yaml.safe_load((tmp_path / ".cambrian" / "auto" / "mission.yaml").read_text(encoding="utf-8"))
+    assert mission["final_goal"] == "build the next bounded product step"
+    assert mission["completion_score"] is None
 
     iteration = yaml.safe_load((tmp_path / payload["iteration_ref"]).read_text(encoding="utf-8"))
     assert iteration["previous_handoff_status"] == "auto_done"

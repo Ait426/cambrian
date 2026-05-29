@@ -14,6 +14,7 @@ from engine.project_mode import (
     ProjectInitializer,
     ProjectRunPreparer,
     ProjectStatusReader,
+    render_status_summary,
 )
 
 
@@ -81,6 +82,125 @@ def test_init_does_not_overwrite_without_force(tmp_path: Path) -> None:
 
     assert result.status == "blocked"
     assert project_path.read_text(encoding="utf-8") == "marker: keep\n"
+
+
+def test_init_repairs_profile_only_harness_install_state(tmp_path: Path) -> None:
+    _prepare_python_project(tmp_path)
+    profile_path = tmp_path / ".cambrian" / "profile.yaml"
+    profile_path.parent.mkdir(parents=True, exist_ok=True)
+    profile_path.write_text("custom_harness_profile: keep\n", encoding="utf-8")
+
+    result = ProjectInitializer().init(tmp_path, force=False)
+
+    assert result.status == "initialized"
+    assert (tmp_path / ".cambrian" / "project.yaml").exists()
+    assert (tmp_path / ".cambrian" / "skills.yaml").exists()
+    assert profile_path.read_text(encoding="utf-8") == "custom_harness_profile: keep\n"
+    assert any("profile.yaml" in warning for warning in result.warnings)
+
+
+def test_status_reports_partial_custom_harness_before_project_baseline_repair(tmp_path: Path) -> None:
+    harness_path = tmp_path / ".cambrian" / "harness.yaml"
+    _write_yaml(
+        harness_path,
+        {
+            "schema_version": "1.0.0",
+            "id": "custom-avf-pipeline",
+            "type": "custom",
+            "status": "active",
+            "quality_gate": {"status": "ready", "score": 92},
+        },
+    )
+
+    status = ProjectStatusReader().read(tmp_path)
+
+    assert status.initialized is False
+    assert status.harness["fitted"] is True
+    assert status.harness["type"] == "custom_harness"
+    assert status.status_truth["status"] == "partial"
+    assert "project_mode_baseline_missing" in status.status_truth["evidence_gaps"]
+    assert "repair the missing project mode baseline" in status.next_actions[0]
+    assert "Custom harness detected" in render_status_summary(status)
+
+
+def test_status_truth_reports_custom_harness_agents_skills_authority_and_validation(tmp_path: Path) -> None:
+    _prepare_python_project(tmp_path)
+    ProjectInitializer().init(tmp_path)
+    _write_yaml(
+        tmp_path / ".cambrian" / "harness.yaml",
+        {
+            "schema_version": "1.0.0",
+            "id": "custom-avf-pipeline",
+            "type": "custom",
+            "status": "active",
+            "quality_gate": {"status": "ready", "score": 94},
+            "policy": {
+                "change_mode": "proposal_only",
+                "auto_apply": False,
+                "forbidden": ["git push"],
+                "allowed": ["avf.py"],
+            },
+            "codebase_evidence": {
+                "status": "grounded",
+                "existing_important_paths": ["avf.py", "tests/test_avf.py"],
+                "missing_important_paths": [],
+                "domain_confidence": {
+                    "confirmed": ["stage_pipeline"],
+                    "suspected": ["schema_validation"],
+                    "weak": [],
+                },
+            },
+            "domain_spec": {
+                "execution_policy": {
+                    "change_policy": "proposal_only",
+                    "provider_api_call": False,
+                    "external_transfer": "explicit_approval_required",
+                    "auto_apply": False,
+                }
+            },
+            "evaluator_contract": {"validation_commands": ["python -m pytest -q tests/test_avf.py"]},
+        },
+    )
+    _write_yaml(
+        tmp_path / ".cambrian" / "agents.yaml",
+        {"schema_version": "1.0.0", "agents": [{"id": "ddmq-debugger"}, {"id": "stage-schema-validator"}]},
+    )
+    _write_yaml(
+        tmp_path / ".cambrian" / "validation.yaml",
+        {
+            "schema_version": "1.0.0",
+            "validation": {"test_commands": ["python -m pytest -q tests/test_avf.py"], "policy": "proposal_only"},
+        },
+    )
+    _write_yaml(
+        tmp_path / ".cambrian" / "skills" / "trace-stage-pipeline.yaml",
+        {"id": "trace-stage-pipeline", "status": "active", "assigned_agents": ["ddmq-debugger"]},
+    )
+    _write_json(
+        tmp_path / ".cambrian" / "reports" / "latest_verdict.json",
+        {
+            "job_id": "job-001",
+            "validation_status": "passed",
+            "validation_contract_status": "commands_executed",
+            "trust_gate_status": "verified",
+            "verdict": "pass",
+            "unchecked_items": [],
+        },
+    )
+
+    status = ProjectStatusReader().read(tmp_path)
+    truth = status.status_truth
+
+    assert truth["status"] == "verified"
+    assert truth["active_harness"]["harness_id"] == "custom-avf-pipeline"
+    assert truth["active_agents"]["ids"] == ["ddmq-debugger", "stage-schema-validator"]
+    assert truth["active_skills"]["ids"] == ["trace-stage-pipeline"]
+    assert truth["authority"]["change_mode"] == "proposal_only"
+    assert truth["authority"]["source_apply_requires_confirm"] is True
+    assert truth["validation"]["trust_gate_status"] == "verified"
+    assert truth["evidence_gaps"] == []
+    assert truth["release_boundaries"]["status_truth_claim_allowed"] is True
+    assert truth["release_boundaries"]["external_release_claim_allowed"] is False
 
 
 def test_init_force_overwrites(tmp_path: Path) -> None:

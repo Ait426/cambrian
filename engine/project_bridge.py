@@ -186,10 +186,12 @@ class ProjectBridgeBuilder:
                 active_pack_context = active_pack_bridge_context(root)
             except Exception as exc:
                 logger.warning("active pack bridge context failed: %s", exc)
+        _augment_harness_summary_from_active_context(harness_summary, active_pack_context)
+        _augment_agent_summary_from_active_context(agent_summary, active_pack_context)
         request_text = str(request or "").strip()
         intent = _infer_request_intent(request_text)
         packet_id = f"packet_{_timestamp()}_{_short_id()}"
-        response_contract = _response_contract()
+        response_contract = _response_contract(active_pack_context)
         next_actions = [
             "Paste this packet into any AI.",
             "Ask the AI to return YAML or JSON matching response_contract.",
@@ -353,6 +355,31 @@ def render_bridge_packet(packet: BridgePacket) -> str:
             lines.append(f"  agents: {', '.join(selected_agents)}")
         if selected_skills:
             lines.append(f"  skills: {', '.join(selected_skills)}")
+        company_fit = contract.get("company_fit_report", {}) if isinstance(contract.get("company_fit_report"), dict) else {}
+        if company_fit:
+            lines.append("  company fit:")
+            lines.append(f"    size: {company_fit.get('company_size') or 'unknown'}")
+            lines.append(f"    target lift: {company_fit.get('target_lift_pct') or 30}%")
+            gaps = _as_list(company_fit.get("coverage_gaps"))
+            lines.append(f"    gaps: {', '.join(gaps[:3]) if gaps else 'none'}")
+        company_blueprint = contract.get("company_blueprint", {}) if isinstance(contract.get("company_blueprint"), dict) else {}
+        if company_blueprint:
+            lines.append(f"  company os: {company_blueprint.get('compiler_version') or 'company_os_compiler'}")
+        project_discussion_layer = (
+            contract.get("project_discussion_layer", {}) if isinstance(contract.get("project_discussion_layer"), dict) else {}
+        )
+        if project_discussion_layer:
+            roles = project_discussion_layer.get("roles", {}) if isinstance(project_discussion_layer.get("roles"), dict) else {}
+            lines.append(
+                f"  project discussion: {project_discussion_layer.get('status') or 'unknown'} / roles={len(roles)}"
+            )
+        context_intent = contract.get("context_intent_snapshot", {}) if isinstance(contract.get("context_intent_snapshot"), dict) else {}
+        if context_intent:
+            detected = context_intent.get("detected_intent", {}) if isinstance(context_intent.get("detected_intent"), dict) else {}
+            quality = context_intent.get("quality_gate", {}) if isinstance(context_intent.get("quality_gate"), dict) else {}
+            lines.append(
+                f"  context intent: {detected.get('primary') or 'unknown'} / {quality.get('current_context_level') or 'unknown'}"
+            )
         must_not_do = _as_list(contract.get("must_not_do"))
         if must_not_do:
             lines.append("  must not:")
@@ -432,6 +459,58 @@ def render_bridge_packet_markdown(packet: BridgePacket) -> str:
             lines.extend(["- selected_agents:"] + [f"  - {item}" for item in selected_agents])
         if selected_skills:
             lines.extend(["- selected_skills:"] + [f"  - {item}" for item in selected_skills])
+        company_fit = contract.get("company_fit_report", {}) if isinstance(contract.get("company_fit_report"), dict) else {}
+        if company_fit:
+            gaps = _as_list(company_fit.get("coverage_gaps"))
+            lines.extend(
+                [
+                    "- company_fit_report:",
+                    f"  - company_size: {company_fit.get('company_size') or 'unknown'}",
+                    f"  - target_lift_pct: {company_fit.get('target_lift_pct') or 30}",
+                    f"  - coverage_gaps: {', '.join(gaps) if gaps else 'none'}",
+                ]
+            )
+        company_blueprint = contract.get("company_blueprint", {}) if isinstance(contract.get("company_blueprint"), dict) else {}
+        if company_blueprint:
+            lines.extend(
+                [
+                    "- company_os:",
+                    f"  - compiler_version: {company_blueprint.get('compiler_version') or 'company_os_compiler'}",
+                    f"  - blueprint_id: {company_blueprint.get('blueprint_id') or 'none'}",
+                ]
+            )
+        project_discussion_layer = (
+            contract.get("project_discussion_layer", {}) if isinstance(contract.get("project_discussion_layer"), dict) else {}
+        )
+        if project_discussion_layer:
+            roles = project_discussion_layer.get("roles", {}) if isinstance(project_discussion_layer.get("roles"), dict) else {}
+            docs = (
+                project_discussion_layer.get("document_contract", {})
+                if isinstance(project_discussion_layer.get("document_contract"), dict)
+                else {}
+            )
+            lines.extend(
+                [
+                    "- project_discussion_layer:",
+                    f"  - status: {project_discussion_layer.get('status') or 'unknown'}",
+                    f"  - roles: {', '.join(sorted(str(role_id) for role_id in roles)) or 'none'}",
+                    f"  - missing_core_docs: {len(_as_list(docs.get('missing_core_docs')))}",
+                ]
+            )
+        context_intent = contract.get("context_intent_snapshot", {}) if isinstance(contract.get("context_intent_snapshot"), dict) else {}
+        if context_intent:
+            detected = context_intent.get("detected_intent", {}) if isinstance(context_intent.get("detected_intent"), dict) else {}
+            quality = context_intent.get("quality_gate", {}) if isinstance(context_intent.get("quality_gate"), dict) else {}
+            relevance = context_intent.get("relevance_filter", {}) if isinstance(context_intent.get("relevance_filter"), dict) else {}
+            lines.extend(
+                [
+                    "- context_intent_snapshot:",
+                    f"  - intent: {detected.get('primary') or 'unknown'}",
+                    f"  - confidence: {detected.get('confidence') or 'low'}",
+                    f"  - context_level: {quality.get('current_context_level') or 'unknown'}",
+                    f"  - selected_context_count: {relevance.get('selected_context_count') or 0}",
+                ]
+            )
         if validation_criteria:
             lines.extend(["- validation_criteria:"] + [f"  - {item}" for item in validation_criteria])
         if approval_required_actions:
@@ -638,6 +717,53 @@ def _collect_harness_summary(root: Path, warnings: list[str]) -> dict[str, Any]:
     return summary
 
 
+def _augment_harness_summary_from_active_context(summary: dict[str, Any], active_pack_context: dict[str, Any]) -> None:
+    """설치형 pack/custom harness 컨텍스트를 사람이 보는 bridge 요약에 반영한다."""
+    if not isinstance(active_pack_context, dict) or not active_pack_context:
+        return
+    custom_harness = bool(active_pack_context.get("custom_harness"))
+    harness_id = active_pack_context.get("harness_id") or active_pack_context.get("pack_id")
+    if harness_id and (custom_harness or not summary.get("harness_id")):
+        summary["harness_id"] = str(harness_id)
+    project_type = active_pack_context.get("project_type") or active_pack_context.get("pack_kind")
+    if not project_type and active_pack_context.get("custom_harness"):
+        project_type = "custom_harness"
+    if project_type and (custom_harness or not summary.get("project_type")):
+        summary["project_type"] = str(project_type)
+    stack = _as_list(active_pack_context.get("stack"))
+    if not stack:
+        stack = _stack_from_lane(active_pack_context.get("lane_label")) or _stack_from_lane(active_pack_context.get("lane_id"))
+    if stack and (custom_harness or not _as_list(summary.get("stack"))):
+        summary["stack"] = stack
+    validation_commands = _as_list(active_pack_context.get("validation_commands"))
+    if validation_commands and (custom_harness or not summary.get("test_command")):
+        summary["test_command"] = validation_commands[0]
+    selected_agents = _as_list(active_pack_context.get("selected_agents"))
+    if selected_agents and (custom_harness or not _as_list(summary.get("active_agents"))):
+        summary["active_agents"] = selected_agents
+
+
+def _augment_agent_summary_from_active_context(summary: dict[str, Any], active_pack_context: dict[str, Any]) -> None:
+    """Keep the visible packet agent list aligned with the active custom harness."""
+    if not isinstance(active_pack_context, dict) or not active_pack_context:
+        return
+    selected_agents = _as_list(active_pack_context.get("selected_agents"))
+    if not selected_agents:
+        return
+    if active_pack_context.get("custom_harness") or not _as_list(summary.get("active_agents")):
+        summary["active_agents"] = selected_agents
+        summary["preferred_lead"] = selected_agents[0]
+        summary["preferred_support"] = selected_agents[1:3]
+
+
+def _stack_from_lane(value: Any) -> list[str]:
+    text = str(value or "").strip()
+    if not text:
+        return []
+    parts = [part.strip() for part in re.split(r"[^A-Za-z0-9_.-]+", text) if part.strip()]
+    return _dedupe([part for part in parts if part.lower() not in {"none", "unknown", "custom", "harness"}])
+
+
 def _collect_agent_summary(root: Path, warnings: list[str]) -> dict[str, Any]:
     summary: dict[str, Any] = {"active_agents": []}
     try:
@@ -732,12 +858,55 @@ def _collect_memory_summary(root: Path, warnings: list[str]) -> dict[str, Any]:
     return summary
 
 
-def _response_contract() -> dict[str, Any]:
+def _response_contract(active_pack_context: dict[str, Any] | None = None) -> dict[str, Any]:
+    active = active_pack_context if isinstance(active_pack_context, dict) else {}
+    llm_required_agents = _as_list(active.get("llm_required_agents"))
+    evidence_required_keys = [
+        "codebase evidence path citation",
+        "risk boundary check",
+        "validation command selection",
+        "patch application state",
+        "verdict rationale",
+        "context intent resolution",
+        "project discussion role check",
+    ]
+    evidence_guidance = [
+        "cite the codebase evidence paths used for the conclusion",
+        "separate confirmed/suspected domains from weak keyword evidence",
+        "state whether risk_boundaries were checked",
+        "explain which validation command should be run and why",
+        "state whether any patch was applied and whether source code was modified",
+        "state the verdict and why the evidence supports it",
+        "state how current user intent was resolved from packet context",
+        "cite project_discussion_layer context docs for product or direction claims",
+    ]
+    if llm_required_agents or active.get("llm_invocation_required"):
+        evidence_required_keys.append("llm invocation evidence")
+        evidence_guidance.append(
+            "record llm_invocation_evidence for thinking agents, including mode/provider and selected agent ids"
+        )
     return {
         "format": "YAML or JSON",
         "allowed_response_kinds": sorted(ALLOWED_RESPONSE_KINDS),
         "required_keys": ["response_kind", "summary"],
         "patch_candidate_required_keys": ["target_path", "old_text", "new_text", "reason"],
+        "evidence_required_keys": evidence_required_keys,
+        "evidence_guidance": evidence_guidance,
+        "llm_required_agents": llm_required_agents,
+        "company_guidance": [
+            "state which company role owns context, execution proposal, and validation",
+            "use project_discussion_layer for product, strategy, architecture, and next-step discussions",
+            "read company_fit_report before answering and address any coverage_gaps",
+            "read context_intent_snapshot before using memory or prior job records",
+            "use company_blueprint as the operating contract for the installed AI company",
+            "do not add duplicate agents when an existing role already covers the responsibility",
+            "keep context_manager, execution_lead, and verification_owner responsibilities visible",
+        ],
+        "relearning_guidance": [
+            "separate learning candidates from approved memory",
+            "recommend revise or rebuild when evidence shows the company structure was wrong",
+            "never promote new defaults without user review",
+        ],
         "safety": [
             "do not mutate project files",
             "do not assume facts outside the packet",
@@ -763,15 +932,106 @@ def _execution_contract(
     approval_required_actions = _as_list(active_pack_context.get("approval_required_actions"))
     change_policy = str(active_pack_context.get("change_policy") or "proposal_only")
     harness_id = active_pack_context.get("harness_id") or active_pack_context.get("pack_id") or harness_summary.get("harness_id")
+    codebase_evidence = dict(active_pack_context.get("codebase_evidence", {}) if isinstance(active_pack_context.get("codebase_evidence"), dict) else {})
+    evidence_card = dict(active_pack_context.get("evidence_card", {}) if isinstance(active_pack_context.get("evidence_card"), dict) else {})
+    if not evidence_card and isinstance(codebase_evidence.get("evidence_card"), dict):
+        evidence_card = dict(codebase_evidence.get("evidence_card", {}))
+    domain_confidence = dict(active_pack_context.get("domain_confidence", {}) if isinstance(active_pack_context.get("domain_confidence"), dict) else {})
+    if not domain_confidence and isinstance(codebase_evidence.get("domain_confidence"), dict):
+        domain_confidence = dict(codebase_evidence.get("domain_confidence", {}))
+    quality_gate = dict(active_pack_context.get("quality_gate", {}) if isinstance(active_pack_context.get("quality_gate"), dict) else {})
+    agent_evidence_context = dict(active_pack_context.get("agent_evidence_context", {}) if isinstance(active_pack_context.get("agent_evidence_context"), dict) else {})
+    agent_runtime_contracts = dict(active_pack_context.get("agent_runtime_contracts", {}) if isinstance(active_pack_context.get("agent_runtime_contracts"), dict) else {})
+    llm_required_agents = _as_list(active_pack_context.get("llm_required_agents"))
+    llm_invocation_required = bool(active_pack_context.get("llm_invocation_required") or llm_required_agents)
+    skill_evidence_context = dict(active_pack_context.get("skill_evidence_context", {}) if isinstance(active_pack_context.get("skill_evidence_context"), dict) else {})
+    company_structure = dict(active_pack_context.get("company_structure", {}) if isinstance(active_pack_context.get("company_structure"), dict) else {})
+    company_fit_report = dict(
+        company_structure.get("company_fit_report", {}) if isinstance(company_structure.get("company_fit_report"), dict) else {}
+    )
+    company_blueprint = dict(active_pack_context.get("company_blueprint", {}) if isinstance(active_pack_context.get("company_blueprint"), dict) else {})
+    harness_os_contract = dict(
+        active_pack_context.get("harness_os_contract", {}) if isinstance(active_pack_context.get("harness_os_contract"), dict) else {}
+    )
+    relearning_policy = dict(active_pack_context.get("relearning_policy", {}) if isinstance(active_pack_context.get("relearning_policy"), dict) else {})
+    marketplace_boundary = dict(
+        active_pack_context.get("marketplace_boundary", {}) if isinstance(active_pack_context.get("marketplace_boundary"), dict) else {}
+    )
+    project_discussion_layer = dict(
+        active_pack_context.get("project_discussion_layer", {})
+        if isinstance(active_pack_context.get("project_discussion_layer"), dict)
+        else {}
+    )
+    company_roles = dict(active_pack_context.get("company_roles", {}) if isinstance(active_pack_context.get("company_roles"), dict) else {})
+    if not company_roles and isinstance(company_structure.get("active_roles"), dict):
+        company_roles = dict(company_structure.get("active_roles", {}))
+    responsibility_matrix = dict(active_pack_context.get("responsibility_matrix", {}) if isinstance(active_pack_context.get("responsibility_matrix"), dict) else {})
+    if not responsibility_matrix and isinstance(company_structure.get("responsibility_matrix"), dict):
+        responsibility_matrix = dict(company_structure.get("responsibility_matrix", {}))
+    duplicate_guard = dict(active_pack_context.get("duplicate_guard", {}) if isinstance(active_pack_context.get("duplicate_guard"), dict) else {})
+    if not duplicate_guard and isinstance(company_structure.get("duplicate_guard"), dict):
+        duplicate_guard = dict(company_structure.get("duplicate_guard", {}))
+    company_loop_context = dict(
+        active_pack_context.get("company_loop_context", {}) if isinstance(active_pack_context.get("company_loop_context"), dict) else {}
+    )
+    context_intent_snapshot = dict(
+        active_pack_context.get("context_intent_snapshot", {})
+        if isinstance(active_pack_context.get("context_intent_snapshot"), dict)
+        else {}
+    )
+    evidence_gap_report = dict(
+        active_pack_context.get("evidence_gap_report", {}) if isinstance(active_pack_context.get("evidence_gap_report"), dict) else {}
+    )
+    risk_boundaries = dict(active_pack_context.get("risk_boundaries", {}) if isinstance(active_pack_context.get("risk_boundaries"), dict) else {})
+    if not risk_boundaries and isinstance(codebase_evidence.get("risk_boundaries"), dict):
+        risk_boundaries = dict(codebase_evidence.get("risk_boundaries", {}))
+    evaluator_contract = dict(active_pack_context.get("evaluator_contract", {}) if isinstance(active_pack_context.get("evaluator_contract"), dict) else {})
+    evidence_status = str(active_pack_context.get("evidence_status") or codebase_evidence.get("status") or "missing")
+    manual_review_required = bool(active_pack_context.get("manual_review_required")) or evidence_status not in {"", "grounded"}
+    evidence_warnings = _as_list(active_pack_context.get("evidence_warnings"))
+    if manual_review_required and "manual review required" not in evidence_warnings:
+        evidence_warnings.append("manual review required")
     must_do = [
         "요청을 설치된 하네스, 인력, 스킬, 정책 기준으로 분석한다.",
         "근거와 불확실성을 분리해서 설명한다.",
         "패치가 필요하면 자동 적용이 아니라 patch_candidate로 제안한다.",
         "검증 명령과 회귀 위험을 함께 적는다.",
         "response_contract에 맞는 YAML 또는 JSON으로 답한다.",
+        "cite codebase_evidence paths used for the conclusion.",
+        "record the risk boundary check before proposing a patch.",
+        "explain validation command selection before claiming readiness.",
     ]
+    if company_roles:
+        must_do.append("state which AI company role is responsible for context, execution proposal, and verification.")
+    if company_fit_report:
+        must_do.append("read company_fit_report and address coverage_gaps before recommending next action.")
+    if company_blueprint:
+        must_do.append("treat company_blueprint as the operating context, not as a prompt snippet.")
+    if project_discussion_layer:
+        must_do.append("use project_discussion_layer before product, strategy, architecture, roadmap, or next-step claims.")
+        must_do.append("cite project_discussion_layer document_contract and list missing context docs instead of inventing facts.")
+    if relearning_policy:
+        must_do.append("use relearning_policy to separate revise/rebuild candidates from approved memory.")
+    if duplicate_guard:
+        must_do.append("do not introduce duplicate agents when duplicate_guard says the existing workforce covers the role.")
+    if company_loop_context.get("status") == "available":
+        must_do.append("review company_loop_context before answering and carry forward prior unchecked risks.")
+        must_do.append("distinguish promoted_memory from candidate_context_records; do not treat candidates as approved memory.")
+    if context_intent_snapshot:
+        must_do.append("resolve the current user intent with context_intent_snapshot before using company memory.")
+        must_do.append("discard irrelevant recent memory when context_intent_snapshot marks it outside the request intent.")
+    if evidence_gap_report:
+        must_do.append("use evidence_gap_report to produce new evidence-backed findings instead of restating old memory.")
+    if llm_invocation_required:
+        must_do.append("record llm_invocation_evidence because selected AI agents require an LLM call for thinking work.")
     if validation_criteria:
         must_do.append("결과가 계약 validation_criteria를 어떻게 만족하는지 설명한다.")
+    if domain_confidence:
+        must_do.append("use domain_confidence to avoid treating weak domains as the harness core.")
+    if quality_gate:
+        must_do.append("respect quality_gate status before claiming the harness is ready.")
+    if manual_review_required:
+        must_do.append("manual review required: codebase_evidence is weak or incomplete, so do not make confident proof claims.")
     must_not_do = [
         "프로젝트 파일을 직접 수정했다고 주장하지 않는다.",
         "사용자가 제공하지 않은 secret, API key, 개인 정보를 요구하거나 출력하지 않는다.",
@@ -797,6 +1057,33 @@ def _execution_contract(
         "validation_criteria": validation_criteria,
         "forbidden_actions": forbidden_actions,
         "approval_required_actions": approval_required_actions,
+        "codebase_evidence": codebase_evidence,
+        "evidence_card": evidence_card,
+        "domain_confidence": domain_confidence,
+        "quality_gate": quality_gate,
+        "agent_evidence_context": agent_evidence_context,
+        "agent_runtime_contracts": agent_runtime_contracts,
+        "llm_required_agents": llm_required_agents,
+        "llm_invocation_required": llm_invocation_required,
+        "skill_evidence_context": skill_evidence_context,
+        "company_structure": company_structure,
+        "company_fit_report": company_fit_report,
+        "company_blueprint": company_blueprint,
+        "harness_os_contract": harness_os_contract,
+        "relearning_policy": relearning_policy,
+        "marketplace_boundary": marketplace_boundary,
+        "project_discussion_layer": project_discussion_layer,
+        "company_roles": company_roles,
+        "responsibility_matrix": responsibility_matrix,
+        "duplicate_guard": duplicate_guard,
+        "company_loop_context": company_loop_context,
+        "context_intent_snapshot": context_intent_snapshot,
+        "evidence_gap_report": evidence_gap_report,
+        "risk_boundaries": risk_boundaries,
+        "evaluator_contract": evaluator_contract,
+        "evidence_status": evidence_status,
+        "manual_review_required": manual_review_required,
+        "evidence_warnings": _dedupe(evidence_warnings),
         "contract_template_kind": active_pack_context.get("contract_template_kind"),
         "must_do": _dedupe(must_do),
         "must_not_do": _dedupe(must_not_do),
@@ -817,6 +1104,14 @@ def _codex_claude_instruction(contract: dict[str, Any]) -> str:
     criteria = "; ".join(_as_list(contract.get("validation_criteria"))) or "명시된 계약 검증 기준 없음"
     approvals = "; ".join(_as_list(contract.get("approval_required_actions"))) or "승인 필요 행동 없음"
     forbidden = "; ".join(_as_list(contract.get("forbidden_actions"))) or "금지 행동 없음"
+    evidence_paths = ", ".join(_contract_evidence_paths(contract)[:6]) or "명시된 codebase evidence path 없음"
+    evidence_status = str(contract.get("evidence_status") or "missing")
+    llm_required = ", ".join(_as_list(contract.get("llm_required_agents"))) or "none"
+    company_roles = _company_role_summary(contract)
+    company_loop = _company_loop_summary(contract)
+    context_intent = _context_intent_summary(contract)
+    project_discussion = _project_discussion_summary(contract)
+    manual_review = "필요" if contract.get("manual_review_required") else "불필요"
     return "\n".join(
         [
             "너는 Cambrian이 이 프로젝트 안에 설치한 AI 회사의 실행 엔진이다.",
@@ -824,13 +1119,94 @@ def _codex_claude_instruction(contract: dict[str, Any]) -> str:
             f"투입 agent: {agents}",
             f"투입 skill: {skills}",
             f"변경 정책: {contract.get('change_policy') or 'proposal_only'}",
+            f"codebase evidence 상태: {evidence_status}",
+            f"codebase evidence path: {evidence_paths}",
+            f"LLM-required agents: {llm_required}",
+            f"AI company roles: {company_roles}",
+            f"Project discussion layer: {project_discussion}",
+            f"Company ledger: {company_loop}",
+            f"Context intent: {context_intent}",
+            f"manual review required: {manual_review}",
             f"검증 명령 후보: {validation}",
             f"계약 검증 기준: {criteria}",
             f"승인 필요 행동: {approvals}",
             f"금지 행동: {forbidden}",
+            "응답에는 codebase evidence path citation, risk boundary check, validation command selection을 포함하라.",
             "소스 파일을 직접 수정했다고 주장하지 말고, patch_candidate 또는 analysis 형태로 답하라.",
             "반드시 response_contract에 맞는 YAML 또는 JSON으로 답하라.",
         ]
+    )
+
+
+def _contract_evidence_paths(contract: dict[str, Any]) -> list[str]:
+    paths: list[str] = []
+    codebase_evidence = contract.get("codebase_evidence", {}) if isinstance(contract.get("codebase_evidence"), dict) else {}
+    paths.extend(_as_list(codebase_evidence.get("existing_important_paths")))
+    for context_key in ["agent_evidence_context", "skill_evidence_context"]:
+        context = contract.get(context_key, {})
+        if not isinstance(context, dict):
+            continue
+        for item in context.values():
+            if isinstance(item, dict):
+                paths.extend(_as_list(item.get("paths")))
+    return _dedupe(paths)
+
+
+def _company_role_summary(contract: dict[str, Any]) -> str:
+    """실행 지시문에 표시할 회사 역할 요약을 만든다."""
+    roles = contract.get("company_roles", {}) if isinstance(contract.get("company_roles"), dict) else {}
+    if not roles:
+        structure = contract.get("company_structure", {}) if isinstance(contract.get("company_structure"), dict) else {}
+        roles = structure.get("active_roles", {}) if isinstance(structure.get("active_roles"), dict) else {}
+    summaries: list[str] = []
+    for role_id, role in roles.items():
+        if not isinstance(role, dict):
+            continue
+        agent_id = str(role.get("agent_id") or "unassigned")
+        summaries.append(f"{role_id}={agent_id}")
+    return ", ".join(_dedupe(summaries)) or "company roles not assigned"
+
+
+def _project_discussion_summary(contract: dict[str, Any]) -> str:
+    layer = contract.get("project_discussion_layer", {}) if isinstance(contract.get("project_discussion_layer"), dict) else {}
+    if not layer:
+        return "project_discussion_layer=missing"
+    roles = layer.get("roles", {}) if isinstance(layer.get("roles"), dict) else {}
+    docs = layer.get("document_contract", {}) if isinstance(layer.get("document_contract"), dict) else {}
+    existing_docs = _as_list(docs.get("existing_context_docs"))
+    missing_docs = _as_list(docs.get("missing_core_docs"))
+    return (
+        f"status={layer.get('status') or 'unknown'}; roles={len(roles)}; "
+        f"context_docs={len(existing_docs)}; missing_core_docs={len(missing_docs)}"
+    )
+
+
+def _company_loop_summary(contract: dict[str, Any]) -> str:
+    """실행 지시문에 표시할 회사 ledger 요약을 만든다."""
+    loop = contract.get("company_loop_context", {}) if isinstance(contract.get("company_loop_context"), dict) else {}
+    status = str(loop.get("status") or "empty")
+    context_count = len(loop.get("context_records", [])) if isinstance(loop.get("context_records"), list) else 0
+    candidate_count = len(loop.get("candidate_context_records", [])) if isinstance(loop.get("candidate_context_records"), list) else 0
+    verification_count = len(loop.get("verification_entries", [])) if isinstance(loop.get("verification_entries"), list) else 0
+    promoted_memory = loop.get("promoted_memory", {}) if isinstance(loop.get("promoted_memory"), dict) else {}
+    promoted_count = int(promoted_memory.get("total_count") or 0)
+    return (
+        f"{status}; context_records={context_count}; candidate_records={candidate_count}; "
+        f"promoted_memory={promoted_count}; verification_entries={verification_count}"
+    )
+
+
+def _context_intent_summary(contract: dict[str, Any]) -> str:
+    snapshot = contract.get("context_intent_snapshot", {}) if isinstance(contract.get("context_intent_snapshot"), dict) else {}
+    if not snapshot:
+        return "context_intent_snapshot=missing"
+    intent = snapshot.get("detected_intent", {}) if isinstance(snapshot.get("detected_intent"), dict) else {}
+    quality = snapshot.get("quality_gate", {}) if isinstance(snapshot.get("quality_gate"), dict) else {}
+    relevance = snapshot.get("relevance_filter", {}) if isinstance(snapshot.get("relevance_filter"), dict) else {}
+    return (
+        f"intent={intent.get('primary') or 'unknown'}; confidence={intent.get('confidence') or 'low'}; "
+        f"context_level={quality.get('current_context_level') or 'unknown'}; "
+        f"selected_context={relevance.get('selected_context_count') or 0}"
     )
 
 

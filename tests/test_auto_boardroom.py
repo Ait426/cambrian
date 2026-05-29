@@ -27,6 +27,8 @@ def test_auto_boardroom_creates_role_decisions(tmp_path: Path) -> None:
     assert "coo" in payload["decisions"]
     assert "pm" in payload["decisions"]
     assert payload["recommended_next_action"] == "cambrian auto plan --json"
+    assert payload["report_evidence_refs"]
+    assert payload["decision_lineage"]["source_auto_report"] == ".cambrian/auto/report.yaml"
 
     boardroom_files = list((tmp_path / ".cambrian" / "auto" / "boardroom").glob("boardroom-*.yaml"))
     decision_files = list((tmp_path / ".cambrian" / "auto" / "decisions").glob("boardroom-*.yaml"))
@@ -35,6 +37,11 @@ def test_auto_boardroom_creates_role_decisions(tmp_path: Path) -> None:
 
     meeting = yaml.safe_load(boardroom_files[0].read_text(encoding="utf-8"))
     assert meeting["decisions"]["engineering"]["decision"]
+    assert meeting["decisions"]["engineering"]["evidence_refs"]
+    assert meeting["decisions"]["engineering"]["evidence_citations"][0]["kind"] == "auto_report"
+    decision = yaml.safe_load(decision_files[0].read_text(encoding="utf-8"))
+    assert decision["decision_lineage"]["decision_roles"]
+    assert decision["source_auto_report"] == ".cambrian/auto/report.yaml"
 
 
 def _prepare_waiting_task(tmp_path: Path) -> str:
@@ -120,6 +127,62 @@ def test_auto_boardroom_reads_validated_result_handoff(tmp_path: Path) -> None:
     assert "validated auto step" in payload["agenda"]
     assert payload["decisions"]["release_manager"]["decision"].startswith("Check whether")
     assert payload["recommended_next_action"] == "cambrian auto plan --json"
+
+
+def test_auto_plan_records_boardroom_decision_lineage_on_steps(tmp_path: Path) -> None:
+    prepare_auto(tmp_path)
+    boardroom = run_cli(tmp_path, "auto", "boardroom", "--json")
+    assert boardroom.returncode == 0, boardroom.stderr
+
+    plan = run_cli(tmp_path, "auto", "plan", "--json")
+
+    assert plan.returncode == 0, plan.stderr
+    payload = json.loads(plan.stdout)
+    assert payload["decision_lineage"]["boardroom_ref"] == json.loads(boardroom.stdout)["boardroom_ref"]
+    assert payload["decision_lineage"]["decision_ref"] == json.loads(boardroom.stdout)["decision_ref"]
+    assert payload["decision_lineage"]["source_auto_report"] == ".cambrian/auto/report.yaml"
+    assert payload["steps"][0]["boardroom_decision_lineage"]["role"] == "pm"
+    assert payload["steps"][0]["boardroom_role_decision"]["role"] == "pm"
+    assert payload["steps"][0]["decision_evidence_refs"]
+    assert "boardroom decision evidence cited" in payload["steps"][0]["success_criteria"]
+
+    saved = yaml.safe_load((tmp_path / ".cambrian" / "auto" / "plan.yaml").read_text(encoding="utf-8"))
+    assert saved["source_decision"] == json.loads(boardroom.stdout)["decision_ref"]
+    assert saved["steps"][2]["boardroom_decision_lineage"]["role"] == "engineering"
+    assert saved["steps"][4]["boardroom_decision_lineage"]["role"] == "release_manager"
+
+
+def test_stale_boardroom_cannot_create_plan_after_handoff_changes(tmp_path: Path) -> None:
+    task_ref = _prepare_waiting_task(tmp_path)
+    stale_boardroom = run_cli(tmp_path, "auto", "boardroom", "--json")
+    assert stale_boardroom.returncode == 0, stale_boardroom.stderr
+    result_file = tmp_path / "blocked_after_boardroom.yaml"
+    result_file.write_text(
+        yaml.safe_dump(
+            {
+                "status": "failed",
+                "summary": "blocked after stale boardroom",
+                "changed_files": [],
+                "tests": [{"command": "python -m pytest", "status": "failed"}],
+                "blockers": ["new blocker after boardroom"],
+                "next_action": "cambrian auto boardroom --json",
+                "evidence": {"notes": ["new blocker"], "artifacts": []},
+            },
+            allow_unicode=True,
+            sort_keys=False,
+        ),
+        encoding="utf-8",
+    )
+    ingest = run_cli(tmp_path, "auto", "step", "ingest", task_ref, "--result", str(result_file), "--json")
+    assert ingest.returncode == 0, ingest.stderr
+
+    plan = run_cli(tmp_path, "auto", "plan", "--json")
+
+    assert plan.returncode == 1
+    payload = json.loads(plan.stdout)
+    assert payload["ok"] is False
+    assert "boardroom decision is stale" in payload["errors"][0]
+    assert payload["next_command"] == "cambrian auto boardroom --json"
 
 
 def test_auto_boardroom_report_review_doc_is_linked() -> None:

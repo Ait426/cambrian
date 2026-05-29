@@ -47,6 +47,17 @@ def _usable_pm_result() -> dict:
     return payload
 
 
+def _company_ledger_compliance() -> dict:
+    return {
+        "ledger_reviewed": True,
+        "duplicate_guard_checked": True,
+        "promotion_policy_respected": True,
+        "new_acceptance_delta": "Release cleanup adds evidence beyond the prior auto result.",
+        "unchecked_items_addressed": [],
+        "validation_commands_selected": ["python -m pytest tests/test_auto_release_gate.py"],
+    }
+
+
 def _ingest(tmp_path: Path, payload: dict) -> dict:
     task_ref = _create_task(tmp_path)
     result_file = _write_result(tmp_path, payload)
@@ -76,6 +87,26 @@ def test_auto_release_gate_creates_go_package_for_strong_result(tmp_path: Path) 
     gate = yaml.safe_load(gate_path.read_text(encoding="utf-8"))
     assert gate["safety"]["automatic_release"] is False
     assert gate["verdict"] == "GO"
+    assert gate["proof_summary"]["proof_ready"] is True
+    assert gate["proof_summary"]["runtime_evidence"]["present"] is True
+
+
+def test_auto_report_does_not_claim_success_rate_without_runtime_proof(tmp_path: Path) -> None:
+    prepare_auto(tmp_path)
+
+    result = run_cli(tmp_path, "auto", "report", "--json")
+
+    assert result.returncode == 0, result.stderr
+    payload = json.loads(result.stdout)
+    proof = payload["report"]["proof_summary"]
+    claim = payload["report"]["mission_status"]["completion_claim"]
+    assert proof["proof_status"] == "gaps"
+    assert proof["success_rate_allowed"] is False
+    assert proof["success_rate"] is None
+    assert "runtime validation command evidence is missing" in proof["proof_gaps"]
+    assert claim["can_claim_complete"] is False
+    assert claim["success_rate_allowed"] is False
+    assert claim["success_rate"] is None
 
 
 def test_release_gate_go_drives_next_iteration_handoff(tmp_path: Path) -> None:
@@ -163,6 +194,7 @@ def test_newer_release_cleanup_result_makes_old_conditional_gate_stale(tmp_path:
         "artifact_checklist": ["release-manager cleanup evidence exists"],
         "post_release_backlog": ["split long pytest runs in CI"],
     }
+    result["company_ledger_compliance"] = _company_ledger_compliance()
     result_file = _write_result(tmp_path, result)
     ingest = run_cli(tmp_path, "auto", "step", "ingest", task_ref, "--result", str(result_file), "--json")
     assert ingest.returncode == 0, ingest.stderr
@@ -208,6 +240,35 @@ def test_no_go_release_gate_drives_recovery_plan(tmp_path: Path) -> None:
     assert payload["plan_kind"] == "release_gate_recovery"
     assert payload["auto_report_summary"]["handoff_status"] == "release_gate_no_go"
     assert payload["steps"][0]["owner"] == "pm-agent"
+
+
+def test_release_gate_blocks_missing_validation_proof(tmp_path: Path) -> None:
+    prepare_auto(tmp_path)
+
+    result = run_cli(tmp_path, "auto", "release-gate", "--json")
+
+    assert result.returncode == 0, result.stderr
+    payload = json.loads(result.stdout)
+    assert payload["verdict"] == "NO-GO"
+    assert payload["proof_summary"]["proof_ready"] is False
+    assert "validated runtime result is missing" in payload["proof_summary"]["proof_gaps"]
+    assert "runtime validation evidence" in payload["required_before_release"]
+
+
+def test_auto_report_surfaces_runtime_proof_evidence(tmp_path: Path) -> None:
+    _ingest(tmp_path, _strong_pm_result())
+
+    report = run_cli(tmp_path, "auto", "report", "--json")
+
+    assert report.returncode == 0, report.stderr
+    payload = json.loads(report.stdout)
+    proof = payload["report"]["proof_summary"]
+    assert proof["proof_ready"] is True
+    assert proof["proof_status"] == "ready"
+    assert proof["runtime_evidence"]["present"] is True
+    assert "python -m pytest tests/test_auto_release_gate.py" in proof["runtime_evidence"]["validation_commands"]
+    assert proof["proof_evidence"]["present"] is True
+    assert "tests/test_auto_release_gate.py" in proof["proof_evidence"]["evidence_artifacts"]
 
 
 def test_auto_release_gate_doc_is_linked() -> None:

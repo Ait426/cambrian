@@ -297,6 +297,7 @@ class ProjectStatus:
     alpha_readiness: dict = field(default_factory=dict)
     notes: dict = field(default_factory=dict)
     harness: dict = field(default_factory=dict)
+    status_truth: dict = field(default_factory=dict)
     agents: dict = field(default_factory=dict)
     last_error: dict = field(default_factory=dict)
     next_actions: list[str] = field(default_factory=list)
@@ -340,7 +341,13 @@ class ProjectInitializer:
             for file_name in self.CONFIG_FILES
             if (cambrian_dir / file_name).exists()
         ]
-        if existing and not force:
+        existing_project_config = (cambrian_dir / "project.yaml").exists()
+        missing_config = [
+            file_name
+            for file_name in self.CONFIG_FILES
+            if not (cambrian_dir / file_name).exists()
+        ]
+        if existing_project_config and not missing_config and not force:
             return ProjectInitResult(
                 status="blocked",
                 project_root=str(root),
@@ -449,10 +456,14 @@ class ProjectInitializer:
             },
         }
 
-        _dump_yaml(cambrian_dir / "project.yaml", project_payload)
-        _dump_yaml(cambrian_dir / "rules.yaml", rules_payload)
-        _dump_yaml(cambrian_dir / "skills.yaml", skills_payload)
-        _dump_yaml(cambrian_dir / "profile.yaml", profile_payload)
+        if force or not (cambrian_dir / "project.yaml").exists():
+            _dump_yaml(cambrian_dir / "project.yaml", project_payload)
+        if force or not (cambrian_dir / "rules.yaml").exists():
+            _dump_yaml(cambrian_dir / "rules.yaml", rules_payload)
+        if force or not (cambrian_dir / "skills.yaml").exists():
+            _dump_yaml(cambrian_dir / "skills.yaml", skills_payload)
+        if force or not (cambrian_dir / "profile.yaml").exists():
+            _dump_yaml(cambrian_dir / "profile.yaml", profile_payload)
 
         return ProjectInitResult(
             status="initialized",
@@ -463,7 +474,7 @@ class ProjectInitializer:
             config_paths=config_paths,
             recommended_skills=[item["id"] for item in recommended_skills],
             detected=project_payload["detected"],
-            warnings=[],
+            warnings=[f"Preserved existing {path}" for path in existing if not force] if existing else [],
         )
 
     @staticmethod
@@ -1333,13 +1344,29 @@ class ProjectStatusReader:
         profile_payload = _load_yaml(cambrian_dir / "profile.yaml", warnings)
         skills_payload = _load_yaml(cambrian_dir / "skills.yaml", warnings)
         if project_payload is None or profile_payload is None or skills_payload is None:
+            harness = self._collect_installed_custom_harness(root, warnings)
+            next_actions = [
+                "Run `cambrian init --wizard` to fit your project harness.",
+                "Run `cambrian init` to create project memory.",
+            ]
+            if harness.get("fitted"):
+                next_actions = [
+                    "Run `cambrian init` to repair the missing project mode baseline.",
+                    "Re-run `cambrian status --json` and confirm the custom harness is fitted.",
+                ]
             return ProjectStatus(
                 initialized=False,
                 project_root=str(root),
-                next_actions=[
-                    "Run `cambrian init --wizard` to fit your project harness.",
-                    "Run `cambrian init` to create project memory.",
-                ],
+                harness=harness,
+                status_truth=self._build_status_truth(
+                    root,
+                    initialized=False,
+                    harness=harness,
+                    agents={},
+                    skills_payload=skills_payload if isinstance(skills_payload, dict) else {},
+                    warnings=warnings,
+                ),
+                next_actions=next_actions,
                 warnings=warnings,
             )
 
@@ -1579,6 +1606,11 @@ class ProjectStatusReader:
                     "recommended_agent_roles": [],
                     "template_bootstrap_choice": template_bootstrap_choice,
                 }
+            custom_harness = self._collect_installed_custom_harness(root, warnings)
+            if custom_harness:
+                if harness.get("fitted"):
+                    custom_harness["legacy_harness"] = dict(harness)
+                harness = custom_harness
             registry_path = default_agent_registry_path(root)
             if registry_path.exists():
                 registry = AgentRegistryStore().load(registry_path)
@@ -1790,11 +1822,335 @@ class ProjectStatusReader:
             alpha_readiness=alpha_readiness,
             notes=notes,
             harness=harness,
+            status_truth=self._build_status_truth(
+                root,
+                initialized=True,
+                harness=harness,
+                agents=agents,
+                skills_payload=skills_payload,
+                warnings=warnings,
+            ),
             agents=agents,
             last_error=last_error,
             next_actions=next_actions,
             warnings=warnings,
         )
+
+    @staticmethod
+    def _collect_installed_custom_harness(root: Path, warnings: list[str]) -> dict:
+        """Return the installed custom harness as the active fitted harness."""
+        try:
+            from engine.project_custom_harness import (
+                default_custom_harness_path,
+                load_custom_agents,
+                load_custom_harness,
+                load_custom_validation,
+            )
+        except ImportError as exc:
+            warnings.append(f"custom harness status unavailable: {exc}")
+            return {}
+
+        try:
+            custom = load_custom_harness(root)
+            if not custom:
+                return {}
+            validation = load_custom_validation(root)
+            agents = load_custom_agents(root)
+        except Exception as exc:
+            warnings.append(f"custom harness status load failed: {exc}")
+            return {}
+
+        commands = validation.get("test_commands", [])
+        if not isinstance(commands, list):
+            commands = []
+        agent_ids = [
+            str(agent.get("id") or agent.get("name") or "").strip()
+            for agent in agents
+            if isinstance(agent, dict) and (agent.get("id") or agent.get("name"))
+        ]
+        role_ids = [
+            str(agent.get("role") or agent.get("name") or agent.get("id") or "").strip()
+            for agent in agents
+            if isinstance(agent, dict) and (agent.get("role") or agent.get("name") or agent.get("id"))
+        ]
+        quality_gate = custom.get("quality_gate", {}) if isinstance(custom.get("quality_gate"), dict) else {}
+        codebase_evidence = custom.get("codebase_evidence", {}) if isinstance(custom.get("codebase_evidence"), dict) else {}
+        domain_spec = custom.get("domain_spec", {}) if isinstance(custom.get("domain_spec"), dict) else {}
+        evaluator_contract = custom.get("evaluator_contract", {}) if isinstance(custom.get("evaluator_contract"), dict) else {}
+        harness_os_contract = (
+            custom.get("harness_os_contract", {}) if isinstance(custom.get("harness_os_contract"), dict) else {}
+        )
+        enforced_gates = [
+            name
+            for name, value in {
+                "domain_spec": domain_spec,
+                "codebase_evidence": codebase_evidence,
+                "quality_gate": quality_gate,
+                "evaluator_contract": evaluator_contract,
+                "harness_os_contract": harness_os_contract,
+            }.items()
+            if isinstance(value, dict) and value
+        ]
+        return {
+            "fitted": True,
+            "type": "custom_harness",
+            "harness_id": custom.get("id") or "custom-harness",
+            "mode": "custom",
+            "test_command": str(commands[0]) if commands else "",
+            "validation_commands": [str(command) for command in commands if command],
+            "active_agents": agent_ids,
+            "recommended_agent_roles": role_ids,
+            "path": _relative_to_project(default_custom_harness_path(root), root),
+            "quality_score": quality_gate.get("score"),
+            "quality_status": quality_gate.get("status"),
+            "codebase_evidence_status": codebase_evidence.get("status"),
+            "enforced_gates": enforced_gates,
+            "policy": dict(custom.get("policy", {}) if isinstance(custom.get("policy"), dict) else {}),
+            "domain_spec": domain_spec,
+            "evaluator_contract": evaluator_contract,
+        }
+
+    @staticmethod
+    def _build_status_truth(
+        root: Path,
+        *,
+        initialized: bool,
+        harness: dict,
+        agents: dict,
+        skills_payload: dict,
+        warnings: list[str],
+    ) -> dict:
+        """Build the explicit truth surface for fitted harness state."""
+
+        def _texts(value) -> list[str]:
+            if isinstance(value, list):
+                result: list[str] = []
+                for item in value:
+                    text = str(item or "").strip()
+                    if text:
+                        result.append(text)
+                return _dedupe(result)
+            text = str(value or "").strip()
+            return [text] if text else []
+
+        def _ref(path: Path) -> str:
+            return _relative_to_project(path, root) if path.exists() else ""
+
+        harness = dict(harness) if isinstance(harness, dict) else {}
+        agents = dict(agents) if isinstance(agents, dict) else {}
+        skills_payload = dict(skills_payload) if isinstance(skills_payload, dict) else {}
+
+        cambrian_dir = root / ".cambrian"
+        harness_path = cambrian_dir / "harness.yaml"
+        agents_path = cambrian_dir / "agents.yaml"
+        validation_path = cambrian_dir / "validation.yaml"
+        latest_verdict_path = cambrian_dir / "reports" / "latest_verdict.json"
+        latest_job_path = cambrian_dir / "packs" / "jobs" / "latest.yaml"
+
+        custom_payload = _load_yaml(harness_path, warnings) or {}
+        if str(custom_payload.get("type") or "") != "custom":
+            custom_payload = {}
+        codebase_evidence = (
+            custom_payload.get("codebase_evidence", {})
+            if isinstance(custom_payload.get("codebase_evidence"), dict)
+            else {}
+        )
+        domain_confidence = (
+            codebase_evidence.get("domain_confidence", {})
+            if isinstance(codebase_evidence.get("domain_confidence"), dict)
+            else {}
+        )
+        validation_payload = _load_yaml(validation_path, warnings) or {}
+        validation_block = (
+            validation_payload.get("validation", validation_payload)
+            if isinstance(validation_payload, dict)
+            else {}
+        )
+        if not isinstance(validation_block, dict):
+            validation_block = {}
+
+        active_agent_ids = _texts(harness.get("active_agents"))
+        if not active_agent_ids:
+            active_agent_ids = _texts(agents.get("equipped"))
+
+        generated_skills: list[dict] = []
+        generated_skills_ref = ""
+        try:
+            from engine.project_skill_builder import default_generated_skills_dir, load_generated_skills
+
+            skills_dir = default_generated_skills_dir(root)
+            generated_skills_ref = _ref(skills_dir)
+            generated_skills = load_generated_skills(root)
+        except Exception as exc:
+            message = f"status truth generated skills load failed: {exc}"
+            logger.warning(message)
+            warnings.append(message)
+
+        active_skill_ids = [
+            str(skill.get("id") or "").strip()
+            for skill in generated_skills
+            if isinstance(skill, dict)
+            and str(skill.get("id") or "").strip()
+            and str(skill.get("status") or "active").strip() != "inactive"
+        ]
+        active_skill_ids = _dedupe(active_skill_ids)
+        recommended_skill_ids = [
+            str(item.get("id") or "").strip()
+            for item in skills_payload.get("recommended_skills", [])
+            if isinstance(item, dict) and str(item.get("id") or "").strip()
+        ]
+        recommended_skill_ids = _dedupe(recommended_skill_ids)
+
+        policy = harness.get("policy", {}) if isinstance(harness.get("policy"), dict) else {}
+        domain_spec = harness.get("domain_spec", {}) if isinstance(harness.get("domain_spec"), dict) else {}
+        execution_policy = (
+            domain_spec.get("execution_policy", {})
+            if isinstance(domain_spec.get("execution_policy"), dict)
+            else {}
+        )
+        change_mode = (
+            str(policy.get("change_mode") or execution_policy.get("change_policy") or validation_block.get("policy") or "")
+            .strip()
+            or "unknown"
+        )
+        auto_apply = policy.get("auto_apply")
+        if auto_apply is None:
+            auto_apply = execution_policy.get("auto_apply")
+        auto_apply_bool = bool(auto_apply) if auto_apply is not None else False
+        source_apply_requires_confirm = change_mode != "auto_apply" or not auto_apply_bool
+
+        validation_commands = _texts(harness.get("validation_commands"))
+        if not validation_commands:
+            validation_commands = _texts(validation_block.get("test_commands"))
+        if not validation_commands and str(harness.get("test_command") or "").strip():
+            validation_commands = [str(harness.get("test_command")).strip()]
+
+        latest_verdict = _load_json(latest_verdict_path, warnings) or {}
+        latest_job = _load_yaml(latest_job_path, warnings) or {}
+        latest_verdict_job_id = str(latest_verdict.get("job_id") or "").strip()
+        latest_job_id = str(latest_job.get("job_id") or "").strip()
+        trust_gate_status = str(latest_verdict.get("trust_gate_status") or "unknown").strip()
+        validation_contract_status = str(latest_verdict.get("validation_contract_status") or "unknown").strip()
+        unchecked_items = _texts(latest_verdict.get("unchecked_items"))
+        missing_paths = _texts(codebase_evidence.get("missing_important_paths"))
+
+        evidence_gaps: list[str] = []
+        fitted = bool(harness.get("fitted"))
+        if not fitted:
+            evidence_gaps.append("harness_not_fitted")
+        if fitted and not initialized:
+            evidence_gaps.append("project_mode_baseline_missing")
+        if fitted and not active_agent_ids:
+            evidence_gaps.append("active_agents_missing")
+        if fitted and not active_skill_ids:
+            evidence_gaps.append("active_skills_missing")
+        if fitted and not validation_commands:
+            evidence_gaps.append("validation_commands_missing")
+        evidence_status = str(codebase_evidence.get("status") or harness.get("codebase_evidence_status") or "").strip()
+        if fitted and evidence_status and evidence_status not in {"grounded", "strong"}:
+            evidence_gaps.append(f"codebase_evidence_not_grounded:{evidence_status}")
+        if missing_paths:
+            evidence_gaps.append("missing_important_paths")
+        if fitted and not latest_verdict:
+            evidence_gaps.append("latest_verdict_missing")
+        if latest_verdict and trust_gate_status not in {"verified", "passed"}:
+            evidence_gaps.append(f"trust_gate_not_verified:{trust_gate_status}")
+        if unchecked_items:
+            evidence_gaps.append("unchecked_items_present")
+        if latest_job_id and latest_verdict_job_id and latest_job_id != latest_verdict_job_id:
+            evidence_gaps.append("latest_job_not_validated")
+        evidence_gaps = _dedupe(evidence_gaps)
+
+        if not fitted:
+            truth_status = "not_fitted"
+        elif evidence_gaps:
+            truth_status = "partial"
+        else:
+            truth_status = "verified"
+
+        source_refs = _dedupe(
+            [
+                _ref(cambrian_dir / "project.yaml"),
+                _ref(cambrian_dir / "profile.yaml"),
+                _ref(cambrian_dir / "skills.yaml"),
+                _ref(harness_path),
+                _ref(agents_path),
+                generated_skills_ref,
+                _ref(validation_path),
+                _ref(latest_verdict_path),
+                _ref(latest_job_path),
+            ]
+        )
+        source_refs = [item for item in source_refs if item]
+
+        return {
+            "schema_version": "1.0.0",
+            "status": truth_status,
+            "initialized": bool(initialized),
+            "source_refs": source_refs,
+            "active_harness": {
+                "fitted": fitted,
+                "type": str(harness.get("type") or "none"),
+                "harness_id": str(harness.get("harness_id") or ""),
+                "mode": str(harness.get("mode") or ""),
+                "source_of_truth_ref": _ref(harness_path),
+                "quality_status": harness.get("quality_status"),
+                "codebase_evidence_status": evidence_status or None,
+                "enforced_gates": _texts(harness.get("enforced_gates")),
+            },
+            "active_agents": {
+                "count": len(active_agent_ids),
+                "ids": active_agent_ids,
+                "source_of_truth_ref": _ref(agents_path) or str(agents.get("path") or ""),
+            },
+            "active_skills": {
+                "count": len(active_skill_ids),
+                "ids": active_skill_ids,
+                "generated_skills_ref": generated_skills_ref,
+                "recommended_count": len(recommended_skill_ids),
+                "recommended_ids": recommended_skill_ids,
+                "project_skills_ref": _ref(cambrian_dir / "skills.yaml"),
+            },
+            "authority": {
+                "change_mode": change_mode,
+                "auto_apply": auto_apply_bool,
+                "source_apply_requires_confirm": source_apply_requires_confirm,
+                "external_transfer": str(execution_policy.get("external_transfer") or "explicit_approval_required"),
+                "provider_api_call": bool(execution_policy.get("provider_api_call", False)),
+                "forbidden": _texts(policy.get("forbidden")),
+                "allowed": _texts(policy.get("allowed")),
+            },
+            "validation": {
+                "commands": validation_commands,
+                "command_count": len(validation_commands),
+                "latest_verdict_ref": _ref(latest_verdict_path),
+                "latest_job_ref": _ref(latest_job_path),
+                "latest_job_id": latest_job_id,
+                "latest_verdict_job_id": latest_verdict_job_id,
+                "validation_status": str(latest_verdict.get("validation_status") or "unknown"),
+                "validation_contract_status": validation_contract_status,
+                "trust_gate_status": trust_gate_status,
+                "verdict": str(latest_verdict.get("verdict") or "unknown"),
+                "unchecked_items": unchecked_items,
+            },
+            "evidence": {
+                "status": evidence_status or "missing",
+                "existing_important_paths": _texts(codebase_evidence.get("existing_important_paths"))[:12],
+                "missing_important_paths": missing_paths[:12],
+                "weak_domains": _texts(domain_confidence.get("weak")),
+                "confirmed_domains": _texts(domain_confidence.get("confirmed")),
+                "suspected_domains": _texts(domain_confidence.get("suspected")),
+            },
+            "evidence_gaps": evidence_gaps,
+            "release_boundaries": {
+                "source_code_modified_by_cambrian": False,
+                "provider_api_called_by_cambrian": False,
+                "auto_publish_allowed": False,
+                "status_truth_claim_allowed": truth_status == "verified" and not evidence_gaps,
+                "external_release_claim_allowed": False,
+                "external_release_claim_reason": "requires separate real external-recipient proof",
+            },
+        }
 
     @staticmethod
     def _timeline_events_to_journey(timeline) -> list[dict]:
@@ -2641,14 +2997,25 @@ def render_run_summary(result: ProjectRunResult) -> str:
 def render_status_summary(status: ProjectStatus) -> str:
     """status 결과를 사람이 읽기 좋게 렌더링한다."""
     if not status.initialized:
-        return "\n".join([
+        lines = [
             "Cambrian Project Status",
             "==================================================",
             "Cambrian is not fitted to this project yet.",
-            "",
-            "Next:",
-            "  cambrian init --wizard",
-        ])
+        ]
+        harness = status.harness if isinstance(status.harness, dict) else {}
+        if harness.get("fitted"):
+            lines.extend([
+                "",
+                "Custom harness detected:",
+                f"  harness id : {harness.get('harness_id', 'custom-harness')}",
+                f"  path       : {harness.get('path', '.cambrian/harness.yaml')}",
+                "",
+                "Project mode baseline is incomplete, so status cannot be fully trusted yet.",
+            ])
+        lines.extend(["", "Next:"])
+        for action in status.next_actions or ["cambrian init --wizard"]:
+            lines.append(f"  {action}")
+        return "\n".join(lines)
 
     def _journey_symbol(item: dict) -> str:
         status_value = str(item.get("status", ""))
@@ -2681,14 +3048,39 @@ def render_status_summary(status: ProjectStatus) -> str:
     ]
     harness = status.harness if isinstance(status.harness, dict) else {}
     agents = status.agents if isinstance(status.agents, dict) else {}
+    truth = status.status_truth if isinstance(status.status_truth, dict) else {}
     if harness:
         lines.extend([
             "",
             "Harness:",
             f"  fitted     : {'yes' if harness.get('fitted', False) else 'no'}",
+            f"  kind       : {harness.get('type', 'template_harness') or 'template_harness'}",
             f"  mode       : {harness.get('mode', 'balanced') or 'balanced'}",
             f"  test cmd   : {harness.get('test_command', 'none yet') or 'none yet'}",
         ])
+        if harness.get("type") == "custom_harness":
+            gates = list(harness.get("enforced_gates", []) if isinstance(harness.get("enforced_gates"), list) else [])
+            lines.extend([
+                f"  harness id : {harness.get('harness_id', 'custom-harness')}",
+                f"  evidence   : {harness.get('codebase_evidence_status', 'unknown') or 'unknown'}",
+                f"  quality    : {harness.get('quality_status', 'unknown') or 'unknown'}"
+                + (f" ({harness.get('quality_score')})" if harness.get("quality_score") is not None else ""),
+                f"  gates      : {', '.join(gates) or 'none'}",
+            ])
+        if truth:
+            truth_agents = truth.get("active_agents", {}) if isinstance(truth.get("active_agents"), dict) else {}
+            truth_skills = truth.get("active_skills", {}) if isinstance(truth.get("active_skills"), dict) else {}
+            truth_validation = truth.get("validation", {}) if isinstance(truth.get("validation"), dict) else {}
+            gaps = list(truth.get("evidence_gaps", []) if isinstance(truth.get("evidence_gaps"), list) else [])
+            lines.extend([
+                "",
+                "Status truth:",
+                f"  status     : {truth.get('status', 'unknown') or 'unknown'}",
+                f"  agents     : {truth_agents.get('count', 0)} active",
+                f"  skills     : {truth_skills.get('count', 0)} active",
+                f"  trust gate : {truth_validation.get('trust_gate_status', 'unknown') or 'unknown'}",
+                f"  gaps       : {', '.join(str(item) for item in gaps) or 'none'}",
+            ])
         win_lane = harness.get("win_lane_summary") if isinstance(harness.get("win_lane_summary"), dict) else {}
         if win_lane:
             lines.extend([
