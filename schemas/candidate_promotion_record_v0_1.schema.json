@@ -1,0 +1,210 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://cambrian.local/schemas/candidate_promotion_record_v0_1.schema.json",
+  "title": "Candidate Promotion Record v0.1",
+  "description": "candidate pack을 사용자 명령으로 private promoted version으로 승격했음을 기록하는 계약이다.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "$schema",
+    "schema_version",
+    "record_kind",
+    "generated_by",
+    "generated_at",
+    "agent_id",
+    "promotion_status",
+    "source",
+    "gate",
+    "proof_boundary",
+    "applied_change_summary",
+    "outputs"
+  ],
+  "properties": {
+    "$schema": {
+      "type": "string",
+      "const": "https://cambrian.local/schemas/candidate_promotion_record_v0_1.schema.json"
+    },
+    "schema_version": {
+      "type": "string",
+      "const": "0.1"
+    },
+    "record_kind": {
+      "type": "string",
+      "const": "candidate_promotion_record_v0_1"
+    },
+    "generated_by": {
+      "type": "string",
+      "const": "tools/promote_candidate_pack.py"
+    },
+    "generated_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "agent_id": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9_-]{1,63}$"
+    },
+    "promotion_status": {
+      "type": "string",
+      "const": "promoted_private_version"
+    },
+    "source": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "original_pack_hash",
+        "candidate_pack_hash",
+        "diff_report_hash",
+        "promoted_pack_hash",
+        "candidate_diff_status"
+      ],
+      "properties": {
+        "original_pack_hash": {
+          "type": "string",
+          "pattern": "^sha256:[a-f0-9]{64}$"
+        },
+        "candidate_pack_hash": {
+          "type": "string",
+          "pattern": "^sha256:[a-f0-9]{64}$"
+        },
+        "diff_report_hash": {
+          "type": "string",
+          "pattern": "^sha256:[a-f0-9]{64}$"
+        },
+        "promoted_pack_hash": {
+          "type": "string",
+          "pattern": "^sha256:[a-f0-9]{64}$"
+        },
+        "candidate_diff_status": {
+          "type": "string",
+          "const": "review_pass_not_promoted"
+        }
+      }
+    },
+    "gate": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "user_command_required",
+        "auto_promote",
+        "source_diff_report_required",
+        "output_overwrite_blocked"
+      ],
+      "properties": {
+        "user_command_required": {
+          "type": "boolean",
+          "const": true
+        },
+        "auto_promote": {
+          "type": "boolean",
+          "const": false
+        },
+        "source_diff_report_required": {
+          "type": "boolean",
+          "const": true
+        },
+        "output_overwrite_blocked": {
+          "type": "boolean",
+          "const": true
+        }
+      }
+    },
+    "proof_boundary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "uses_runtime_evidence",
+        "proof_claim_allowed",
+        "success_rate_claim_allowed",
+        "marketplace_sale_ready"
+      ],
+      "properties": {
+        "uses_runtime_evidence": {
+          "type": "boolean",
+          "const": false
+        },
+        "proof_claim_allowed": {
+          "type": "boolean",
+          "const": false
+        },
+        "success_rate_claim_allowed": {
+          "type": "boolean",
+          "const": false
+        },
+        "marketplace_sale_ready": {
+          "type": "boolean",
+          "const": false
+        }
+      }
+    },
+    "applied_change_summary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "changed_path_count",
+        "changed_files",
+        "approved_recommendation_ids",
+        "deferred_or_rejected_recommendation_ids"
+      ],
+      "properties": {
+        "changed_path_count": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "changed_files": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "uniqueItems": true
+        },
+        "approved_recommendation_ids": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "string",
+            "pattern": "^evo_[0-9]+$"
+          },
+          "uniqueItems": true
+        },
+        "deferred_or_rejected_recommendation_ids": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^evo_[0-9]+$"
+          },
+          "uniqueItems": true
+        }
+      }
+    },
+    "outputs": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "promoted_pack_kind",
+        "promotion_metadata_kind",
+        "candidate_metadata_removed",
+        "private_visibility"
+      ],
+      "properties": {
+        "promoted_pack_kind": {
+          "type": "string",
+          "const": "agent_pack_bundle"
+        },
+        "promotion_metadata_kind": {
+          "type": "string",
+          "const": "promoted_agent_pack_metadata_v0_1"
+        },
+        "candidate_metadata_removed": {
+          "type": "boolean",
+          "const": true
+        },
+        "private_visibility": {
+          "type": "boolean",
+          "const": true
+        }
+      }
+    }
+  }
+}

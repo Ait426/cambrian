@@ -1,0 +1,218 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://cambrian.local/schemas/agent_contract_v0_1.schema.json",
+  "title": "Agent Contract v0.1",
+  "description": "플랫폼-first AI 에이전트 패키지의 agent.json 계약 형식이다.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "$schema",
+    "contract_schema",
+    "schema_version",
+    "agent_id",
+    "name",
+    "author",
+    "role",
+    "goals",
+    "inputs",
+    "outputs",
+    "permissions",
+    "forbidden_actions",
+    "approval_required_actions",
+    "validation_criteria",
+    "data_policy",
+    "risk_level",
+    "known_limits",
+    "license",
+    "provenance",
+    "runtime"
+  ],
+  "properties": {
+    "$schema": {
+      "type": "string",
+      "const": "https://cambrian.local/schemas/agent_contract_v0_1.schema.json"
+    },
+    "contract_schema": {
+      "type": "string",
+      "const": "agent_contract_v0_1"
+    },
+    "schema_version": {
+      "type": "string",
+      "const": "0.1"
+    },
+    "agent_id": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9_-]{1,63}$"
+    },
+    "name": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 120
+    },
+    "author": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 120
+    },
+    "role": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 2000
+    },
+    "goals": {
+      "$ref": "#/$defs/non_empty_string_list"
+    },
+    "inputs": {
+      "$ref": "#/$defs/non_empty_string_list"
+    },
+    "outputs": {
+      "$ref": "#/$defs/non_empty_string_list"
+    },
+    "permissions": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "enum": [
+          "read_user_selected_uploads",
+          "file_write",
+          "network_send"
+        ]
+      },
+      "uniqueItems": true
+    },
+    "forbidden_actions": {
+      "$ref": "#/$defs/non_empty_string_list"
+    },
+    "approval_required_actions": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 240
+      },
+      "uniqueItems": true
+    },
+    "validation_criteria": {
+      "$ref": "#/$defs/non_empty_string_list"
+    },
+    "data_policy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "default_visibility",
+        "retention",
+        "third_party_sharing",
+        "secret_collection"
+      ],
+      "properties": {
+        "default_visibility": {
+          "type": "string",
+          "const": "private"
+        },
+        "retention": {
+          "type": "string",
+          "enum": [
+            "local_only",
+            "session_only",
+            "local_or_user_selected",
+            "user_opt_in"
+          ]
+        },
+        "third_party_sharing": {
+          "type": "string",
+          "const": "none_by_default"
+        },
+        "secret_collection": {
+          "type": "string",
+          "const": "forbidden_by_default"
+        }
+      }
+    },
+    "risk_level": {
+      "type": "string",
+      "enum": [
+        "green",
+        "yellow",
+        "red"
+      ]
+    },
+    "known_limits": {
+      "$ref": "#/$defs/non_empty_string_list"
+    },
+    "license": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 160
+    },
+    "provenance": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "source",
+          "kind"
+        ],
+        "properties": {
+          "source": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 240
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "platform_builder",
+              "user_created",
+              "imported",
+              "evolution_candidate",
+              "evolution_promoted"
+            ]
+          },
+          "generated_at": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "runtime": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "type",
+        "cambrian_required",
+        "cambrian_compatible"
+      ],
+      "properties": {
+        "type": {
+          "type": "string",
+          "const": "generic"
+        },
+        "cambrian_required": {
+          "type": "boolean",
+          "const": false
+        },
+        "cambrian_compatible": {
+          "type": "string",
+          "enum": [
+            "planned",
+            "supported"
+          ]
+        }
+      }
+    }
+  },
+  "$defs": {
+    "non_empty_string_list": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 500
+      },
+      "uniqueItems": true
+    }
+  }
+}

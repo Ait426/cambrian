@@ -1,0 +1,258 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://cambrian.local/schemas/manual_run_receipt_v0_1.schema.json",
+  "title": "Manual Run Receipt v0.1",
+  "description": "API와 Cambrian Runtime 없이 실행한 수동 실행 메타데이터 영수증 계약이다. 이 계약은 proof가 아니다.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "$schema",
+    "schema_version",
+    "receipt_kind",
+    "runner_mode",
+    "generated_by",
+    "generated_at",
+    "agent_id",
+    "agent_name",
+    "source_bundle",
+    "run_status",
+    "prompt_status",
+    "result_status",
+    "input_summary",
+    "output_summary",
+    "manual_checks",
+    "privacy",
+    "proof_boundary",
+    "evolution_signal"
+  ],
+  "properties": {
+    "$schema": {
+      "type": "string",
+      "const": "https://cambrian.local/schemas/manual_run_receipt_v0_1.schema.json"
+    },
+    "schema_version": {
+      "type": "string",
+      "const": "0.1"
+    },
+    "receipt_kind": {
+      "type": "string",
+      "const": "manual_run_receipt_v0_1"
+    },
+    "runner_mode": {
+      "type": "string",
+      "const": "manual_no_api"
+    },
+    "generated_by": {
+      "type": "string",
+      "const": "web/runner/index.html"
+    },
+    "generated_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "agent_id": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9_-]{1,63}$"
+    },
+    "agent_name": {
+      "type": "string",
+      "minLength": 1
+    },
+    "source_bundle": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "bundle_schema",
+        "package_kind",
+        "evidence_status",
+        "preflight_status",
+        "card_kind",
+        "marketplace_review_status"
+      ],
+      "properties": {
+        "bundle_schema": {
+          "type": "string",
+          "const": "agent_pack_bundle_v0_1"
+        },
+        "package_kind": {
+          "type": "string",
+          "const": "agent_pack_bundle"
+        },
+        "evidence_status": {
+          "type": "string",
+          "const": "no_runtime_evidence"
+        },
+        "preflight_status": {
+          "type": "string",
+          "const": "pass"
+        },
+        "card_kind": {
+          "type": "string",
+          "const": "private_agent_card"
+        },
+        "marketplace_review_status": {
+          "type": "string",
+          "const": "not_ready"
+        }
+      }
+    },
+    "run_status": {
+      "type": "string",
+      "const": "manual_review_only"
+    },
+    "prompt_status": {
+      "type": "string",
+      "enum": [
+        "prompt_generated",
+        "prompt_not_generated"
+      ]
+    },
+    "result_status": {
+      "type": "string",
+      "enum": [
+        "result_pasted_for_manual_review",
+        "result_not_recorded"
+      ]
+    },
+    "input_summary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "input_length",
+        "stores_raw_input"
+      ],
+      "properties": {
+        "input_length": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "stores_raw_input": {
+          "type": "boolean",
+          "const": false
+        }
+      }
+    },
+    "output_summary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "output_length",
+        "stores_raw_output"
+      ],
+      "properties": {
+        "output_length": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "stores_raw_output": {
+          "type": "boolean",
+          "const": false
+        }
+      }
+    },
+    "manual_checks": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "criterion",
+          "status"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^manual_check_[0-9]+$"
+          },
+          "criterion": {
+            "type": "string",
+            "minLength": 1
+          },
+          "status": {
+            "type": "string",
+            "const": "user_review_required"
+          }
+        }
+      }
+    },
+    "privacy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "stores_raw_inputs",
+        "stores_raw_outputs",
+        "stores_secrets",
+        "api_key_collected"
+      ],
+      "properties": {
+        "stores_raw_inputs": {
+          "type": "boolean",
+          "const": false
+        },
+        "stores_raw_outputs": {
+          "type": "boolean",
+          "const": false
+        },
+        "stores_secrets": {
+          "type": "boolean",
+          "const": false
+        },
+        "api_key_collected": {
+          "type": "boolean",
+          "const": false
+        }
+      }
+    },
+    "proof_boundary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "evidence_status",
+        "proof_claim_allowed",
+        "success_rate_claim_allowed",
+        "marketplace_sale_ready"
+      ],
+      "properties": {
+        "evidence_status": {
+          "type": "string",
+          "const": "no_runtime_evidence"
+        },
+        "proof_claim_allowed": {
+          "type": "boolean",
+          "const": false
+        },
+        "success_rate_claim_allowed": {
+          "type": "boolean",
+          "const": false
+        },
+        "marketplace_sale_ready": {
+          "type": "boolean",
+          "const": false
+        }
+      }
+    },
+    "evolution_signal": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "eligible_for_suggestion",
+        "source",
+        "requires_user_approval"
+      ],
+      "properties": {
+        "eligible_for_suggestion": {
+          "type": "boolean"
+        },
+        "source": {
+          "type": "string",
+          "const": "manual_review_receipt"
+        },
+        "requires_user_approval": {
+          "type": "boolean",
+          "const": true
+        }
+      }
+    }
+  }
+}

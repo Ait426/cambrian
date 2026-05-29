@@ -535,12 +535,16 @@ def _validate_custom_harness_job(root: Path, job: PackJob, job_path: Path, job_f
 
     job.validation_status = "not_ready"
     job.status = "blocked"
-    job.outcome_snapshot = {
-        "validation_lane": "custom harness",
-        "auto_apply": False,
-        "test_commands": test_commands,
-        "manual_validation_required": True,
-    }
+    snapshot = dict(job.outcome_snapshot) if isinstance(job.outcome_snapshot, dict) else {}
+    snapshot.update(
+        {
+            "validation_lane": "custom harness",
+            "auto_apply": False,
+            "test_commands": test_commands,
+            "manual_validation_required": True,
+        }
+    )
+    job.outcome_snapshot = snapshot
     message = "Custom harness validation requires manual command execution in this RC."
     if test_commands:
         message = f"Run validation command manually: {test_commands[0]}"
