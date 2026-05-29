@@ -1,0 +1,1396 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Agent Pack Local Runner</title>
+  <style>
+    :root {
+      --bg: #f5f6f2;
+      --surface: #ffffff;
+      --ink: #18211f;
+      --muted: #5c6864;
+      --line: #d6ded7;
+      --green: #21674c;
+      --amber: #93611f;
+      --red: #9f3f3f;
+      --blue: #315f8f;
+      --shadow: 0 1px 2px rgba(24, 33, 31, 0.08);
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--ink);
+      font-family: "Aptos", "Malgun Gothic", "Segoe UI", sans-serif;
+      letter-spacing: 0;
+    }
+
+    a {
+      color: var(--blue);
+      font-weight: 800;
+      text-decoration: none;
+    }
+
+    button,
+    input,
+    textarea {
+      font: inherit;
+    }
+
+    .shell {
+      margin: 0 auto;
+      padding: 18px 0 36px;
+      width: min(1360px, calc(100% - 32px));
+    }
+
+    .topbar {
+      align-items: center;
+      border-bottom: 1px solid var(--line);
+      display: flex;
+      gap: 16px;
+      justify-content: space-between;
+      min-height: 56px;
+    }
+
+    .brand,
+    .nav,
+    .button-row {
+      align-items: center;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+    }
+
+    .brand {
+      font-weight: 900;
+    }
+
+    .mark {
+      align-items: center;
+      background: var(--ink);
+      border-radius: 8px;
+      color: #fff;
+      display: inline-flex;
+      height: 32px;
+      justify-content: center;
+      width: 32px;
+    }
+
+    .nav {
+      gap: 12px;
+      justify-content: flex-end;
+    }
+
+    .status-strip {
+      align-items: stretch;
+      border-bottom: 1px solid var(--line);
+      display: grid;
+      gap: 10px;
+      grid-template-columns: repeat(5, minmax(0, 1fr));
+      padding: 14px 0;
+    }
+
+    .status-item,
+    .panel {
+      background: var(--surface);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      box-shadow: var(--shadow);
+      min-width: 0;
+    }
+
+    .status-item {
+      min-height: 76px;
+      padding: 12px;
+    }
+
+    .status-label {
+      color: var(--muted);
+      display: block;
+      font-size: 0.8rem;
+      font-weight: 800;
+      margin-bottom: 6px;
+    }
+
+    .status-value {
+      display: block;
+      font-size: 1rem;
+      font-weight: 900;
+      line-height: 1.35;
+    }
+
+    .workspace {
+      display: grid;
+      gap: 16px;
+      grid-template-columns: minmax(280px, 360px) minmax(0, 1fr) minmax(280px, 360px);
+      padding-top: 18px;
+    }
+
+    .panel-header {
+      align-items: center;
+      border-bottom: 1px solid var(--line);
+      display: flex;
+      gap: 12px;
+      justify-content: space-between;
+      padding: 14px 16px;
+    }
+
+    .panel-title {
+      font-size: 1rem;
+      font-weight: 900;
+      margin: 0;
+    }
+
+    .panel-body,
+    .stack {
+      display: grid;
+      gap: 14px;
+    }
+
+    .panel-body {
+      padding: 16px;
+    }
+
+    .button {
+      align-items: center;
+      background: var(--ink);
+      border: 1px solid var(--ink);
+      border-radius: 8px;
+      color: #fff;
+      cursor: pointer;
+      display: inline-flex;
+      font-weight: 900;
+      min-height: 40px;
+      padding: 9px 12px;
+    }
+
+    .button.secondary {
+      background: #fff;
+      color: var(--ink);
+    }
+
+    .button:disabled {
+      cursor: not-allowed;
+      opacity: 0.5;
+    }
+
+    .file-input {
+      height: 1px;
+      opacity: 0;
+      overflow: hidden;
+      position: absolute;
+      width: 1px;
+    }
+
+    .field {
+      display: grid;
+      gap: 7px;
+    }
+
+    label {
+      font-size: 0.9rem;
+      font-weight: 900;
+    }
+
+    textarea {
+      background: #fff;
+      border: 1px solid #c9d0cb;
+      border-radius: 8px;
+      color: var(--ink);
+      min-height: 150px;
+      min-width: 0;
+      padding: 10px 11px;
+      resize: vertical;
+      width: 100%;
+    }
+
+    .prompt-output {
+      background: #101816;
+      color: #edf3ee;
+      font-family: "Cascadia Mono", Consolas, monospace;
+      font-size: 0.82rem;
+      line-height: 1.55;
+      min-height: 370px;
+      white-space: pre-wrap;
+    }
+
+    .hint,
+    .meta {
+      color: var(--muted);
+      font-size: 0.84rem;
+      line-height: 1.5;
+      margin: 0;
+    }
+
+    .summary-list,
+    .check-list,
+    .history-list {
+      display: grid;
+      gap: 8px;
+      margin: 0;
+      padding: 0;
+    }
+
+    .summary-list li,
+    .check-list li,
+    .history-list li {
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      display: grid;
+      gap: 4px;
+      list-style: none;
+      padding: 10px;
+    }
+
+    .handoff-summary {
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      display: grid;
+      gap: 10px;
+      padding: 12px;
+    }
+
+    .handoff-summary[hidden] {
+      display: none;
+    }
+
+    .handoff-summary .summary-list {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .badge {
+      border-radius: 999px;
+      display: inline-flex;
+      font-size: 0.78rem;
+      font-weight: 900;
+      line-height: 1;
+      padding: 6px 8px;
+      width: fit-content;
+    }
+
+    .badge.green {
+      background: #e0f1e7;
+      color: var(--green);
+    }
+
+    .badge.amber {
+      background: #f4ead8;
+      color: var(--amber);
+    }
+
+    .badge.red {
+      background: #f4dfdf;
+      color: var(--red);
+    }
+
+    .alert {
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 12px;
+    }
+
+    .alert.green {
+      background: #eef8f1;
+      border-color: #bad7c4;
+    }
+
+    .alert.amber {
+      background: #fbf2e4;
+      border-color: #dcc190;
+    }
+
+    .alert.red {
+      background: #fbebeb;
+      border-color: #dfb8b8;
+    }
+
+    @media (max-width: 1120px) {
+      .workspace {
+        grid-template-columns: 1fr;
+      }
+
+      .status-strip {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+    }
+
+    @media (max-width: 640px) {
+      .shell {
+        width: min(100% - 20px, 1360px);
+      }
+
+      .topbar {
+        align-items: flex-start;
+        flex-direction: column;
+        padding-bottom: 12px;
+      }
+
+      .nav {
+        justify-content: flex-start;
+      }
+
+      .status-strip {
+        grid-template-columns: 1fr;
+      }
+
+      .handoff-summary .summary-list {
+        grid-template-columns: 1fr;
+      }
+    }
+  </style>
+</head>
+<body>
+  <main class="shell">
+    <header class="topbar">
+      <div class="brand">
+        <span class="mark">R</span>
+        <span>Agent Pack Local Runner</span>
+      </div>
+      <nav class="nav" aria-label="상단 이동">
+        <a href="../index.html">Home</a>
+        <a href="../platform/index.html">Builder</a>
+        <a href="../evolution/index.html">Evolution</a>
+        <a href="../assets/document-organizer.agent-pack.json">Sample Pack</a>
+        <a href="../../tools/validate_agent_pack.py">Validator</a>
+      </nav>
+    </header>
+
+    <section class="status-strip" aria-label="로컬 실행 상태">
+      <div class="status-item">
+        <span class="status-label">runner mode</span>
+        <span class="status-value">manual_no_api</span>
+      </div>
+      <div class="status-item">
+        <span class="status-label">Cambrian Runtime</span>
+        <span class="status-value">not required</span>
+      </div>
+      <div class="status-item">
+        <span class="status-label">API key</span>
+        <span class="status-value">not collected</span>
+      </div>
+      <div class="status-item">
+        <span class="status-label">evidence</span>
+        <span class="status-value" id="evidenceStatus">no_runtime_evidence</span>
+      </div>
+      <div class="status-item">
+        <span class="status-label">storage</span>
+        <span class="status-value">local metadata only</span>
+      </div>
+    </section>
+
+    <section class="workspace">
+      <aside class="panel">
+        <div class="panel-header">
+          <h1 class="panel-title">Pack Load</h1>
+        </div>
+        <div class="panel-body">
+          <div class="button-row">
+            <label class="button" for="packInput">.agent-pack.json 열기</label>
+            <input class="file-input" id="packInput" type="file" accept=".json,application/json" />
+            <button class="button secondary" id="loadHandoffButton" type="button">Builder handoff 불러오기</button>
+            <button class="button secondary" id="clearButton" type="button">초기화</button>
+          </div>
+          <div class="alert amber" id="loadStatus">패키지를 불러오면 브라우저 안에서 client preflight를 먼저 확인합니다. Builder handoff는 localStorage에서 한 번만 읽고 제거합니다.</div>
+          <div class="handoff-summary" id="handoffSummary" hidden aria-live="polite"></div>
+          <ul class="summary-list" id="packSummary"></ul>
+        </div>
+      </aside>
+
+      <section class="panel">
+        <div class="panel-header">
+          <h2 class="panel-title">Manual Run</h2>
+          <div class="button-row">
+            <button class="button" id="buildPromptButton" type="button" disabled>실행 프롬프트 생성</button>
+            <button class="button secondary" id="copyPromptButton" type="button" disabled>복사</button>
+          </div>
+        </div>
+        <div class="panel-body">
+          <div class="field">
+            <label for="taskInput">작업 입력</label>
+            <textarea id="taskInput" placeholder="사용자가 직접 선택한 문서나 업무 내용을 붙여 넣습니다. 비밀번호, 토큰, 결제 정보는 넣지 마세요."></textarea>
+          </div>
+          <div class="field">
+            <label for="promptOutput">AI 도구에 붙여 넣을 실행 프롬프트</label>
+            <textarea class="prompt-output" id="promptOutput" readonly></textarea>
+          </div>
+          <div class="field">
+            <label for="resultInput">AI 결과</label>
+            <textarea id="resultInput" placeholder="AI 도구에서 받은 결과를 여기에 붙여 넣고 검증 체크리스트를 만듭니다."></textarea>
+          </div>
+          <div class="button-row">
+            <button class="button" id="completeRunButton" type="button" disabled>검토 완료 + 영수증</button>
+            <button class="button secondary" id="reviewButton" type="button" disabled>검증 체크리스트 생성</button>
+            <button class="button secondary" id="saveRunButton" type="button" disabled>로컬 실행 기록 저장</button>
+            <button class="button secondary" id="exportReceiptButton" type="button" disabled>실행 영수증 내보내기</button>
+            <button class="button secondary" id="sendEvolutionButton" type="button" disabled>Evolution으로 보내기</button>
+          </div>
+        </div>
+      </section>
+
+      <aside class="panel">
+        <div class="panel-header">
+          <h2 class="panel-title">Review Gate</h2>
+        </div>
+        <div class="panel-body">
+          <div class="alert amber" id="gateStatus">실행 전입니다. 이 화면은 proof나 성공률을 만들지 않습니다.</div>
+          <ul class="check-list" id="checkList"></ul>
+          <div>
+            <h3 class="panel-title">Local Run History</h3>
+            <p class="hint">원문 입력과 결과문은 저장하지 않고 길이, 상태, 시간만 저장합니다.</p>
+          </div>
+          <ul class="history-list" id="historyList"></ul>
+        </div>
+      </aside>
+    </section>
+  </main>
+
+  <script>
+    const RUNNER_STORAGE_KEY = "agent-platform-manual-runner-v0-1";
+    const RUNNER_HANDOFF_STORAGE_KEY = "agent-platform-runner-handoff-v0-1";
+    const EVOLUTION_HANDOFF_STORAGE_KEY = "agent-platform-evolution-handoff-v0-1";
+    const REQUIRED_FILES = [
+      "agent.json",
+      "agent_card.json",
+      "instructions.md",
+      "run_local.md",
+      "legal_notice.md",
+      "preflight_report.json",
+      "marketplace_review.json",
+      "manifest.json",
+    ];
+
+    const packInput = document.getElementById("packInput");
+    const loadHandoffButton = document.getElementById("loadHandoffButton");
+    const clearButton = document.getElementById("clearButton");
+    const buildPromptButton = document.getElementById("buildPromptButton");
+    const copyPromptButton = document.getElementById("copyPromptButton");
+    const reviewButton = document.getElementById("reviewButton");
+    const saveRunButton = document.getElementById("saveRunButton");
+    const exportReceiptButton = document.getElementById("exportReceiptButton");
+    const completeRunButton = document.getElementById("completeRunButton");
+    const sendEvolutionButton = document.getElementById("sendEvolutionButton");
+    const taskInput = document.getElementById("taskInput");
+    const resultInput = document.getElementById("resultInput");
+    const promptOutput = document.getElementById("promptOutput");
+    const loadStatus = document.getElementById("loadStatus");
+    const handoffSummary = document.getElementById("handoffSummary");
+    const gateStatus = document.getElementById("gateStatus");
+    const packSummary = document.getElementById("packSummary");
+    const checkList = document.getElementById("checkList");
+    const historyList = document.getElementById("historyList");
+    const evidenceStatus = document.getElementById("evidenceStatus");
+
+    let currentBundle = null;
+    let currentValidation = null;
+    let currentLoadSource = null;
+
+    function escapeHtml(value) {
+      return String(value)
+        .replaceAll("&", "&amp;")
+        .replaceAll("<", "&lt;")
+        .replaceAll(">", "&gt;")
+        .replaceAll('"', "&quot;")
+        .replaceAll("'", "&#039;");
+    }
+
+    function filesOf(bundle) {
+      return bundle && typeof bundle === "object" && bundle.files && typeof bundle.files === "object"
+        ? bundle.files
+        : {};
+    }
+
+    function validateBundle(bundle) {
+      const errors = [];
+      const warnings = [];
+      const files = filesOf(bundle);
+      const agent = files["agent.json"];
+      const card = files["agent_card.json"];
+      const manifest = files["manifest.json"];
+      const preflight = files["preflight_report.json"];
+      const marketplace = files["marketplace_review.json"];
+
+      if (!bundle || typeof bundle !== "object") errors.push("bundle 객체가 아닙니다.");
+      if (bundle && bundle.bundle_schema !== "agent_pack_bundle_v0_1") errors.push("bundle_schema가 agent_pack_bundle_v0_1이 아닙니다.");
+      if (bundle && bundle.package_kind !== "agent_pack_bundle") errors.push("package_kind가 agent_pack_bundle이 아닙니다.");
+      for (const name of REQUIRED_FILES) {
+        if (!(name in files)) errors.push(`${name} 파일이 없습니다.`);
+      }
+      if (!agent || typeof agent !== "object") errors.push("agent.json이 객체가 아닙니다.");
+      if (!card || typeof card !== "object") errors.push("agent_card.json이 객체가 아닙니다.");
+      if (!manifest || typeof manifest !== "object") errors.push("manifest.json이 객체가 아닙니다.");
+      if (!preflight || typeof preflight !== "object") errors.push("preflight_report.json이 객체가 아닙니다.");
+      if (!marketplace || typeof marketplace !== "object") errors.push("marketplace_review.json이 객체가 아닙니다.");
+
+      if (agent && manifest && agent.agent_id !== manifest.agent_id) errors.push("agent_id가 일치하지 않습니다.");
+      if (agent && card && agent.agent_id !== card.agent_id) errors.push("agent_card agent_id가 일치하지 않습니다.");
+      if (agent && agent.runtime && agent.runtime.cambrian_required !== false) errors.push("cambrian_required는 false여야 합니다.");
+      if (agent && agent.data_policy && agent.data_policy.secret_collection !== "forbidden_by_default") errors.push("secret_collection은 forbidden_by_default여야 합니다.");
+      if (manifest && manifest.evidence_status !== "no_runtime_evidence") errors.push("evidence_status는 no_runtime_evidence여야 합니다.");
+      if (manifest && manifest.marketplace && manifest.marketplace.sale_ready !== false) errors.push("sale_ready는 false여야 합니다.");
+      if (manifest && manifest.marketplace && manifest.marketplace.proof_claim_allowed !== false) errors.push("proof_claim_allowed는 false여야 합니다.");
+      if (card && card.card_kind !== "private_agent_card") errors.push("agent_card는 private_agent_card여야 합니다.");
+      if (marketplace && marketplace.status !== "not_ready") errors.push("marketplace_review status는 not_ready여야 합니다.");
+      if (marketplace && marketplace.sale_ready !== false) errors.push("marketplace_review sale_ready는 false여야 합니다.");
+      if (marketplace && marketplace.proof_claim_allowed !== false) errors.push("marketplace_review proof_claim_allowed는 false여야 합니다.");
+
+      const blocked = Boolean(bundle && bundle.riskReport && Array.isArray(bundle.riskReport.blocks) && bundle.riskReport.blocks.length);
+      if (blocked) warnings.push("Red 위험 항목이 있어 실행 프롬프트 생성을 막았습니다.");
+      const expectedStatus = blocked ? "blocked" : "pass";
+      if (preflight && preflight.status !== expectedStatus) errors.push("preflight status가 위험 차단 상태와 일치하지 않습니다.");
+
+      return {
+        ok: errors.length === 0 && !blocked,
+        status: errors.length ? "fail" : expectedStatus,
+        errors,
+        warnings,
+      };
+    }
+
+    function validateBuilderHandoff(handoff) {
+      const errors = [];
+      const warnings = [];
+
+      if (!handoff || typeof handoff !== "object") {
+        errors.push("Builder handoff 객체가 아닙니다.");
+      }
+      if (handoff && handoff.handoff_schema !== "agent_platform_runner_handoff_v0_1") {
+        errors.push("handoff_schema가 agent_platform_runner_handoff_v0_1이 아닙니다.");
+      }
+      const allowedHandoffKinds = ["builder_to_manual_runner", "private_download_hub_to_manual_runner"];
+      if (handoff && !allowedHandoffKinds.includes(handoff.handoff_kind)) {
+        errors.push("handoff_kind가 builder_to_manual_runner 또는 private_download_hub_to_manual_runner가 아닙니다.");
+      }
+      if (handoff && (!handoff.storage_policy || handoff.storage_policy.single_use !== true)) {
+        errors.push("Builder handoff는 single_use: true여야 합니다.");
+      }
+      if (handoff && handoff.storage_policy && handoff.storage_policy.server_sync !== false) {
+        errors.push("Builder handoff는 server_sync: false여야 합니다.");
+      }
+      if (handoff && handoff.storage_policy && handoff.storage_policy.sends_to_cambrian_runtime !== false) {
+        errors.push("Builder handoff는 Cambrian Runtime으로 전송될 수 없습니다.");
+      }
+      if (handoff && (!handoff.privacy || handoff.privacy.api_key_collected !== false)) {
+        errors.push("Builder handoff는 api_key_collected: false여야 합니다.");
+      }
+      if (handoff && handoff.privacy && handoff.privacy.stores_raw_inputs !== false) {
+        errors.push("Builder handoff는 원문 입력을 저장할 수 없습니다.");
+      }
+      if (handoff && handoff.privacy && handoff.privacy.stores_secrets !== false) {
+        errors.push("Builder handoff는 secret을 저장할 수 없습니다.");
+      }
+      if (handoff && (!handoff.proof_boundary || handoff.proof_boundary.evidence_status !== "no_runtime_evidence")) {
+        errors.push("Builder handoff는 no_runtime_evidence 경계를 유지해야 합니다.");
+      }
+      if (handoff && handoff.proof_boundary && handoff.proof_boundary.proof_claim_allowed !== false) {
+        errors.push("Builder handoff는 proof_claim_allowed: false여야 합니다.");
+      }
+      if (handoff && handoff.proof_boundary && handoff.proof_boundary.success_rate_claim_allowed !== false) {
+        errors.push("Builder handoff는 success_rate_claim_allowed: false여야 합니다.");
+      }
+      if (handoff && handoff.proof_boundary && handoff.proof_boundary.marketplace_sale_ready !== false) {
+        errors.push("Builder handoff는 marketplace_sale_ready: false여야 합니다.");
+      }
+      if (handoff && (!handoff.bundle || typeof handoff.bundle !== "object")) {
+        errors.push("Builder handoff에 bundle 객체가 없습니다.");
+      }
+
+      const bundleValidation = handoff && handoff.bundle && typeof handoff.bundle === "object"
+        ? validateBundle(handoff.bundle)
+        : { ok: false, status: "fail", errors: [], warnings: [] };
+
+      return {
+        ok: errors.length === 0 && bundleValidation.ok,
+        status: errors.length ? "fail" : bundleValidation.status,
+        errors: [...errors, ...bundleValidation.errors],
+        warnings: [...warnings, ...bundleValidation.warnings],
+        bundleValidation,
+      };
+    }
+
+    function runnerSourceLabel() {
+      return currentLoadSource && currentLoadSource.label
+        ? currentLoadSource.label
+        : ".agent-pack.json";
+    }
+
+    function runnerNextStepText() {
+      return "다음: 작업 입력을 붙이고 실행 프롬프트 생성을 누르세요.";
+    }
+
+    function clearHandoffSummary() {
+      handoffSummary.hidden = true;
+      handoffSummary.innerHTML = "";
+    }
+
+    function renderHandoffSummary(handoff, sourceLabel) {
+      const storage = handoff.storage_policy || {};
+      const privacy = handoff.privacy || {};
+      const proof = handoff.proof_boundary || {};
+      const bundle = handoff.bundle || {};
+      const manifest = filesOf(bundle)["manifest.json"] || {};
+      const promotion = bundle.promotion_metadata || {};
+      handoffSummary.hidden = false;
+      handoffSummary.innerHTML = `
+        <strong>${escapeHtml(sourceLabel)} 검증 요약</strong>
+        <ul class="summary-list">
+          <li><strong>handoff kind</strong><span class="meta">${escapeHtml(handoff.handoff_kind || "unknown")}</span></li>
+          <li><strong>single use</strong><span class="meta">${escapeHtml(String(storage.single_use))}</span></li>
+          <li><strong>server sync</strong><span class="meta">${escapeHtml(String(storage.server_sync))}</span></li>
+          <li><strong>runtime send</strong><span class="meta">${escapeHtml(String(storage.sends_to_cambrian_runtime))}</span></li>
+          <li><strong>privacy</strong><span class="meta">api key ${escapeHtml(String(privacy.api_key_collected))} · secrets ${escapeHtml(String(privacy.stores_secrets))}</span></li>
+          <li><strong>proof</strong><span class="meta">${escapeHtml(`${proof.evidence_status || manifest.evidence_status || "unknown"} / claim ${String(proof.proof_claim_allowed)}`)}</span></li>
+          <li><strong>lifecycle</strong><span class="meta">${escapeHtml(promotion.promotion_status || "builder_draft")}</span></li>
+          <li><strong>sale ready</strong><span class="meta">${escapeHtml(String(proof.marketplace_sale_ready))}</span></li>
+        </ul>
+      `;
+    }
+
+    function packLifecycleLabel(bundle) {
+      if (bundle && bundle.promotion_metadata) return "promoted_private_version";
+      if (bundle && bundle.candidate_metadata) return "candidate_not_applied";
+      return "builder_private_draft";
+    }
+
+    function renderFilePackSummary(bundle, validation, fileLabel) {
+      const files = filesOf(bundle);
+      const agent = files["agent.json"] || {};
+      const manifest = files["manifest.json"] || {};
+      const marketplace = files["marketplace_review.json"] || {};
+      const dataPolicy = agent.data_policy || {};
+      const runtime = agent.runtime || manifest.runtime || {};
+      const status = validation && validation.status ? validation.status : "unknown";
+
+      handoffSummary.hidden = false;
+      handoffSummary.innerHTML = `
+        <strong>Agent pack 파일 검증 요약</strong>
+        <ul class="summary-list">
+          <li><strong>file source</strong><span class="meta">${escapeHtml(fileLabel || ".agent-pack.json 파일")}</span></li>
+          <li><strong>client preflight</strong><span class="meta">${escapeHtml(status)}</span></li>
+          <li><strong>runner mode</strong><span class="meta">manual_no_api</span></li>
+          <li><strong>generated_by</strong><span class="meta">${escapeHtml(bundle.generated_by || "unknown")}</span></li>
+          <li><strong>lifecycle</strong><span class="meta">${escapeHtml(packLifecycleLabel(bundle))}</span></li>
+          <li><strong>runtime</strong><span class="meta">cambrian_required ${escapeHtml(String(runtime.cambrian_required))}</span></li>
+          <li><strong>visibility</strong><span class="meta">${escapeHtml(dataPolicy.default_visibility || marketplace.listing_visibility || "private")}</span></li>
+          <li><strong>secret collection</strong><span class="meta">${escapeHtml(dataPolicy.secret_collection || "unknown")}</span></li>
+          <li><strong>api key</strong><span class="meta">false</span></li>
+          <li><strong>evidence</strong><span class="meta">${escapeHtml(manifest.evidence_status || "unknown")}</span></li>
+          <li><strong>proof false</strong><span class="meta">${escapeHtml(String((manifest.marketplace || {}).proof_claim_allowed))}</span></li>
+          <li><strong>sale false</strong><span class="meta">${escapeHtml(String((manifest.marketplace || {}).sale_ready))}</span></li>
+        </ul>
+      `;
+    }
+
+    function loadBuilderHandoff(options = {}) {
+      const auto = Boolean(options.auto);
+
+      try {
+        const raw = localStorage.getItem(RUNNER_HANDOFF_STORAGE_KEY);
+        if (!raw) {
+          if (!auto) {
+            loadStatus.className = "alert amber";
+            loadStatus.textContent = "불러올 Builder handoff가 없습니다. Builder에서 Local Runner로 보내기를 먼저 누르세요.";
+          }
+          clearHandoffSummary();
+          return false;
+        }
+
+        const handoff = JSON.parse(raw);
+        const handoffValidation = validateBuilderHandoff(handoff);
+        const sourceLabel = handoff && handoff.handoff_kind === "private_download_hub_to_manual_runner"
+          ? "Private Download Hub handoff"
+          : "Builder handoff";
+        if (!handoffValidation.errors.length && handoff.bundle) {
+          currentBundle = handoff.bundle;
+          currentValidation = handoffValidation.bundleValidation;
+          currentLoadSource = { kind: "handoff", label: sourceLabel };
+          promptOutput.value = "";
+          checkList.innerHTML = "";
+          localStorage.removeItem(RUNNER_HANDOFF_STORAGE_KEY);
+          renderPack();
+          renderHandoffSummary(handoff, sourceLabel);
+          loadStatus.className = currentValidation.ok ? "alert green" : "alert red";
+          loadStatus.textContent = currentValidation.ok
+            ? `${sourceLabel}를 불러왔습니다. handoff는 localStorage에서 제거했습니다. ${runnerNextStepText()}`
+            : `${sourceLabel} bundle 검증 실패: ${[...currentValidation.errors, ...currentValidation.warnings].join(" / ")}`;
+          return currentValidation.ok;
+        }
+
+        currentBundle = null;
+        currentLoadSource = { kind: "handoff", label: sourceLabel };
+        currentValidation = {
+          ok: false,
+          status: "fail",
+          errors: handoffValidation.errors,
+          warnings: handoffValidation.warnings,
+        };
+        clearHandoffSummary();
+        renderPack();
+        loadStatus.className = "alert red";
+        loadStatus.textContent = `${sourceLabel} 검증 실패: ${[...handoffValidation.errors, ...handoffValidation.warnings].join(" / ")}`;
+      } catch (error) {
+        console.error("Builder handoff 로드 실패", error);
+        currentBundle = null;
+        currentLoadSource = { kind: "handoff", label: "Builder handoff" };
+        currentValidation = { ok: false, status: "fail", errors: ["Builder handoff JSON을 읽지 못했습니다."], warnings: [] };
+        clearHandoffSummary();
+        renderPack();
+        loadStatus.className = "alert red";
+        loadStatus.textContent = "Builder handoff JSON을 읽지 못했습니다. Builder에서 다시 보내거나 .agent-pack.json을 직접 여세요.";
+      }
+
+      return false;
+    }
+
+    function renderPack() {
+      const files = filesOf(currentBundle);
+      const agent = files["agent.json"] || {};
+      const manifest = files["manifest.json"] || {};
+      const marketplace = files["marketplace_review.json"] || {};
+      const validation = currentValidation || { status: "empty", errors: [], warnings: [] };
+      const badgeClass = validation.status === "pass" ? "green" : validation.status === "blocked" ? "amber" : "red";
+      const validationMessages = [...(validation.errors || []), ...(validation.warnings || [])];
+      const hasLoadError = !currentBundle && validation.status === "fail" && validationMessages.length;
+
+      evidenceStatus.textContent = manifest.evidence_status || "no_runtime_evidence";
+      loadStatus.className = `alert ${badgeClass}`;
+      loadStatus.textContent = currentBundle
+        ? `${runnerSourceLabel()} · client preflight: ${validation.status}. ${runnerNextStepText()}`
+        : hasLoadError
+          ? `파일 로드 실패: ${validationMessages.join(" / ")}`
+          : "패키지를 불러오면 브라우저 안에서 client preflight를 먼저 확인합니다.";
+
+      packSummary.innerHTML = currentBundle ? [
+        ["source", runnerSourceLabel()],
+        ["agent", `${agent.name || "이름 없음"} (${agent.agent_id || "unknown"})`],
+        ["risk", `${agent.risk_level || "unknown"} / ${validation.status}`],
+        ["runtime", `cambrian_required: ${String((agent.runtime || {}).cambrian_required)}`],
+        ["evidence", manifest.evidence_status || "unknown"],
+        ["marketplace", `${marketplace.status || "unknown"} / sale_ready: ${String(marketplace.sale_ready)}`],
+        ["next", "작업 입력 → 실행 프롬프트 생성 → AI 결과 붙여넣기 → 검토 완료 + 영수증"],
+      ].map(([label, value]) => `<li><strong>${escapeHtml(label)}</strong><span class="meta">${escapeHtml(value)}</span></li>`).join("") : "";
+
+      buildPromptButton.disabled = !currentBundle || !validation.ok;
+      completeRunButton.disabled = !currentBundle || !validation.ok;
+      reviewButton.disabled = !currentBundle || !validation.ok;
+      saveRunButton.disabled = !currentBundle || !validation.ok;
+      exportReceiptButton.disabled = !currentBundle || !validation.ok;
+      sendEvolutionButton.disabled = !currentBundle || !validation.ok;
+      copyPromptButton.disabled = !promptOutput.value.trim();
+
+      if (!currentBundle) {
+        gateStatus.className = hasLoadError ? "alert red" : "alert amber";
+        gateStatus.textContent = hasLoadError
+          ? validationMessages.join(" / ")
+          : "실행 전입니다. 이 화면은 proof나 성공률을 만들지 않습니다.";
+      } else if (validation.ok) {
+        gateStatus.className = "alert green";
+        gateStatus.textContent = "수동 실행 가능 상태입니다. 결과는 사용자가 직접 검증해야 하며 proof로 승격되지 않습니다.";
+      } else {
+        gateStatus.className = "alert red";
+        gateStatus.textContent = [...validation.errors, ...validation.warnings].join(" / ") || "패키지 검증에 실패했습니다.";
+      }
+    }
+
+    function buildManualPrompt() {
+      const files = filesOf(currentBundle);
+      const agent = files["agent.json"];
+      const instructions = files["instructions.md"];
+      const criteria = Array.isArray(agent.validation_criteria) ? agent.validation_criteria : [];
+      const forbidden = Array.isArray(agent.forbidden_actions) ? agent.forbidden_actions : [];
+      const outputs = contractOutputs(agent);
+      const userTask = taskInput.value.trim();
+
+      if (!currentValidation || !currentValidation.ok) {
+        gateStatus.className = "alert red";
+        gateStatus.textContent = "검증을 통과한 패키지만 실행 프롬프트를 만들 수 있습니다.";
+        return "";
+      }
+      if (!userTask) {
+        gateStatus.className = "alert amber";
+        gateStatus.textContent = "작업 입력을 먼저 넣어야 합니다.";
+        return "";
+      }
+
+      return [
+        `너는 '${agent.name}' 에이전트다.`,
+        "",
+        "[Agent Contract]",
+        `agent_id: ${agent.agent_id}`,
+        `risk_level: ${agent.risk_level}`,
+        "runner_mode: manual_no_api",
+        "cambrian_required: false",
+        "evidence_status: no_runtime_evidence",
+        "proof_claim_allowed: false",
+        "secret_collection: forbidden_by_default",
+        `outputs: ${outputs.join(", ")}`,
+        "",
+        "[Instructions]",
+        instructions,
+        "",
+        "[금지 행동]",
+        forbidden.map((item) => `- ${item}`).join("\n") || "- 비밀번호, 토큰, 결제 정보 요청",
+        "",
+        "[사용자 입력]",
+        userTask,
+        "",
+        "[출력 요구]",
+        `- 계약 출력 형식: ${outputs.join(", ")}`,
+        "- 결과와 추정을 구분한다.",
+        "- 사용자가 직접 확인해야 하는 항목을 표시한다.",
+        "- 아래 validation_criteria를 기준으로 자가 검증 섹션을 붙인다.",
+        criteria.map((item) => `- ${item}`).join("\n"),
+        "",
+        "[중요]",
+        "이 실행은 실제 성능 proof가 아니다. 성공률, 검증된 성능, 판매 가능 상태를 주장하지 않는다.",
+      ].join("\n");
+    }
+
+    function contractOutputs(agent) {
+      return Array.isArray(agent && agent.outputs) && agent.outputs.length
+        ? agent.outputs
+        : ["markdown_summary"];
+    }
+
+    function contractOutputReviewCriteria(agent) {
+      return contractOutputs(agent).map((output) => `계약 출력 형식(${output})을 결과가 지켰는지 확인`);
+    }
+
+    function manualReviewCriteria(agent) {
+      const criteria = Array.isArray(agent && agent.validation_criteria) ? agent.validation_criteria : [];
+      const items = [...contractOutputReviewCriteria(agent), ...criteria];
+      return items.length ? items : ["결과가 사용자 입력 범위 안에서 작성되었는지 확인"];
+    }
+
+    function formatSignalForOutput(output, text) {
+      const value = String(text || "").trim();
+      const lines = value.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
+      const detectors = {
+        markdown_summary: () => lines.some((line) => /^#{1,6}\s+\S/.test(line)) || lines.some((line) => /^[-*]\s+\S/.test(line)),
+        meeting_minutes: () => /(회의록|결정 사항|논의 사항|담당자)/.test(value),
+        email_draft: () => /(제목:|안녕하세요|감사합니다)/.test(value),
+        table: () => lines.some((line) => /^\|.+\|$/.test(line)) && lines.some((line) => /^\|?\s*:?-{3,}:?\s*(\|\s*:?-{3,}:?\s*)+\|?$/.test(line)),
+        checklist: () => lines.some((line) => /^[-*]\s+\[[ xX]\]\s+\S/.test(line)) || lines.some((line) => /^[-*]\s+\S/.test(line)),
+      };
+      const found = detectors[output] ? detectors[output]() : value.length > 0;
+      return {
+        output,
+        found,
+        label: found ? `형식 신호 감지: ${output}` : `형식 신호 부족: ${output}`,
+      };
+    }
+
+    function manualReviewMeta(item, hasResult, resultText) {
+      if (!hasResult) return "AI 결과를 붙여 넣은 뒤 확인";
+      const match = /^계약 출력 형식\(([^)]+)\)/.exec(item);
+      if (!match) return "사용자 직접 확인 필요";
+      const signal = formatSignalForOutput(match[1], resultText);
+      return signal.found
+        ? `${signal.label} · proof 아님, 사용자 확인 필요`
+        : `${signal.label} · 결과 형식을 직접 확인`;
+    }
+
+    function formatSignalSummary(agent, resultText) {
+      const outputs = contractOutputs(agent);
+      const signals = outputs.map((output) => formatSignalForOutput(output, resultText));
+      const found = signals.filter((signal) => signal.found).length;
+      const missing = signals.filter((signal) => !signal.found).map((signal) => signal.output);
+      return {
+        total: signals.length,
+        found,
+        missing,
+      };
+    }
+
+    function formatSignalSummaryText(agent, hasResult, resultText) {
+      if (!hasResult) {
+        return "AI 결과를 붙여 넣으면 계약 출력 형식 신호를 함께 확인합니다.";
+      }
+      const summary = formatSignalSummary(agent, resultText);
+      if (!summary.total) {
+        return "계약 출력 형식이 없어 일반 수동 검토만 진행합니다.";
+      }
+      if (!summary.missing.length) {
+        return `형식 신호 ${summary.found}/${summary.total} 감지. proof가 아니라 수동 검토 보조입니다.`;
+      }
+      return `형식 신호 ${summary.found}/${summary.total} 감지, 부족: ${summary.missing.join(", ")}. 결과 형식을 직접 확인하세요.`;
+    }
+
+    function renderReviewChecklist() {
+      const files = filesOf(currentBundle);
+      const agent = files["agent.json"] || {};
+      const resultText = resultInput.value.trim();
+      const hasResult = resultText.length > 0;
+      const items = manualReviewCriteria(agent);
+
+      checkList.innerHTML = items.map((item, index) => `
+        <li>
+          <span class="badge amber">manual_check_${index + 1}</span>
+          <strong>${escapeHtml(item)}</strong>
+          <span class="meta">${escapeHtml(manualReviewMeta(item, hasResult, resultText))}</span>
+        </li>
+      `).join("");
+      gateStatus.className = "alert amber";
+      gateStatus.textContent = formatSignalSummaryText(agent, hasResult, resultText);
+    }
+
+    function buildManualRunReceipt() {
+      if (!currentBundle || !currentValidation || !currentValidation.ok) return null;
+
+      const files = filesOf(currentBundle);
+      const agent = files["agent.json"] || {};
+      const manifest = files["manifest.json"] || {};
+      const card = files["agent_card.json"] || {};
+      const marketplace = files["marketplace_review.json"] || {};
+      const criteria = manualReviewCriteria(agent);
+      const hasPrompt = promptOutput.value.trim().length > 0;
+      const hasResult = resultInput.value.trim().length > 0;
+
+      return {
+        "$schema": "https://cambrian.local/schemas/manual_run_receipt_v0_1.schema.json",
+        schema_version: "0.1",
+        receipt_kind: "manual_run_receipt_v0_1",
+        runner_mode: "manual_no_api",
+        generated_by: "web/runner/index.html",
+        generated_at: new Date().toISOString(),
+        agent_id: agent.agent_id || "unknown",
+        agent_name: agent.name || "unknown",
+        source_bundle: {
+          bundle_schema: currentBundle.bundle_schema || "unknown",
+          package_kind: currentBundle.package_kind || "unknown",
+          evidence_status: manifest.evidence_status || "no_runtime_evidence",
+          preflight_status: currentValidation.status,
+          card_kind: card.card_kind || "unknown",
+          marketplace_review_status: marketplace.status || "unknown",
+        },
+        run_status: "manual_review_only",
+        prompt_status: hasPrompt ? "prompt_generated" : "prompt_not_generated",
+        result_status: hasResult ? "result_pasted_for_manual_review" : "result_not_recorded",
+        input_summary: {
+          input_length: taskInput.value.length,
+          stores_raw_input: false,
+        },
+        output_summary: {
+          output_length: resultInput.value.length,
+          stores_raw_output: false,
+        },
+        manual_checks: criteria.map((item, index) => ({
+          id: `manual_check_${index + 1}`,
+          criterion: item,
+          status: "user_review_required",
+        })),
+        privacy: {
+          stores_raw_inputs: false,
+          stores_raw_outputs: false,
+          stores_secrets: false,
+          api_key_collected: false,
+        },
+        proof_boundary: {
+          evidence_status: "no_runtime_evidence",
+          proof_claim_allowed: false,
+          success_rate_claim_allowed: false,
+          marketplace_sale_ready: false,
+        },
+        evolution_signal: {
+          eligible_for_suggestion: hasResult,
+          source: "manual_review_receipt",
+          requires_user_approval: true,
+        },
+      };
+    }
+
+    function buildEvolutionRecommendations(agent, receipt) {
+      const criteria = Array.isArray(agent.validation_criteria) ? agent.validation_criteria : [];
+      const manualChecks = Array.isArray(receipt.manual_checks) ? receipt.manual_checks : [];
+      const outputLength = Number((receipt.output_summary || {}).output_length || 0);
+      const formatSummary = formatSignalSummary(agent, resultInput.value);
+      const recommendations = [
+        {
+          id: "evo_1",
+          title: "수동 검증 체크리스트를 출력 말미에 고정",
+          target: "instructions.md",
+          rationale: `receipt에 ${manualChecks.length}개의 manual check가 있으며 모두 사용자 검토가 필요합니다.`,
+          proposed_change: "결과 마지막에 validation_criteria 기반의 사용자 확인 체크리스트를 항상 붙이도록 instructions.md를 강화합니다.",
+          risk_level: "low",
+          acceptance_criteria: [
+            "출력 끝에 사용자 확인 체크리스트가 포함된다.",
+            "체크리스트가 proof나 성공률로 표현되지 않는다.",
+          ],
+          status: "suggested",
+        },
+        {
+          id: "evo_2",
+          title: "known limits에 manual_no_api 한계 추가",
+          target: "agent.json.known_limits",
+          rationale: "manual_no_api 실행은 원문 저장 없는 수동 검토 메타데이터만 남기므로 proof가 아닙니다.",
+          proposed_change: "manual_no_api 결과는 proof가 아니며 사용자가 직접 검토해야 한다는 known limit을 추가합니다.",
+          risk_level: "low",
+          acceptance_criteria: [
+            "known_limits에 수동 실행 한계가 명시된다.",
+            "marketplace_sale_ready가 false로 유지된다.",
+          ],
+          status: "suggested",
+        },
+      ];
+
+      if (receipt.result_status === "result_pasted_for_manual_review" && outputLength > 0 && formatSummary.missing.length) {
+        recommendations.push({
+          id: `evo_${recommendations.length + 1}`,
+          title: "계약 출력 형식 신호를 instructions에 고정",
+          target: "instructions.md",
+          rationale: `manual_no_api 결과에서 계약 출력 형식 신호가 ${formatSummary.found}/${formatSummary.total}만 감지됐고 부족 형식은 ${formatSummary.missing.join(", ")}입니다.`,
+          proposed_change: `instructions.md에 ${formatSummary.missing.join(", ")} 출력 형식을 시작 구조와 예시로 고정하고, 형식이 맞지 않으면 사용자 확인 필요를 표시하도록 강화합니다. 원문 결과를 저장하지 않고 수동 검토 메타데이터만 사용합니다.`,
+          risk_level: "medium",
+          acceptance_criteria: [
+            "출력 첫 섹션이 계약 출력 형식과 일치한다.",
+            "형식 신호가 부족한 경우에도 proof나 성공률로 표현하지 않는다.",
+            "원문 결과를 저장하지 않고 수동 검토 메타데이터만 사용한다.",
+          ],
+          status: "suggested",
+        });
+      }
+
+      if (criteria.length && receipt.result_status === "result_pasted_for_manual_review" && outputLength > 0) {
+        recommendations.push({
+          id: `evo_${recommendations.length + 1}`,
+          title: "검증 기준을 더 측정 가능한 문장으로 정리",
+          target: "agent.json.validation_criteria",
+          rationale: "receipt에 실제 결과 길이와 수동 검토 기준이 있어 다음 버전에서 검증 문장을 더 명확히 만들 수 있습니다.",
+          proposed_change: "각 validation_criteria를 사용자가 예/아니오로 확인할 수 있는 문장으로 다듬는 초안을 만듭니다.",
+          risk_level: "medium",
+          acceptance_criteria: [
+            "각 검증 기준이 단일 판단 문장으로 유지된다.",
+            "의료, 법률, 투자, 채용 판단으로 범위가 넓어지지 않는다.",
+          ],
+          status: "suggested",
+        });
+      }
+
+      return recommendations;
+    }
+
+    function buildEvolutionSuggestionDraft() {
+      const receipt = buildManualRunReceipt();
+      if (!receipt) return null;
+
+      const files = filesOf(currentBundle);
+      const agent = files["agent.json"] || {};
+      const evolutionSignal = receipt.evolution_signal || {};
+      return {
+        "$schema": "https://cambrian.local/schemas/evolution_suggestion_v0_1.schema.json",
+        schema_version: "0.1",
+        suggestion_kind: "evolution_suggestion_v0_1",
+        generated_by: "web/runner/index.html",
+        generated_at: new Date().toISOString(),
+        source_agent: {
+          agent_id: agent.agent_id || "unknown",
+          agent_name: agent.name || "unknown",
+          bundle_schema: currentBundle.bundle_schema || "agent_pack_bundle_v0_1",
+          risk_level: agent.risk_level || "green",
+        },
+        source_receipt: {
+          receipt_kind: receipt.receipt_kind,
+          runner_mode: receipt.runner_mode,
+          run_status: receipt.run_status,
+          result_status: receipt.result_status,
+          input_length: receipt.input_summary.input_length,
+          output_length: receipt.output_summary.output_length,
+          manual_check_count: receipt.manual_checks.length,
+          eligible_for_suggestion: evolutionSignal.eligible_for_suggestion === true,
+          requires_user_approval: evolutionSignal.requires_user_approval === true,
+        },
+        proposal_status: "draft_requires_user_approval",
+        approval_gate: {
+          requires_user_approval: true,
+          auto_apply: false,
+          auto_promote: false,
+          can_create_new_version: false,
+        },
+        proof_boundary: {
+          uses_runtime_evidence: false,
+          proof_claim_allowed: false,
+          success_rate_claim_allowed: false,
+          marketplace_sale_ready: false,
+        },
+        privacy: {
+          stores_raw_inputs: false,
+          stores_raw_outputs: false,
+          stores_secrets: false,
+          uses_only_receipt_metadata: true,
+        },
+        recommendations: buildEvolutionRecommendations(agent, receipt),
+        rollback: {
+          required_before_apply: true,
+          strategy: "save_previous_agent_pack_before_new_version",
+        },
+      };
+    }
+
+    function validateEvolutionSuggestionDraft(suggestion) {
+      const errors = [];
+      const sourceReceipt = suggestion && typeof suggestion.source_receipt === "object" ? suggestion.source_receipt : {};
+      const approvalGate = suggestion && typeof suggestion.approval_gate === "object" ? suggestion.approval_gate : {};
+      const proofBoundary = suggestion && typeof suggestion.proof_boundary === "object" ? suggestion.proof_boundary : {};
+      const privacy = suggestion && typeof suggestion.privacy === "object" ? suggestion.privacy : {};
+
+      if (!suggestion || typeof suggestion !== "object") errors.push("suggestion 객체가 아닙니다.");
+      if (suggestion && suggestion.suggestion_kind !== "evolution_suggestion_v0_1") errors.push("suggestion_kind가 evolution_suggestion_v0_1이 아닙니다.");
+      if (suggestion && suggestion.generated_by !== "web/runner/index.html") errors.push("Runner handoff suggestion은 web/runner/index.html에서 생성되어야 합니다.");
+      if (suggestion && suggestion.proposal_status !== "draft_requires_user_approval") errors.push("proposal_status는 draft_requires_user_approval이어야 합니다.");
+      if (sourceReceipt.eligible_for_suggestion !== true) errors.push("AI 결과를 붙여 넣은 receipt만 evolution suggestion으로 보낼 수 있습니다.");
+      if (sourceReceipt.requires_user_approval !== true) errors.push("source_receipt.requires_user_approval은 true여야 합니다.");
+      if (approvalGate.auto_apply !== false || approvalGate.auto_promote !== false || approvalGate.can_create_new_version !== false) {
+        errors.push("진화 제안은 자동 적용, 자동 승격, 자동 버전 생성을 허용하지 않아야 합니다.");
+      }
+      if (proofBoundary.proof_claim_allowed !== false || proofBoundary.success_rate_claim_allowed !== false || proofBoundary.marketplace_sale_ready !== false) {
+        errors.push("진화 제안은 proof, 성공률, 판매 준비 상태를 주장할 수 없습니다.");
+      }
+      if (privacy.stores_raw_inputs !== false || privacy.stores_raw_outputs !== false || privacy.stores_secrets !== false || privacy.uses_only_receipt_metadata !== true) {
+        errors.push("진화 제안은 receipt 메타데이터만 사용하고 원문과 secret을 저장하지 않아야 합니다.");
+      }
+      if (!Array.isArray(suggestion && suggestion.recommendations) || !suggestion.recommendations.length) errors.push("recommendations가 없습니다.");
+
+      return { ok: errors.length === 0, status: errors.length ? "fail" : "pass", errors };
+    }
+
+    function sendEvolutionHandoff() {
+      const suggestion = buildEvolutionSuggestionDraft();
+      const validation = validateEvolutionSuggestionDraft(suggestion);
+      if (!validation.ok) {
+        gateStatus.className = "alert red";
+        gateStatus.textContent = validation.errors.join(" / ");
+        return;
+      }
+
+      const handoff = {
+        handoff_schema: "agent_platform_evolution_handoff_v0_1",
+        handoff_kind: "manual_runner_to_evolution_review",
+        generated_by: "web/runner/index.html",
+        generated_at: new Date().toISOString(),
+        storage_policy: {
+          storage: "localStorage",
+          single_use: true,
+          server_sync: false,
+          sends_to_cambrian_runtime: false,
+        },
+        privacy: {
+          stores_raw_inputs: false,
+          stores_raw_outputs: false,
+          stores_secrets: false,
+          api_key_collected: false,
+          uses_only_receipt_metadata: true,
+        },
+        proof_boundary: {
+          evidence_status: "no_runtime_evidence",
+          proof_claim_allowed: false,
+          success_rate_claim_allowed: false,
+          marketplace_sale_ready: false,
+        },
+        source_bundle: currentBundle,
+        suggestion,
+      };
+
+      try {
+        localStorage.setItem(EVOLUTION_HANDOFF_STORAGE_KEY, JSON.stringify(handoff));
+        window.location.href = "../evolution/index.html?handoff=runner";
+      } catch (error) {
+        console.error("Evolution handoff 저장 실패", error);
+        gateStatus.className = "alert red";
+        gateStatus.textContent = "Evolution handoff를 저장하지 못했습니다. 실행 영수증을 내보낸 뒤 CLI generator를 사용하세요.";
+      }
+    }
+
+    function downloadJson(filename, payload) {
+      const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = filename;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(url);
+    }
+
+    function readHistory() {
+      try {
+        const raw = localStorage.getItem(RUNNER_STORAGE_KEY);
+        const parsed = raw ? JSON.parse(raw) : [];
+        return Array.isArray(parsed) ? parsed : [];
+      } catch (error) {
+        console.error("로컬 실행 이력 읽기 실패", error);
+        return [];
+      }
+    }
+
+    function writeHistory(records) {
+      try {
+        localStorage.setItem(RUNNER_STORAGE_KEY, JSON.stringify(records.slice(0, 20)));
+      } catch (error) {
+        console.error("로컬 실행 이력 저장 실패", error);
+        gateStatus.className = "alert red";
+        gateStatus.textContent = "브라우저 저장소에 실행 이력을 저장하지 못했습니다.";
+      }
+    }
+
+    function renderHistory() {
+      const records = readHistory();
+      historyList.innerHTML = records.length ? records.map((record) => `
+        <li>
+          <strong>${escapeHtml(record.agent_id)} · ${escapeHtml(record.status)}</strong>
+          <span class="meta">${escapeHtml(record.saved_at)} · input ${record.input_length} chars · output ${record.output_length} chars · checks ${record.manual_check_count || record.criteria_count || 0} · format ${record.format_signal_found || 0}/${record.format_signal_total || 0}${record.format_signal_missing && record.format_signal_missing.length ? ` missing ${escapeHtml(record.format_signal_missing.join(", "))}` : ""}</span>
+        </li>
+      `).join("") : `<li><span class="meta">저장된 로컬 실행 기록이 없습니다.</span></li>`;
+    }
+
+    async function loadPackFile(event) {
+      const file = event.target.files && event.target.files[0];
+      if (!file) return;
+
+      try {
+        const text = await file.text();
+        const bundle = JSON.parse(text);
+        currentBundle = bundle;
+        currentValidation = validateBundle(bundle);
+        currentLoadSource = { kind: "file", label: file.name || ".agent-pack.json 파일" };
+        promptOutput.value = "";
+        checkList.innerHTML = "";
+        renderPack();
+        renderFilePackSummary(bundle, currentValidation, currentLoadSource.label);
+      } catch (error) {
+        console.error("agent pack 로드 실패", error);
+        currentBundle = null;
+        currentLoadSource = { kind: "file", label: file.name || ".agent-pack.json 파일" };
+        currentValidation = { ok: false, status: "fail", errors: ["JSON 파일을 읽거나 해석하지 못했습니다."], warnings: [] };
+        clearHandoffSummary();
+        renderPack();
+      } finally {
+        event.target.value = "";
+      }
+    }
+
+    function saveRunRecord() {
+      if (!currentBundle || !currentValidation || !currentValidation.ok) return;
+      const files = filesOf(currentBundle);
+      const agent = files["agent.json"] || {};
+      const receipt = buildManualRunReceipt();
+      const manualChecks = receipt && Array.isArray(receipt.manual_checks) ? receipt.manual_checks : [];
+      const formatSummary = formatSignalSummary(agent, resultInput.value);
+      const record = {
+        agent_id: agent.agent_id || "unknown",
+        status: "manual_review_only",
+        saved_at: receipt ? receipt.generated_at : new Date().toISOString(),
+        input_length: taskInput.value.length,
+        output_length: resultInput.value.length,
+        criteria_count: manualChecks.length,
+        manual_check_count: manualChecks.length,
+        format_signal_total: formatSummary.total,
+        format_signal_found: formatSummary.found,
+        format_signal_missing: formatSummary.missing,
+        evidence_status: "no_runtime_evidence",
+        proof_claim_allowed: false,
+        receipt_kind: "manual_run_receipt_v0_1",
+        stores_raw_inputs: false,
+        stores_raw_outputs: false,
+      };
+      writeHistory([record, ...readHistory()]);
+      renderHistory();
+      gateStatus.className = "alert green";
+      gateStatus.textContent = "원문 없이 로컬 실행 메타데이터만 저장했습니다.";
+    }
+
+    function exportManualRunReceipt() {
+      const receipt = buildManualRunReceipt();
+      if (!receipt) {
+        gateStatus.className = "alert red";
+        gateStatus.textContent = "검증을 통과한 패키지만 실행 영수증을 만들 수 있습니다.";
+        return;
+      }
+      const safeAgentId = String(receipt.agent_id || "agent").replace(/[^a-z0-9_-]/gi, "-").toLowerCase();
+      downloadJson(`${safeAgentId}-manual-run-receipt.json`, receipt);
+      gateStatus.className = "alert green";
+      gateStatus.textContent = "manual_run_receipt_v0_1을 내보냈습니다. 이 파일은 proof가 아니라 수동 검토 메타데이터입니다.";
+    }
+
+    function completeManualRunAndExportReceipt() {
+      if (!currentBundle || !currentValidation || !currentValidation.ok) {
+        gateStatus.className = "alert red";
+        gateStatus.textContent = "검증을 통과한 패키지만 실행 영수증을 만들 수 있습니다.";
+        return;
+      }
+      if (!resultInput.value.trim()) {
+        gateStatus.className = "alert amber";
+        gateStatus.textContent = "AI 결과를 먼저 붙여 넣어야 실행 영수증을 만들 수 있습니다.";
+        return;
+      }
+      if (!promptOutput.value.trim()) {
+        const prompt = buildManualPrompt();
+        promptOutput.value = prompt;
+        copyPromptButton.disabled = !prompt;
+        if (!prompt) return;
+      }
+      renderReviewChecklist();
+      saveRunRecord();
+      exportManualRunReceipt();
+    }
+
+    buildPromptButton.addEventListener("click", () => {
+      const prompt = buildManualPrompt();
+      promptOutput.value = prompt;
+      copyPromptButton.disabled = !prompt;
+      if (prompt) {
+        gateStatus.className = "alert green";
+        gateStatus.textContent = "실행 프롬프트를 만들었습니다. 사용 중인 AI 도구에 직접 붙여 넣으세요.";
+      }
+    });
+
+    copyPromptButton.addEventListener("click", async () => {
+      const text = promptOutput.value;
+      if (!text) return;
+      try {
+        if (navigator.clipboard && window.isSecureContext) {
+          await navigator.clipboard.writeText(text);
+        } else {
+          promptOutput.focus();
+          promptOutput.select();
+          document.execCommand("copy");
+        }
+        gateStatus.className = "alert green";
+        gateStatus.textContent = "프롬프트를 복사했습니다.";
+      } catch (error) {
+        console.error("프롬프트 복사 실패", error);
+        gateStatus.className = "alert red";
+        gateStatus.textContent = "복사에 실패했습니다. 프롬프트 영역을 직접 선택해 복사하세요.";
+      }
+    });
+
+    reviewButton.addEventListener("click", renderReviewChecklist);
+    saveRunButton.addEventListener("click", saveRunRecord);
+    exportReceiptButton.addEventListener("click", exportManualRunReceipt);
+    completeRunButton.addEventListener("click", completeManualRunAndExportReceipt);
+    sendEvolutionButton.addEventListener("click", sendEvolutionHandoff);
+    loadHandoffButton.addEventListener("click", () => loadBuilderHandoff());
+    packInput.addEventListener("change", loadPackFile);
+    clearButton.addEventListener("click", () => {
+      currentBundle = null;
+      currentValidation = null;
+      currentLoadSource = null;
+      taskInput.value = "";
+      resultInput.value = "";
+      promptOutput.value = "";
+      checkList.innerHTML = "";
+      clearHandoffSummary();
+      renderPack();
+    });
+
+    renderPack();
+    renderHistory();
+    const handoffQuery = new URLSearchParams(window.location.search).get("handoff");
+    loadBuilderHandoff({ auto: handoffQuery === "builder" || handoffQuery === "hub" });
+  </script>
+</body>
+</html>

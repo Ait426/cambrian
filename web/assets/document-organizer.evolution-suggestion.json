@@ -1,0 +1,88 @@
+{
+  "$schema": "https://cambrian.local/schemas/evolution_suggestion_v0_1.schema.json",
+  "schema_version": "0.1",
+  "suggestion_kind": "evolution_suggestion_v0_1",
+  "generated_by": "tools/generate_evolution_suggestion.py",
+  "generated_at": "2026-05-10T02:53:06Z",
+  "source_agent": {
+    "agent_id": "document-organizer",
+    "agent_name": "문서 정리 에이전트",
+    "bundle_schema": "agent_pack_bundle_v0_1",
+    "risk_level": "green"
+  },
+  "source_receipt": {
+    "receipt_kind": "manual_run_receipt_v0_1",
+    "runner_mode": "manual_no_api",
+    "run_status": "manual_review_only",
+    "result_status": "result_pasted_for_manual_review",
+    "input_length": 1200,
+    "output_length": 860,
+    "manual_check_count": 3,
+    "eligible_for_suggestion": true,
+    "requires_user_approval": true
+  },
+  "proposal_status": "draft_requires_user_approval",
+  "approval_gate": {
+    "requires_user_approval": true,
+    "auto_apply": false,
+    "auto_promote": false,
+    "can_create_new_version": false
+  },
+  "proof_boundary": {
+    "uses_runtime_evidence": false,
+    "proof_claim_allowed": false,
+    "success_rate_claim_allowed": false,
+    "marketplace_sale_ready": false
+  },
+  "privacy": {
+    "stores_raw_inputs": false,
+    "stores_raw_outputs": false,
+    "stores_secrets": false,
+    "uses_only_receipt_metadata": true
+  },
+  "recommendations": [
+    {
+      "id": "evo_1",
+      "title": "수동 검증 체크리스트를 출력 말미에 고정",
+      "target": "instructions.md",
+      "rationale": "receipt에 3개의 manual check가 있으며 모두 사용자 검토가 필요합니다.",
+      "proposed_change": "결과 마지막에 validation_criteria 기반의 사용자 확인 체크리스트를 항상 붙이도록 instructions.md를 강화합니다.",
+      "risk_level": "low",
+      "acceptance_criteria": [
+        "출력 끝에 사용자 확인 체크리스트가 포함된다.",
+        "체크리스트가 proof나 성공률로 표현되지 않는다."
+      ],
+      "status": "suggested"
+    },
+    {
+      "id": "evo_2",
+      "title": "known limits에 manual_no_api 한계 추가",
+      "target": "agent.json.known_limits",
+      "rationale": "manual_no_api 실행은 원문 저장 없는 수동 검토 메타데이터만 남기므로 proof가 아닙니다.",
+      "proposed_change": "manual_no_api 결과는 proof가 아니며 사용자가 직접 검토해야 한다는 known limit을 추가합니다.",
+      "risk_level": "low",
+      "acceptance_criteria": [
+        "known_limits에 수동 실행 한계가 명시된다.",
+        "marketplace_sale_ready가 false로 유지된다."
+      ],
+      "status": "suggested"
+    },
+    {
+      "id": "evo_3",
+      "title": "검증 기준을 더 측정 가능한 문장으로 정리",
+      "target": "agent.json.validation_criteria",
+      "rationale": "receipt에 실제 결과 길이와 수동 검토 기준이 있어 다음 버전에서 검증 문장을 더 명확히 만들 수 있습니다.",
+      "proposed_change": "각 validation_criteria를 사용자가 예/아니오로 확인할 수 있는 문장으로 다듬는 초안을 만듭니다.",
+      "risk_level": "medium",
+      "acceptance_criteria": [
+        "각 검증 기준이 단일 판단 문장으로 유지된다.",
+        "의료, 법률, 투자, 채용 판단으로 범위가 넓어지지 않는다."
+      ],
+      "status": "suggested"
+    }
+  ],
+  "rollback": {
+    "required_before_apply": true,
+    "strategy": "save_previous_agent_pack_before_new_version"
+  }
+}

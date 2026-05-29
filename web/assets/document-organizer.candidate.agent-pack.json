@@ -1,0 +1,300 @@
+{
+  "$schema": "https://cambrian.local/schemas/agent_pack_bundle_v0_1.schema.json",
+  "bundle_schema": "agent_pack_bundle_v0_1",
+  "schema_version": "0.1",
+  "package_kind": "agent_pack_bundle",
+  "generated_by": "tools/generate_candidate_pack.py",
+  "platform_track": "platform-first",
+  "files": {
+    "agent.json": {
+      "$schema": "https://cambrian.local/schemas/agent_contract_v0_1.schema.json",
+      "contract_schema": "agent_contract_v0_1",
+      "schema_version": "0.1",
+      "agent_id": "document-organizer",
+      "name": "문서 정리 에이전트",
+      "author": "사용자",
+      "role": "업로드된 문서를 분류하고 핵심 내용을 요약한다.",
+      "goals": [
+        "문서 묶음을 읽고 주제, 우선순위, 후속 작업으로 정리한다."
+      ],
+      "inputs": [
+        "사용자가 선택한 문서"
+      ],
+      "outputs": [
+        "markdown_summary"
+      ],
+      "permissions": [
+        "read_user_selected_uploads"
+      ],
+      "forbidden_actions": [
+        "사용자 승인 없는 외부 전송",
+        "원문에 없는 사실을 확정 표현으로 작성",
+        "비밀번호, 토큰, 결제 정보 요청"
+      ],
+      "approval_required_actions": [],
+      "validation_criteria": [
+        "출처가 분리되어 있어야 한다.",
+        "요약과 원문 추정이 구분되어야 한다.",
+        "개인정보가 있으면 공개 결과물에 포함하지 않는다."
+      ],
+      "data_policy": {
+        "default_visibility": "private",
+        "retention": "local_or_user_selected",
+        "third_party_sharing": "none_by_default",
+        "secret_collection": "forbidden_by_default"
+      },
+      "risk_level": "green",
+      "known_limits": [
+        "실행 결과는 사용자가 직접 검토해야 합니다.",
+        "이 후보 pack은 evolution_review_decision_v0_1 기반이며, 최종 적용 전 사용자가 다시 검토해야 합니다.",
+        "manual_no_api 결과는 proof가 아니며 사용자가 직접 검토해야 한다는 known limit을 추가합니다."
+      ],
+      "license": "확인 필요",
+      "provenance": [
+        {
+          "source": "web/platform",
+          "kind": "platform_builder",
+          "generated_at": "2026-05-10T00:00:00.000Z"
+        },
+        {
+          "source": "evolution_review_decision_v0_1",
+          "kind": "evolution_candidate",
+          "generated_at": "2026-05-10T00:00:00Z"
+        }
+      ],
+      "runtime": {
+        "type": "generic",
+        "cambrian_required": false,
+        "cambrian_compatible": "planned"
+      }
+    },
+    "agent_card.json": {
+      "schema_version": "0.1",
+      "card_kind": "private_agent_card",
+      "agent_id": "document-organizer",
+      "name": "문서 정리 에이전트",
+      "template_id": "document_organizer",
+      "summary": "사용자가 선택한 문서를 분류하고 핵심 내용을 요약하는 개인용 에이전트입니다.",
+      "capabilities": [
+        "문서 분류",
+        "핵심 요약",
+        "후속 작업 정리"
+      ],
+      "risk_level": "green",
+      "preflight_status": "pass",
+      "evidence_status": "no_runtime_evidence",
+      "marketplace": {
+        "visibility": "private",
+        "sale_ready": false,
+        "proof_claim_allowed": false
+      },
+      "known_limits": [
+        "실행 결과는 사용자가 직접 검토해야 합니다.",
+        "실제 성공률은 실행 데이터가 생긴 뒤에만 표시할 수 있습니다.",
+        "이 후보 pack은 evolution_review_decision_v0_1 기반이며, 최종 적용 전 사용자가 다시 검토해야 합니다.",
+        "manual_no_api 결과는 proof가 아니며 사용자가 직접 검토해야 한다는 known limit을 추가합니다."
+      ]
+    },
+    "instructions.md": "# 문서 정리 에이전트\n\n## 역할\n업로드된 문서를 분류하고 핵심 내용을 요약한다.\n\n## 목표\n- 문서 묶음을 읽고 주제, 우선순위, 후속 작업으로 정리한다.\n\n## 입력\n- 사용자가 선택한 문서\n\n## 출력\n- markdown_summary\n\n## 금지 행동\n- 사용자 승인 없는 외부 전송\n- 원문에 없는 사실을 확정 표현으로 작성\n- 비밀번호, 토큰, 결제 정보 요청\n\n## 검증 기준\n- 출처가 분리되어 있어야 한다.\n- 요약과 원문 추정이 구분되어야 한다.\n- 개인정보가 있으면 공개 결과물에 포함하지 않는다.\n\n## 수동 검증 체크리스트\n이 항목은 proof가 아니라 사용자가 직접 확인할 체크리스트입니다.\n- 출처가 분리되어 있어야 한다.\n- 요약과 원문 추정이 구분되어야 한다.\n- 개인정보가 있으면 공개 결과물에 포함하지 않는다.\n",
+    "run_local.md": "# run_local.md\n\n1. 선호하는 AI 도구를 엽니다.\n2. 이 패키지를 web/runner/index.html의 Agent Pack Local Runner로 열 수 있습니다.\n3. instructions.md 내용을 사용 중인 AI 도구에 붙여 넣습니다.\n4. 사용자가 선택한 문서만 입력으로 제공합니다.\n5. 결과를 받은 뒤 validation_criteria를 기준으로 직접 확인합니다.\n6. 비밀번호, 토큰, 결제 정보, 민감정보는 입력하지 않습니다.\n\nCambrian 없이도 사용할 수 있습니다.\nAPI 키 없이 manual_no_api 방식으로 사용할 수 있습니다.\nCambrian adapter는 이후 planned 상태입니다.\n\nruntime:\n  cambrian_required: false\n  cambrian_compatible: planned\n",
+    "legal_notice.md": "# legal_notice.md\n\n이 에이전트는 사용자가 만든 사용자 패키지입니다.\n의료 결정, 법률 결정, 투자·금융 결정, 채용·해고 판단은 차단 대상입니다.\n\n## 위험 등급\nGreen\n\n## 제한\n- 실제 성공률은 실행 데이터가 생긴 뒤에만 표시합니다.\n- no_runtime_evidence 상태에서는 proof, 성능, 성공률을 주장하지 않습니다.\n- 사용자는 결과물을 직접 검토해야 합니다.\n\n## 데이터\n- 기본 공개 범위: private\n- 제3자 공유: none_by_default\n- 보관: local_or_user_selected\n",
+    "preflight_report.json": {
+      "schema_version": "0.1",
+      "validator": "agent_pack_preflight_v0_1",
+      "status": "pass",
+      "agent_id": "document-organizer",
+      "risk_level": "green",
+      "evidence_status": "no_runtime_evidence",
+      "checks": [
+        {
+          "name": "required_files_present",
+          "status": "pass",
+          "message": "manifest에 적힌 파일이 번들에 모두 존재한다."
+        },
+        {
+          "name": "manifest_agent_id_matches_contract",
+          "status": "pass",
+          "message": "manifest.agent_id와 agent.json.agent_id가 일치한다."
+        },
+        {
+          "name": "risk_report_matches_contract",
+          "status": "pass",
+          "message": "riskReport.level과 agent.json.risk_level이 일치한다."
+        },
+        {
+          "name": "secret_collection_forbidden",
+          "status": "pass",
+          "message": "비밀번호, 토큰, 개인 API 키 수집은 기본 금지다."
+        },
+        {
+          "name": "preflight_validator_matches",
+          "status": "pass",
+          "message": "preflight_report.json은 agent_pack_preflight_v0_1 리포트다."
+        },
+        {
+          "name": "preflight_agent_id_matches_contract",
+          "status": "pass",
+          "message": "preflight_report.json.agent_id와 agent.json.agent_id가 일치한다."
+        },
+        {
+          "name": "preflight_risk_matches_contract",
+          "status": "pass",
+          "message": "preflight_report.json.risk_level과 agent.json.risk_level이 일치한다."
+        },
+        {
+          "name": "agent_card_matches_contract",
+          "status": "pass",
+          "message": "agent_card.json은 agent.json과 핵심 식별자, 위험도, 증거 상태가 일치한다."
+        },
+        {
+          "name": "agent_card_private_preview",
+          "status": "pass",
+          "message": "agent_card.json은 private preview card이며 판매 또는 proof 주장을 허용하지 않는다."
+        },
+        {
+          "name": "marketplace_review_matches_card",
+          "status": "pass",
+          "message": "marketplace_review.json은 agent_card.json과 공개 범위, 식별자가 일치한다."
+        },
+        {
+          "name": "marketplace_review_not_ready",
+          "status": "pass",
+          "message": "marketplace_review.json은 공개 판매와 proof 주장을 아직 허용하지 않는다."
+        },
+        {
+          "name": "private_by_default",
+          "status": "pass",
+          "message": "마켓 공개 상태는 기본 private이다."
+        },
+        {
+          "name": "sale_not_ready",
+          "status": "pass",
+          "message": "판매 준비 상태는 기본 false다."
+        },
+        {
+          "name": "proof_claim_blocked",
+          "status": "pass",
+          "message": "실행 증거가 없으면 proof/성능 주장을 허용하지 않는다."
+        },
+        {
+          "name": "cambrian_not_required",
+          "status": "pass",
+          "message": "초기 플랫폼 패키지는 Cambrian Runtime을 필수로 요구하지 않는다."
+        },
+        {
+          "name": "legal_notice_names_no_runtime_evidence",
+          "status": "pass",
+          "message": "legal_notice.md는 실행 증거 없음 상태를 명시한다."
+        },
+        {
+          "name": "runner_names_cambrian_optional",
+          "status": "pass",
+          "message": "run_local.md는 Cambrian 없이도 사용할 수 있음을 명시한다."
+        },
+        {
+          "name": "runner_names_manual_runner",
+          "status": "pass",
+          "message": "run_local.md는 web/runner/index.html 수동 실행 경로와 manual_no_api 모드를 명시한다."
+        },
+        {
+          "name": "preflight_status_matches_risk",
+          "status": "pass",
+          "message": "preflight_report.json.status는 Red 차단 여부와 일치한다."
+        },
+        {
+          "name": "preflight_evidence_status_matches_manifest",
+          "status": "pass",
+          "message": "preflight_report.json.evidence_status와 manifest.evidence_status가 일치한다."
+        }
+      ],
+      "warnings": [],
+      "errors": []
+    },
+    "marketplace_review.json": {
+      "schema_version": "0.1",
+      "review_kind": "private_marketplace_review",
+      "status": "not_ready",
+      "agent_id": "document-organizer",
+      "listing_visibility": "private",
+      "sale_ready": false,
+      "proof_claim_allowed": false,
+      "reasons": [
+        "실제 실행 evidence가 아직 없다.",
+        "proof와 성공률을 주장할 수 없다.",
+        "라이선스와 환불 정책은 확인 필요 상태다.",
+        "공개 listing 심사가 아직 없다."
+      ],
+      "required_before_public_listing": [
+        "라이선스 확정",
+        "개인정보 처리와 환불 정책 검토",
+        "runtime evidence 생성",
+        "proof claim 검증",
+        "사용자 공개 승인"
+      ]
+    },
+    "manifest.json": {
+      "schema_version": "0.1",
+      "package_kind": "agent_pack_bundle",
+      "bundle_schema": "agent_pack_bundle_v0_1",
+      "agent_contract_schema": "agent_contract_v0_1",
+      "schema_ref": {
+        "bundle": "schemas/agent_pack_bundle_v0_1.schema.json",
+        "agent_contract": "schemas/agent_contract_v0_1.schema.json"
+      },
+      "files": [
+        "agent.json",
+        "agent_card.json",
+        "instructions.md",
+        "run_local.md",
+        "legal_notice.md",
+        "preflight_report.json",
+        "marketplace_review.json",
+        "manifest.json"
+      ],
+      "entrypoint": "instructions.md",
+      "agent_id": "document-organizer",
+      "risk_level": "Green",
+      "runtime": {
+        "type": "generic",
+        "cambrian_required": false,
+        "cambrian_compatible": "planned"
+      },
+      "evidence_status": "no_runtime_evidence",
+      "marketplace": {
+        "visibility": "private",
+        "public_listing_allowed": false,
+        "sale_ready": false,
+        "proof_claim_allowed": false
+      }
+    }
+  },
+  "riskReport": {
+    "level": "Green",
+    "warnings": [],
+    "blocks": [],
+    "no_runtime_evidence": "실제 성공률은 실행 데이터가 생긴 뒤에만 표시"
+  },
+  "candidate_metadata": {
+    "metadata_kind": "candidate_agent_pack_metadata_v0_1",
+    "source_suggestion_kind": "evolution_suggestion_v0_1",
+    "source_decision_kind": "evolution_review_decision_v0_1",
+    "apply_status": "candidate_not_applied",
+    "auto_apply": false,
+    "auto_promote": false,
+    "approved_decision_ids": [
+      "decision_1",
+      "decision_2"
+    ],
+    "approved_recommendation_ids": [
+      "evo_1",
+      "evo_2"
+    ],
+    "deferred_recommendation_ids": [
+      "evo_3"
+    ],
+    "rejected_recommendation_ids": [],
+    "requires_user_final_review": true,
+    "original_pack_preserved": true,
+    "generated_at": "2026-05-10T00:00:00Z"
+  }
+}

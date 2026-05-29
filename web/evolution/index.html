@@ -1,0 +1,1981 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Evolution Review Gate</title>
+  <style>
+    :root {
+      --bg: #f5f6f2;
+      --surface: #ffffff;
+      --ink: #18211f;
+      --muted: #5c6864;
+      --line: #d6ded7;
+      --green: #21674c;
+      --amber: #93611f;
+      --red: #9f3f3f;
+      --blue: #315f8f;
+      --shadow: 0 1px 2px rgba(24, 33, 31, 0.08);
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--ink);
+      font-family: "Aptos", "Malgun Gothic", "Segoe UI", sans-serif;
+      letter-spacing: 0;
+    }
+
+    a {
+      color: var(--blue);
+      font-weight: 800;
+      text-decoration: none;
+    }
+
+    button,
+    input,
+    select,
+    textarea {
+      font: inherit;
+    }
+
+    .shell {
+      margin: 0 auto;
+      padding: 18px 0 36px;
+      width: min(1360px, calc(100% - 32px));
+    }
+
+    .topbar,
+    .brand,
+    .nav,
+    .button-row {
+      align-items: center;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+    }
+
+    .topbar {
+      border-bottom: 1px solid var(--line);
+      justify-content: space-between;
+      min-height: 56px;
+    }
+
+    .brand {
+      font-weight: 900;
+    }
+
+    .mark {
+      align-items: center;
+      background: var(--ink);
+      border-radius: 8px;
+      color: #fff;
+      display: inline-flex;
+      height: 32px;
+      justify-content: center;
+      width: 32px;
+    }
+
+    .nav {
+      gap: 12px;
+      justify-content: flex-end;
+    }
+
+    .status-strip {
+      border-bottom: 1px solid var(--line);
+      display: grid;
+      gap: 10px;
+      grid-template-columns: repeat(5, minmax(0, 1fr));
+      padding: 14px 0;
+    }
+
+    .status-item,
+    .panel,
+    .recommendation {
+      background: var(--surface);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      box-shadow: var(--shadow);
+      min-width: 0;
+    }
+
+    .status-item {
+      min-height: 76px;
+      padding: 12px;
+    }
+
+    .status-label {
+      color: var(--muted);
+      display: block;
+      font-size: 0.8rem;
+      font-weight: 800;
+      margin-bottom: 6px;
+    }
+
+    .status-value {
+      display: block;
+      font-size: 1rem;
+      font-weight: 900;
+      line-height: 1.35;
+    }
+
+    .workspace {
+      display: grid;
+      gap: 16px;
+      grid-template-columns: minmax(280px, 360px) minmax(0, 1fr);
+      padding-top: 18px;
+    }
+
+    .panel-header {
+      align-items: center;
+      border-bottom: 1px solid var(--line);
+      display: flex;
+      gap: 12px;
+      justify-content: space-between;
+      padding: 14px 16px;
+    }
+
+    .panel-title {
+      font-size: 1rem;
+      font-weight: 900;
+      margin: 0;
+    }
+
+    .panel-body,
+    .stack,
+    .recommendation-list {
+      display: grid;
+      gap: 14px;
+    }
+
+    .panel-body,
+    .recommendation {
+      padding: 16px;
+    }
+
+    .button {
+      align-items: center;
+      background: var(--ink);
+      border: 1px solid var(--ink);
+      border-radius: 8px;
+      color: #fff;
+      cursor: pointer;
+      display: inline-flex;
+      font-weight: 900;
+      min-height: 40px;
+      padding: 9px 12px;
+    }
+
+    .button.secondary {
+      background: #fff;
+      color: var(--ink);
+    }
+
+    .button:disabled {
+      cursor: not-allowed;
+      opacity: 0.5;
+    }
+
+    .file-input {
+      height: 1px;
+      opacity: 0;
+      overflow: hidden;
+      position: absolute;
+      width: 1px;
+    }
+
+    .field {
+      display: grid;
+      gap: 7px;
+    }
+
+    label {
+      font-size: 0.9rem;
+      font-weight: 900;
+    }
+
+    select,
+    textarea {
+      background: #fff;
+      border: 1px solid #c9d0cb;
+      border-radius: 8px;
+      color: var(--ink);
+      min-width: 0;
+      padding: 10px 11px;
+      width: 100%;
+    }
+
+    textarea {
+      min-height: 82px;
+      resize: vertical;
+    }
+
+    .hint,
+    .meta {
+      color: var(--muted);
+      font-size: 0.84rem;
+      line-height: 1.5;
+      margin: 0;
+    }
+
+    .alert {
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 12px;
+    }
+
+    .alert.green {
+      background: #eef8f1;
+      border-color: #bad7c4;
+    }
+
+    .alert.amber {
+      background: #fbf2e4;
+      border-color: #dcc190;
+    }
+
+    .alert.red {
+      background: #fbebeb;
+      border-color: #dfb8b8;
+    }
+
+    .badge {
+      border-radius: 999px;
+      display: inline-flex;
+      font-size: 0.78rem;
+      font-weight: 900;
+      line-height: 1;
+      padding: 6px 8px;
+      width: fit-content;
+    }
+
+    .badge.green {
+      background: #e0f1e7;
+      color: var(--green);
+    }
+
+    .badge.amber {
+      background: #f4ead8;
+      color: var(--amber);
+    }
+
+    .badge.red {
+      background: #f4dfdf;
+      color: var(--red);
+    }
+
+    .summary-list {
+      display: grid;
+      gap: 8px;
+      margin: 0;
+      padding: 0;
+    }
+
+    .summary-list li {
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      display: grid;
+      gap: 4px;
+      list-style: none;
+      padding: 10px;
+    }
+
+    .candidate-preview {
+      display: grid;
+      gap: 10px;
+    }
+
+    .candidate-preview[hidden] {
+      display: none;
+    }
+
+    .candidate-preview .summary-list {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .approval-links {
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      display: grid;
+      gap: 8px;
+      padding: 10px;
+    }
+
+    .approval-links ul {
+      display: grid;
+      gap: 8px;
+      margin: 0;
+      padding: 0;
+    }
+
+    .approval-links li {
+      display: grid;
+      gap: 3px;
+      list-style: none;
+    }
+
+    .recommendation h3 {
+      font-size: 1rem;
+      margin: 0;
+    }
+
+    @media (max-width: 980px) {
+      .workspace {
+        grid-template-columns: 1fr;
+      }
+
+      .status-strip {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+    }
+
+    @media (max-width: 640px) {
+      .shell {
+        width: min(100% - 20px, 1360px);
+      }
+
+      .topbar {
+        align-items: flex-start;
+        flex-direction: column;
+        padding-bottom: 12px;
+      }
+
+      .nav {
+        justify-content: flex-start;
+      }
+
+      .status-strip {
+        grid-template-columns: 1fr;
+      }
+
+      .candidate-preview .summary-list {
+        grid-template-columns: 1fr;
+      }
+    }
+  </style>
+</head>
+<body>
+  <main class="shell">
+    <header class="topbar">
+      <div class="brand">
+        <span class="mark">E</span>
+        <span>Evolution Review Gate</span>
+      </div>
+      <nav class="nav" aria-label="상단 이동">
+        <a href="../index.html">Home</a>
+        <a href="../platform/index.html">Builder</a>
+        <a href="../runner/index.html">Local Runner</a>
+        <a href="../assets/document-organizer.evolution-suggestion.json">Sample Suggestion</a>
+        <a href="../assets/document-organizer.evolution-review-decision.json">Sample Decision</a>
+      </nav>
+    </header>
+
+    <section class="status-strip" aria-label="진화 리뷰 상태">
+      <div class="status-item">
+        <span class="status-label">decision kind</span>
+        <span class="status-value">evolution_review_decision_v0_1</span>
+      </div>
+      <div class="status-item">
+        <span class="status-label">review status</span>
+        <span class="status-value">reviewed_not_applied</span>
+      </div>
+      <div class="status-item">
+        <span class="status-label">auto apply</span>
+        <span class="status-value">false</span>
+      </div>
+      <div class="status-item">
+        <span class="status-label">proof</span>
+        <span class="status-value">not claimed</span>
+      </div>
+      <div class="status-item">
+        <span class="status-label">next step</span>
+        <span class="status-value">separate command</span>
+      </div>
+    </section>
+
+    <section class="workspace">
+      <aside class="panel">
+        <div class="panel-header">
+          <h1 class="panel-title">Suggestion Load</h1>
+        </div>
+        <div class="panel-body">
+          <div class="button-row">
+            <label class="button" for="suggestionInput">suggestion 열기</label>
+            <input class="file-input" id="suggestionInput" type="file" accept=".json,application/json" />
+            <button class="button secondary" id="loadEvolutionHandoffButton" type="button">Runner handoff 불러오기</button>
+            <button class="button secondary" id="clearButton" type="button">초기화</button>
+          </div>
+          <div class="alert amber" id="loadStatus">진화 제안 JSON을 불러오면 자동 적용 없이 검토 기록만 만들 수 있습니다. Runner handoff는 localStorage에서 한 번만 읽고 제거합니다.</div>
+          <ul class="summary-list" id="summaryList"></ul>
+          <div class="candidate-preview" id="runnerHandoffSummary" hidden aria-live="polite"></div>
+          <div class="button-row">
+            <button class="button" id="exportDecisionButton" type="button" disabled>리뷰 결정 내보내기</button>
+            <button class="button secondary" id="exportCandidateButton" type="button" disabled>후보 pack 내보내기</button>
+            <button class="button secondary" id="previewDiffButton" type="button" disabled>diff 미리보기</button>
+            <button class="button secondary" id="exportDiffButton" type="button" disabled>diff report 내보내기</button>
+            <button class="button secondary" id="previewPromotionButton" type="button" disabled>promotion 미리보기</button>
+            <button class="button secondary" id="exportPromotedButton" type="button" disabled>promoted pack 내보내기</button>
+            <button class="button secondary" id="exportPromotionRecordButton" type="button" disabled>promotion record 내보내기</button>
+            <button class="button secondary" id="previewHubButton" type="button" disabled>Hub 전송 미리보기</button>
+            <button class="button secondary" id="sendHubButton" type="button" disabled>Private Hub로 보내기</button>
+          </div>
+          <div class="alert amber" id="candidateStatus">후보 pack은 Runner handoff로 원본 pack이 있을 때만, 사용자 명시 명령 후 생성합니다.</div>
+          <div class="candidate-preview" id="candidatePreview" hidden aria-live="polite"></div>
+          <div class="candidate-preview" id="promotionPreview" hidden aria-live="polite"></div>
+          <div class="candidate-preview" id="hubPreview" hidden aria-live="polite"></div>
+        </div>
+      </aside>
+
+      <section class="panel">
+        <div class="panel-header">
+          <h2 class="panel-title">Review Recommendations</h2>
+        </div>
+        <div class="panel-body">
+          <div class="alert amber" id="gateStatus">사용자 승인이 기록되어도 pack은 자동 수정되지 않습니다.</div>
+          <div class="recommendation-list" id="recommendationList"></div>
+        </div>
+      </section>
+    </section>
+  </main>
+
+  <script>
+    const EVOLUTION_HANDOFF_STORAGE_KEY = "agent-platform-evolution-handoff-v0-1";
+    const HUB_HANDOFF_STORAGE_KEY = "agent-platform-hub-handoff-v0-1";
+    const suggestionInput = document.getElementById("suggestionInput");
+    const loadEvolutionHandoffButton = document.getElementById("loadEvolutionHandoffButton");
+    const clearButton = document.getElementById("clearButton");
+    const exportDecisionButton = document.getElementById("exportDecisionButton");
+    const exportCandidateButton = document.getElementById("exportCandidateButton");
+    const previewDiffButton = document.getElementById("previewDiffButton");
+    const exportDiffButton = document.getElementById("exportDiffButton");
+    const previewPromotionButton = document.getElementById("previewPromotionButton");
+    const exportPromotedButton = document.getElementById("exportPromotedButton");
+    const exportPromotionRecordButton = document.getElementById("exportPromotionRecordButton");
+    const previewHubButton = document.getElementById("previewHubButton");
+    const sendHubButton = document.getElementById("sendHubButton");
+    const loadStatus = document.getElementById("loadStatus");
+    const gateStatus = document.getElementById("gateStatus");
+    const candidateStatus = document.getElementById("candidateStatus");
+    const candidatePreview = document.getElementById("candidatePreview");
+    const promotionPreview = document.getElementById("promotionPreview");
+    const hubPreview = document.getElementById("hubPreview");
+    const summaryList = document.getElementById("summaryList");
+    const runnerHandoffSummary = document.getElementById("runnerHandoffSummary");
+    const recommendationList = document.getElementById("recommendationList");
+
+    let currentSuggestion = null;
+    let currentSourceBundle = null;
+    let currentCandidatePack = null;
+    let currentCandidateDecisionHash = "";
+    let currentDiffReport = null;
+    let currentDiffDecisionHash = "";
+    let currentPromotionOutputs = null;
+    let currentPromotionDecisionHash = "";
+    let currentValidation = null;
+
+    function escapeHtml(value) {
+      return String(value)
+        .replaceAll("&", "&amp;")
+        .replaceAll("<", "&lt;")
+        .replaceAll(">", "&gt;")
+        .replaceAll('"', "&quot;")
+        .replaceAll("'", "&#039;");
+    }
+
+    function validateSuggestion(suggestion) {
+      const errors = [];
+      const sourceReceipt = suggestion && typeof suggestion.source_receipt === "object" ? suggestion.source_receipt : {};
+      const approvalGate = suggestion && typeof suggestion.approval_gate === "object" ? suggestion.approval_gate : {};
+      const proofBoundary = suggestion && typeof suggestion.proof_boundary === "object" ? suggestion.proof_boundary : {};
+      const privacy = suggestion && typeof suggestion.privacy === "object" ? suggestion.privacy : {};
+
+      if (!suggestion || typeof suggestion !== "object") errors.push("suggestion 객체가 아닙니다.");
+      if (suggestion && suggestion.suggestion_kind !== "evolution_suggestion_v0_1") errors.push("suggestion_kind가 evolution_suggestion_v0_1이 아닙니다.");
+      if (suggestion && suggestion.proposal_status !== "draft_requires_user_approval") errors.push("proposal_status는 draft_requires_user_approval이어야 합니다.");
+      if (sourceReceipt.eligible_for_suggestion !== true) errors.push("source_receipt.eligible_for_suggestion은 true여야 합니다.");
+      if (sourceReceipt.requires_user_approval !== true) errors.push("source_receipt.requires_user_approval은 true여야 합니다.");
+      if (approvalGate.requires_user_approval !== true) errors.push("requires_user_approval은 true여야 합니다.");
+      if (approvalGate.auto_apply !== false) errors.push("auto_apply는 false여야 합니다.");
+      if (approvalGate.auto_promote !== false) errors.push("auto_promote는 false여야 합니다.");
+      if (approvalGate.can_create_new_version !== false) errors.push("can_create_new_version은 false여야 합니다.");
+      if (proofBoundary.proof_claim_allowed !== false) errors.push("proof_claim_allowed는 false여야 합니다.");
+      if (proofBoundary.success_rate_claim_allowed !== false) errors.push("success_rate_claim_allowed는 false여야 합니다.");
+      if (proofBoundary.marketplace_sale_ready !== false) errors.push("marketplace_sale_ready는 false여야 합니다.");
+      if (privacy.stores_raw_inputs !== false) errors.push("원문 입력을 저장하면 안 됩니다.");
+      if (privacy.stores_raw_outputs !== false) errors.push("원문 결과를 저장하면 안 됩니다.");
+      if (!Array.isArray(suggestion && suggestion.recommendations) || !suggestion.recommendations.length) errors.push("recommendations가 없습니다.");
+
+      return {
+        ok: errors.length === 0,
+        status: errors.length ? "fail" : "pass",
+        errors,
+      };
+    }
+
+    function sourceBundleLifecycleStage(bundle) {
+      if (!bundle || typeof bundle !== "object") return "invalid";
+      if (bundle.generated_by === "web/platform/index.html" && !("candidate_metadata" in bundle) && !("promotion_metadata" in bundle)) {
+        return "builder_private_draft";
+      }
+      const promotion = bundle.promotion_metadata || {};
+      if (
+        bundle.generated_by === "tools/promote_candidate_pack.py"
+        && !("candidate_metadata" in bundle)
+        && promotion.metadata_kind === "promoted_agent_pack_metadata_v0_1"
+        && promotion.promotion_status === "promoted_private_version"
+        && promotion.user_command_required === true
+        && promotion.auto_promote === false
+        && promotion.proof_claim_allowed === false
+        && promotion.marketplace_sale_ready === false
+      ) {
+        return "promoted_private_version";
+      }
+      if (bundle.generated_by === "tools/generate_candidate_pack.py" || "candidate_metadata" in bundle) {
+        return "candidate_not_applied";
+      }
+      return "unsupported";
+    }
+
+    function validateSourceBundleForCandidate(bundle, suggestion) {
+      const errors = [];
+      const files = bundle && typeof bundle === "object" && bundle.files && typeof bundle.files === "object" ? bundle.files : {};
+      const agent = files["agent.json"];
+      const manifest = files["manifest.json"];
+      const card = files["agent_card.json"];
+      const lifecycleStage = sourceBundleLifecycleStage(bundle);
+
+      if (!bundle || typeof bundle !== "object") errors.push("source_bundle 객체가 아닙니다.");
+      if (bundle && bundle.bundle_schema !== "agent_pack_bundle_v0_1") errors.push("source_bundle bundle_schema가 agent_pack_bundle_v0_1이 아닙니다.");
+      if (bundle && bundle.package_kind !== "agent_pack_bundle") errors.push("source_bundle package_kind가 agent_pack_bundle이 아닙니다.");
+      if (bundle && !["builder_private_draft", "promoted_private_version"].includes(lifecycleStage)) {
+        errors.push("candidate 원본은 Builder pack 또는 promoted_private_version이어야 합니다.");
+      }
+      if (lifecycleStage === "candidate_not_applied") errors.push("candidate_not_applied pack에서 다시 candidate를 만들 수 없습니다.");
+      if (!agent || typeof agent !== "object") errors.push("source_bundle agent.json이 없습니다.");
+      if (!manifest || typeof manifest !== "object") errors.push("source_bundle manifest.json이 없습니다.");
+      if (!card || typeof card !== "object") errors.push("source_bundle agent_card.json이 없습니다.");
+      if (agent && suggestion && suggestion.source_agent && agent.agent_id !== suggestion.source_agent.agent_id) {
+        errors.push("source_bundle과 suggestion의 agent_id가 일치하지 않습니다.");
+      }
+      if (agent && agent.runtime && agent.runtime.cambrian_required !== false) errors.push("source_bundle cambrian_required는 false여야 합니다.");
+      if (manifest && manifest.evidence_status !== "no_runtime_evidence") errors.push("source_bundle evidence_status는 no_runtime_evidence여야 합니다.");
+      if (manifest && manifest.marketplace && manifest.marketplace.sale_ready !== false) errors.push("source_bundle sale_ready는 false여야 합니다.");
+      if (manifest && manifest.marketplace && manifest.marketplace.proof_claim_allowed !== false) errors.push("source_bundle proof_claim_allowed는 false여야 합니다.");
+
+      return { ok: errors.length === 0, errors, lifecycleStage };
+    }
+
+    function validateEvolutionHandoff(handoff) {
+      const errors = [];
+
+      if (!handoff || typeof handoff !== "object") {
+        errors.push("Runner handoff 객체가 아닙니다.");
+      }
+      if (handoff && handoff.handoff_schema !== "agent_platform_evolution_handoff_v0_1") {
+        errors.push("handoff_schema가 agent_platform_evolution_handoff_v0_1이 아닙니다.");
+      }
+      if (handoff && handoff.handoff_kind !== "manual_runner_to_evolution_review") {
+        errors.push("handoff_kind가 manual_runner_to_evolution_review가 아닙니다.");
+      }
+      if (handoff && (!handoff.storage_policy || handoff.storage_policy.single_use !== true)) {
+        errors.push("Evolution handoff는 single_use: true여야 합니다.");
+      }
+      if (handoff && handoff.storage_policy && handoff.storage_policy.server_sync !== false) {
+        errors.push("Evolution handoff는 server_sync: false여야 합니다.");
+      }
+      if (handoff && handoff.storage_policy && handoff.storage_policy.sends_to_cambrian_runtime !== false) {
+        errors.push("Evolution handoff는 Cambrian Runtime으로 전송될 수 없습니다.");
+      }
+      if (handoff && (!handoff.privacy || handoff.privacy.api_key_collected !== false)) {
+        errors.push("Evolution handoff는 api_key_collected: false여야 합니다.");
+      }
+      if (handoff && handoff.privacy && handoff.privacy.stores_raw_inputs !== false) {
+        errors.push("Evolution handoff는 원문 입력을 저장할 수 없습니다.");
+      }
+      if (handoff && handoff.privacy && handoff.privacy.stores_raw_outputs !== false) {
+        errors.push("Evolution handoff는 원문 결과를 저장할 수 없습니다.");
+      }
+      if (handoff && handoff.privacy && handoff.privacy.stores_secrets !== false) {
+        errors.push("Evolution handoff는 secret을 저장할 수 없습니다.");
+      }
+      if (handoff && (!handoff.proof_boundary || handoff.proof_boundary.evidence_status !== "no_runtime_evidence")) {
+        errors.push("Evolution handoff는 no_runtime_evidence 경계를 유지해야 합니다.");
+      }
+      if (handoff && handoff.proof_boundary && handoff.proof_boundary.proof_claim_allowed !== false) {
+        errors.push("Evolution handoff는 proof_claim_allowed: false여야 합니다.");
+      }
+      if (handoff && handoff.proof_boundary && handoff.proof_boundary.success_rate_claim_allowed !== false) {
+        errors.push("Evolution handoff는 success_rate_claim_allowed: false여야 합니다.");
+      }
+      if (handoff && handoff.proof_boundary && handoff.proof_boundary.marketplace_sale_ready !== false) {
+        errors.push("Evolution handoff는 marketplace_sale_ready: false여야 합니다.");
+      }
+      if (handoff && (!handoff.suggestion || typeof handoff.suggestion !== "object")) {
+        errors.push("Evolution handoff에 suggestion 객체가 없습니다.");
+      }
+      if (handoff && (!handoff.source_bundle || typeof handoff.source_bundle !== "object")) {
+        errors.push("Evolution handoff에 source_bundle 객체가 없습니다.");
+      }
+
+      const suggestionValidation = handoff && handoff.suggestion && typeof handoff.suggestion === "object"
+        ? validateSuggestion(handoff.suggestion)
+        : { ok: false, status: "fail", errors: [] };
+      const sourceBundleValidation = handoff && handoff.source_bundle && typeof handoff.source_bundle === "object"
+        ? validateSourceBundleForCandidate(handoff.source_bundle, handoff.suggestion)
+        : { ok: false, errors: [] };
+
+      return {
+        ok: errors.length === 0 && suggestionValidation.ok && sourceBundleValidation.ok,
+        status: errors.length ? "fail" : suggestionValidation.status,
+        errors: [...errors, ...suggestionValidation.errors, ...sourceBundleValidation.errors],
+        suggestionValidation,
+        sourceBundleValidation,
+      };
+    }
+
+    function loadEvolutionHandoff(options = {}) {
+      const auto = Boolean(options.auto);
+
+      try {
+        const raw = localStorage.getItem(EVOLUTION_HANDOFF_STORAGE_KEY);
+        if (!raw) {
+          if (!auto) {
+            loadStatus.className = "alert amber";
+            loadStatus.textContent = "불러올 Runner handoff가 없습니다. Local Runner에서 Evolution으로 보내기를 먼저 누르세요.";
+          }
+          clearRunnerHandoffSummary();
+          return false;
+        }
+
+        const handoff = JSON.parse(raw);
+        const handoffValidation = validateEvolutionHandoff(handoff);
+        if (!handoffValidation.errors.length && handoff.suggestion && handoff.source_bundle) {
+          currentSuggestion = handoff.suggestion;
+          currentSourceBundle = handoff.source_bundle;
+          currentCandidatePack = null;
+          currentCandidateDecisionHash = "";
+          currentDiffReport = null;
+          currentDiffDecisionHash = "";
+          currentPromotionOutputs = null;
+          currentPromotionDecisionHash = "";
+          currentValidation = handoffValidation.suggestionValidation;
+          localStorage.removeItem(EVOLUTION_HANDOFF_STORAGE_KEY);
+          renderSuggestion();
+          renderRunnerHandoffSummary(handoff, handoffValidation);
+          loadStatus.className = currentValidation.ok ? "alert green" : "alert red";
+          loadStatus.textContent = currentValidation.ok
+            ? "Runner handoff를 불러왔습니다. handoff는 localStorage에서 제거했습니다."
+            : `Runner handoff suggestion 검증 실패: ${currentValidation.errors.join(" / ")}`;
+          return currentValidation.ok;
+        }
+
+        currentSuggestion = null;
+        currentSourceBundle = null;
+        currentCandidatePack = null;
+        currentCandidateDecisionHash = "";
+        currentDiffReport = null;
+        currentDiffDecisionHash = "";
+        currentPromotionOutputs = null;
+        currentPromotionDecisionHash = "";
+        currentValidation = {
+          ok: false,
+          status: "fail",
+          errors: handoffValidation.errors,
+        };
+        renderSuggestion();
+        clearRunnerHandoffSummary();
+        loadStatus.className = "alert red";
+        loadStatus.textContent = `Runner handoff 검증 실패: ${handoffValidation.errors.join(" / ")}`;
+      } catch (error) {
+        console.error("Runner handoff 로드 실패", error);
+        currentSuggestion = null;
+        currentSourceBundle = null;
+        currentCandidatePack = null;
+        currentCandidateDecisionHash = "";
+        currentDiffReport = null;
+        currentDiffDecisionHash = "";
+        currentPromotionOutputs = null;
+        currentPromotionDecisionHash = "";
+        currentValidation = { ok: false, status: "fail", errors: ["Runner handoff JSON을 읽지 못했습니다."] };
+        renderSuggestion();
+        clearRunnerHandoffSummary();
+        loadStatus.className = "alert red";
+        loadStatus.textContent = "Runner handoff JSON을 읽지 못했습니다. Runner에서 다시 보내거나 suggestion JSON을 직접 여세요.";
+      }
+
+      return false;
+    }
+
+    function renderSuggestion() {
+      const validation = currentValidation || { status: "empty", errors: [] };
+      const sourceAgent = currentSuggestion && currentSuggestion.source_agent ? currentSuggestion.source_agent : {};
+      const recs = currentSuggestion && Array.isArray(currentSuggestion.recommendations) ? currentSuggestion.recommendations : [];
+
+      exportDecisionButton.disabled = !currentSuggestion || !validation.ok;
+      exportCandidateButton.disabled = !currentSuggestion || !validation.ok || !currentSourceBundle;
+      previewDiffButton.disabled = !currentSuggestion || !validation.ok || !currentSourceBundle;
+      exportDiffButton.disabled = !currentSuggestion || !validation.ok || !currentSourceBundle;
+      previewPromotionButton.disabled = !currentDiffReport;
+      exportPromotedButton.disabled = !currentDiffReport;
+      exportPromotionRecordButton.disabled = !currentDiffReport;
+      previewHubButton.disabled = !currentDiffReport;
+      sendHubButton.disabled = !currentDiffReport;
+      loadStatus.className = `alert ${validation.ok ? "green" : currentSuggestion ? "red" : "amber"}`;
+      loadStatus.textContent = currentSuggestion
+        ? `suggestion review preflight: ${validation.status}`
+        : "진화 제안 JSON을 불러오면 자동 적용 없이 검토 기록만 만들 수 있습니다.";
+      gateStatus.className = validation.ok ? "alert green" : "alert amber";
+      gateStatus.textContent = validation.ok
+        ? "제안을 검토할 수 있습니다. 내보내는 파일은 결정 기록이며 pack 변경이 아닙니다."
+        : "사용자 승인이 기록되어도 pack은 자동 수정되지 않습니다.";
+      candidateStatus.className = `alert ${currentSourceBundle && validation.ok ? "green" : "amber"}`;
+      candidateStatus.textContent = currentSourceBundle && validation.ok
+        ? "원본 pack이 연결되었습니다. 후보 pack은 버튼을 누를 때만 생성되며 원본 pack을 수정하지 않습니다."
+        : "후보 pack은 Runner handoff로 원본 pack이 있을 때만, 사용자 명시 명령 후 생성합니다.";
+      if (!currentCandidatePack) clearCandidatePreview();
+      if (!currentPromotionOutputs) clearPromotionPreview();
+      if (!currentPromotionOutputs) clearHubPreview();
+
+      summaryList.innerHTML = currentSuggestion ? [
+        ["agent", `${sourceAgent.agent_name || "unknown"} (${sourceAgent.agent_id || "unknown"})`],
+        ["proposal", currentSuggestion.proposal_status || "unknown"],
+        ["recommendations", String(recs.length)],
+        ["source_bundle", currentSourceBundle ? "available" : "not available"],
+        ["source_lifecycle", currentSourceBundle ? sourceBundleLifecycleStage(currentSourceBundle) : "none"],
+        ["auto_apply", String((currentSuggestion.approval_gate || {}).auto_apply)],
+        ["proof", `proof_claim_allowed: ${String((currentSuggestion.proof_boundary || {}).proof_claim_allowed)}`],
+      ].map(([label, value]) => `<li><strong>${escapeHtml(label)}</strong><span class="meta">${escapeHtml(value)}</span></li>`).join("") : "";
+
+      if (!currentSuggestion) {
+        recommendationList.innerHTML = "";
+        return;
+      }
+      if (!validation.ok) {
+        recommendationList.innerHTML = `<div class="alert red">${escapeHtml(validation.errors.join(" / "))}</div>`;
+        return;
+      }
+      recommendationList.innerHTML = recs.map((rec, index) => `
+        <article class="recommendation" data-index="${index}">
+          <div class="stack">
+            <span class="badge ${rec.risk_level === "medium" ? "amber" : "green"}">${escapeHtml(rec.id)} · ${escapeHtml(rec.risk_level)}</span>
+            <h3>${escapeHtml(rec.title)}</h3>
+            <p class="meta">${escapeHtml(rec.target)}</p>
+            <p>${escapeHtml(rec.rationale)}</p>
+            <p class="meta">${escapeHtml(rec.proposed_change)}</p>
+            <div class="field">
+              <label for="decision-${index}">결정</label>
+              <select id="decision-${index}" data-decision>
+                <option value="approved">승인</option>
+                <option value="deferred">보류</option>
+                <option value="rejected">거절</option>
+              </select>
+            </div>
+            <div class="field">
+              <label for="note-${index}">리뷰 메모</label>
+              <textarea id="note-${index}" data-note placeholder="왜 승인/보류/거절했는지 남깁니다. 원문 입력이나 secret은 넣지 마세요."></textarea>
+            </div>
+          </div>
+        </article>
+      `).join("");
+    }
+
+    function buildDecision() {
+      if (!currentSuggestion || !currentValidation || !currentValidation.ok) return null;
+      const sourceAgent = currentSuggestion.source_agent || {};
+      const recs = Array.isArray(currentSuggestion.recommendations) ? currentSuggestion.recommendations : [];
+      const cards = Array.from(recommendationList.querySelectorAll(".recommendation"));
+
+      return {
+        "$schema": "https://cambrian.local/schemas/evolution_review_decision_v0_1.schema.json",
+        schema_version: "0.1",
+        decision_kind: "evolution_review_decision_v0_1",
+        generated_by: "web/evolution/index.html",
+        generated_at: new Date().toISOString(),
+        source_suggestion: {
+          suggestion_kind: currentSuggestion.suggestion_kind,
+          agent_id: sourceAgent.agent_id || "unknown",
+          proposal_status: currentSuggestion.proposal_status,
+          recommendation_count: recs.length,
+          recommendation_ids: recs.map((rec) => rec.id),
+          source_receipt_eligible_for_suggestion: (currentSuggestion.source_receipt || {}).eligible_for_suggestion === true,
+          source_receipt_requires_user_approval: (currentSuggestion.source_receipt || {}).requires_user_approval === true,
+        },
+        review_status: "reviewed_not_applied",
+        approval_gate: {
+          user_reviewed: true,
+          auto_apply: false,
+          auto_promote: false,
+          apply_requires_separate_step: true,
+          can_create_new_version: false,
+        },
+        proof_boundary: {
+          uses_runtime_evidence: false,
+          proof_claim_allowed: false,
+          success_rate_claim_allowed: false,
+          marketplace_sale_ready: false,
+        },
+        privacy: {
+          stores_raw_inputs: false,
+          stores_raw_outputs: false,
+          stores_secrets: false,
+          uses_only_suggestion_metadata: true,
+        },
+        decisions: cards.map((card, index) => {
+          const rec = recs[index];
+          const decision = card.querySelector("[data-decision]");
+          const note = card.querySelector("[data-note]");
+          return {
+            id: `decision_${index + 1}`,
+            recommendation_id: rec.id,
+            target: rec.target,
+            decision: decision.value,
+            reviewer_note: note.value.trim(),
+            risk_level: rec.risk_level,
+          };
+        }),
+        next_step: {
+          allowed: "generate_candidate_pack_after_user_command",
+          blocked: "automatic_pack_mutation",
+        },
+        rollback: {
+          required_before_apply: true,
+          strategy: "save_previous_agent_pack_before_new_version",
+        },
+      };
+    }
+
+    function reviewDecisionErrors(decision) {
+      if (!decision) return ["검증을 통과한 suggestion만 리뷰 결정을 만들 수 있습니다."];
+      const source = decision.source_suggestion || {};
+      const recommendationIds = Array.isArray(source.recommendation_ids) ? source.recommendation_ids : [];
+      const decisionIds = decision.decisions.map((item) => item.recommendation_id);
+      const errors = [];
+
+      if (source.source_receipt_eligible_for_suggestion !== true || source.source_receipt_requires_user_approval !== true) {
+        errors.push("eligible receipt에서 온 사용자 승인 필요 suggestion만 리뷰할 수 있습니다.");
+      }
+      if (decision.decisions.length !== source.recommendation_count || recommendationIds.length !== source.recommendation_count) {
+        errors.push("recommendation_count와 decision 개수가 일치해야 합니다.");
+      }
+      if (new Set(decisionIds).size !== decisionIds.length || recommendationIds.some((id) => !decisionIds.includes(id))) {
+        errors.push("모든 recommendation_id에 정확히 하나의 결정이 필요합니다.");
+      }
+      if (decision.decisions.some((item) => !item.reviewer_note.trim())) {
+        errors.push("모든 recommendation에 리뷰 메모가 필요합니다.");
+      }
+      return errors;
+    }
+
+    function sortedJsonValue(value) {
+      if (Array.isArray(value)) return value.map(sortedJsonValue);
+      if (value && typeof value === "object") {
+        return Object.fromEntries(Object.keys(value).sort().map((key) => [key, sortedJsonValue(value[key])]));
+      }
+      return value;
+    }
+
+    function stableJson(value) {
+      return JSON.stringify(sortedJsonValue(value));
+    }
+
+    function decisionSignature(decision) {
+      const comparable = JSON.parse(JSON.stringify(decision || {}));
+      delete comparable.generated_at;
+      return stableJson(comparable);
+    }
+
+    async function sha256Payload(value) {
+      if (!crypto || !crypto.subtle) {
+        throw new Error("브라우저 crypto.subtle을 사용할 수 없어 sha256을 만들 수 없습니다.");
+      }
+      const bytes = new TextEncoder().encode(stableJson(value));
+      const digest = await crypto.subtle.digest("SHA-256", bytes);
+      return "sha256:" + Array.from(new Uint8Array(digest)).map((byte) => byte.toString(16).padStart(2, "0")).join("");
+    }
+
+    function flattenPayload(value, prefix = "") {
+      if (value && typeof value === "object" && !Array.isArray(value)) {
+        return Object.assign({}, ...Object.keys(value).map((key) => {
+          const childPrefix = prefix ? `${prefix}.${key}` : key;
+          return flattenPayload(value[key], childPrefix);
+        }));
+      }
+      return { [prefix]: value };
+    }
+
+    function changedPaths(original, candidate) {
+      const originalFlat = flattenPayload(original);
+      const candidateFlat = flattenPayload(candidate);
+      const paths = Array.from(new Set([...Object.keys(originalFlat), ...Object.keys(candidateFlat)])).sort();
+      return paths
+        .filter((path) => JSON.stringify(originalFlat[path]) !== JSON.stringify(candidateFlat[path]))
+        .map((path) => {
+          let changeType = "modified";
+          if (!(path in originalFlat)) changeType = "added";
+          if (!(path in candidateFlat)) changeType = "removed";
+          return { path, change_type: changeType };
+        });
+    }
+
+    function clearCandidatePreview() {
+      candidatePreview.hidden = true;
+      candidatePreview.innerHTML = "";
+    }
+
+    function clearRunnerHandoffSummary() {
+      runnerHandoffSummary.hidden = true;
+      runnerHandoffSummary.innerHTML = "";
+    }
+
+    function renderRunnerHandoffSummary(handoff, validation) {
+      const storage = handoff.storage_policy || {};
+      const privacy = handoff.privacy || {};
+      const proof = handoff.proof_boundary || {};
+      const approval = (handoff.suggestion || {}).approval_gate || {};
+      const sourceBundle = handoff.source_bundle || {};
+      const lifecycle = sourceBundleLifecycleStage(sourceBundle);
+      const status = validation && validation.ok ? "pass" : "fail";
+
+      runnerHandoffSummary.hidden = false;
+      runnerHandoffSummary.innerHTML = `
+        <div class="alert ${validation && validation.ok ? "green" : "red"}">
+          <strong>Runner handoff 검증 요약</strong>
+          <p class="meta">수동 실행 결과는 진화 리뷰 입력일 뿐이며 runtime proof나 판매 가능 성과로 승격하지 않습니다.</p>
+        </div>
+        <ul class="summary-list">
+          <li><strong>handoff status</strong><span class="meta">${escapeHtml(status)}</span></li>
+          <li><strong>handoff kind</strong><span class="meta">${escapeHtml(handoff.handoff_kind || "unknown")}</span></li>
+          <li><strong>single use</strong><span class="meta">${escapeHtml(String(storage.single_use))}</span></li>
+          <li><strong>server sync</strong><span class="meta">${escapeHtml(String(storage.server_sync))}</span></li>
+          <li><strong>runtime send</strong><span class="meta">${escapeHtml(String(storage.sends_to_cambrian_runtime))}</span></li>
+          <li><strong>api key</strong><span class="meta">${escapeHtml(String(privacy.api_key_collected))}</span></li>
+          <li><strong>secrets</strong><span class="meta">${escapeHtml(String(privacy.stores_secrets))}</span></li>
+          <li><strong>raw inputs</strong><span class="meta">${escapeHtml(String(privacy.stores_raw_inputs))}</span></li>
+          <li><strong>raw outputs</strong><span class="meta">${escapeHtml(String(privacy.stores_raw_outputs))}</span></li>
+          <li><strong>evidence</strong><span class="meta">${escapeHtml(proof.evidence_status || "unknown")}</span></li>
+          <li><strong>proof false</strong><span class="meta">${escapeHtml(String(proof.proof_claim_allowed))}</span></li>
+          <li><strong>success rate false</strong><span class="meta">${escapeHtml(String(proof.success_rate_claim_allowed))}</span></li>
+          <li><strong>sale false</strong><span class="meta">${escapeHtml(String(proof.marketplace_sale_ready))}</span></li>
+          <li><strong>source lifecycle</strong><span class="meta">${escapeHtml(lifecycle)}</span></li>
+          <li><strong>runner mode</strong><span class="meta">manual_no_api</span></li>
+          <li><strong>user approval true</strong><span class="meta">${escapeHtml(String(approval.requires_user_approval))}</span></li>
+        </ul>
+      `;
+    }
+
+    function clearPromotionPreview() {
+      promotionPreview.hidden = true;
+      promotionPreview.innerHTML = "";
+    }
+
+    function clearHubPreview() {
+      hubPreview.hidden = true;
+      hubPreview.innerHTML = "";
+    }
+
+    function renderCandidatePreviewNotice(level, title, message) {
+      candidatePreview.hidden = false;
+      candidatePreview.innerHTML = `
+        <div class="alert ${escapeHtml(level)}">
+          <strong>${escapeHtml(title)}</strong>
+          <p class="meta">${escapeHtml(message)}</p>
+        </div>
+      `;
+    }
+
+    function resetDiffAndPromotionOutputs() {
+      currentDiffReport = null;
+      currentDiffDecisionHash = "";
+      currentPromotionOutputs = null;
+      currentPromotionDecisionHash = "";
+      previewPromotionButton.disabled = true;
+      exportPromotedButton.disabled = true;
+      exportPromotionRecordButton.disabled = true;
+      previewHubButton.disabled = true;
+      sendHubButton.disabled = true;
+      clearPromotionPreview();
+      clearHubPreview();
+    }
+
+    function refreshCandidatePreviewAfterDecisionEdit() {
+      if (!currentSourceBundle || !currentSuggestion || !currentValidation || !currentValidation.ok) {
+        currentCandidatePack = null;
+        currentCandidateDecisionHash = "";
+        resetDiffAndPromotionOutputs();
+        clearCandidatePreview();
+        return;
+      }
+
+      const decision = buildDecision();
+      resetDiffAndPromotionOutputs();
+      const errors = reviewDecisionErrors(decision);
+      if (errors.length) {
+        currentCandidatePack = null;
+        currentCandidateDecisionHash = "";
+        renderCandidatePreviewNotice("amber", "미리보기 대기", errors.join(" / "));
+        return;
+      }
+
+      const approved = decision.decisions.filter((item) => item.decision === "approved");
+      if (!approved.length) {
+        currentCandidatePack = null;
+        currentCandidateDecisionHash = decisionSignature(decision);
+        renderCandidatePreviewNotice("amber", "후보 변경 없음", "승인된 추천이 없어 candidate pack 미리보기를 만들지 않습니다.");
+        return;
+      }
+
+      const result = buildCandidatePackAfterUserCommand(decision);
+      if (result.errors.length) {
+        currentCandidatePack = null;
+        currentCandidateDecisionHash = "";
+        renderCandidatePreviewNotice("red", "미리보기 실패", result.errors.join(" / "));
+        return;
+      }
+
+      currentCandidatePack = result.candidate;
+      currentCandidateDecisionHash = decisionSignature(decision);
+      renderCandidatePreview(currentCandidatePack, null);
+      candidateStatus.className = "alert green";
+      candidateStatus.textContent = "현재 리뷰 결정으로 candidate preview를 갱신했습니다. 내보내기 버튼을 누르면 같은 결정으로 다운로드합니다.";
+    }
+
+    function shortPathList(items) {
+      if (!items.length) return "none";
+      const head = items.slice(0, 4).join(", ");
+      return items.length > 4 ? `${head} 외 ${items.length - 4}개` : head;
+    }
+
+    function previewChangedFiles(changes) {
+      const files = new Set();
+      for (const change of changes) {
+        if (!change.path.startsWith("files.")) {
+          files.add(change.path.split(".", 1)[0]);
+          continue;
+        }
+        const path = change.path.replace(/^files\./, "");
+        if (path.startsWith("agent.json")) {
+          files.add("agent.json");
+        } else if (path.startsWith("agent_card.json")) {
+          files.add("agent_card.json");
+        } else if (path.startsWith("manifest.json")) {
+          files.add("manifest.json");
+        } else if (path.startsWith("instructions.md")) {
+          files.add("instructions.md");
+        } else {
+          files.add(path.split(".", 1)[0]);
+        }
+      }
+      const order = {
+        "instructions.md": 0,
+        "agent.json": 1,
+        "agent_card.json": 2,
+        "manifest.json": 3,
+        generated_by: 4,
+        candidate_metadata: 5,
+        promotion_metadata: 6,
+      };
+      return Array.from(files).sort((left, right) => {
+        const leftOrder = Object.prototype.hasOwnProperty.call(order, left) ? order[left] : 99;
+        const rightOrder = Object.prototype.hasOwnProperty.call(order, right) ? order[right] : 99;
+        return leftOrder - rightOrder || left.localeCompare(right);
+      });
+    }
+
+    function previewPath(path) {
+      if (!String(path).startsWith("files.")) return path;
+      return String(path)
+        .replace(/^files\./, "")
+        .replace(/^agent\.json\./, "agent.json.")
+        .replace(/^agent_card\.json\./, "agent_card.json.")
+        .replace(/^manifest\.json\./, "manifest.json.")
+        .replace(/^instructions\.md(\..*)?$/, "instructions.md");
+    }
+
+    function recommendationMap() {
+      const recs = currentSuggestion && Array.isArray(currentSuggestion.recommendations)
+        ? currentSuggestion.recommendations
+        : [];
+      return Object.fromEntries(recs.map((item) => [item.id, item]));
+    }
+
+    function approvalLinkRows(candidate, diffReport = null) {
+      const approved = (candidate.candidate_metadata || {}).approved_recommendation_ids || [];
+      const recommendations = recommendationMap();
+      const groups = new Map();
+
+      for (const recId of approved) {
+        const recommendation = recommendations[recId] || {};
+        groups.set(recId, {
+          id: recId,
+          title: recommendation.title || "승인된 추천",
+          target: recommendation.target || "unknown",
+          reason: "diff report 생성 전입니다.",
+          paths: [],
+        });
+      }
+
+      if (diffReport) {
+        for (const change of diffReport.allowed_changes || []) {
+          const recId = change.source_decision_id;
+          if (!recId || recId === "candidate_metadata") continue;
+          const recommendation = recommendations[recId] || {};
+          if (!groups.has(recId)) {
+            groups.set(recId, {
+              id: recId,
+              title: recommendation.title || "승인된 추천",
+              target: recommendation.target || "unknown",
+              reason: change.reason,
+              paths: [],
+            });
+          }
+          const group = groups.get(recId);
+          group.reason = change.reason || group.reason;
+          const path = previewPath(change.path);
+          if (!group.paths.includes(path)) group.paths.push(path);
+        }
+      }
+
+      return Array.from(groups.values()).map((item) => ({
+        ...item,
+        paths: item.paths.length ? item.paths : [item.target],
+      }));
+    }
+
+    function renderCandidatePreview(candidate, diffReport = null) {
+      if (!currentSourceBundle || !candidate) {
+        clearCandidatePreview();
+        return;
+      }
+      const changes = changedPaths(currentSourceBundle, candidate);
+      const files = previewChangedFiles(changes);
+      const approved = (candidate.candidate_metadata || {}).approved_recommendation_ids || [];
+      const diffStatus = diffReport ? diffReport.diff_status : "diff pending";
+      const allowedCount = diffReport ? String(diffReport.allowed_changes.length) : "pending";
+      const unexpectedCount = diffReport ? String(diffReport.unexpected_changes.length) : "pending";
+      const blocked = diffReport ? diffReport.next_step.blocked : "automatic_candidate_promotion";
+      const linkRows = approvalLinkRows(candidate, diffReport);
+      const approvalHtml = linkRows.length
+        ? `
+          <div class="approval-links">
+            <strong>승인 연결</strong>
+            <ul>
+              ${linkRows.map((row) => `
+                <li>
+                  <span>${escapeHtml(row.id)} · ${escapeHtml(row.title)}</span>
+                  <span class="meta">${escapeHtml(shortPathList(row.paths))}</span>
+                  <span class="meta">${escapeHtml(row.reason)}</span>
+                </li>
+              `).join("")}
+            </ul>
+          </div>
+        `
+        : "";
+      candidatePreview.hidden = false;
+      candidatePreview.innerHTML = `
+        <div class="alert ${diffReport && diffReport.unexpected_changes.length ? "red" : "green"}">
+          <strong>전후 비교</strong>
+          <p class="meta">원본은 유지되고 후보 pack만 검토 대상으로 만들어졌습니다.</p>
+        </div>
+        <ul class="summary-list">
+          <li><strong>changed files</strong><span class="meta">${escapeHtml(shortPathList(files))}</span></li>
+          <li><strong>changed paths</strong><span class="meta">${escapeHtml(String(changes.length))}</span></li>
+          <li><strong>approved ids</strong><span class="meta">${escapeHtml(shortPathList(approved))}</span></li>
+          <li><strong>diff status</strong><span class="meta">${escapeHtml(diffStatus)}</span></li>
+          <li><strong>allowed</strong><span class="meta">${escapeHtml(allowedCount)}</span></li>
+          <li><strong>unexpected</strong><span class="meta">${escapeHtml(unexpectedCount)}</span></li>
+          <li><strong>blocked</strong><span class="meta">${escapeHtml(blocked)}</span></li>
+          <li><strong>proof</strong><span class="meta">not claimed</span></li>
+        </ul>
+        ${approvalHtml}
+      `;
+    }
+
+    function renderPromotionPreview(promoted, record) {
+      const metadata = promoted.promotion_metadata || {};
+      const manifest = promoted.files["manifest.json"] || {};
+      const marketplace = manifest.marketplace || {};
+      const recordSource = record.source || {};
+      const hashesLinked = metadata.promoted_from_candidate_hash === recordSource.candidate_pack_hash
+        && metadata.diff_report_hash === recordSource.diff_report_hash
+        && recordSource.promoted_pack_hash;
+      promotionPreview.hidden = false;
+      promotionPreview.innerHTML = `
+        <div class="alert green">
+          <strong>promotion 미리보기</strong>
+          <p class="meta">promoted pack과 promotion record를 메모리에 만들었습니다. 파일은 아직 다운로드하지 않았습니다.</p>
+        </div>
+        <ul class="summary-list">
+          <li><strong>promotion status</strong><span class="meta">${escapeHtml(metadata.promotion_status || "unknown")}</span></li>
+          <li><strong>record kind</strong><span class="meta">${escapeHtml(record.record_kind || "unknown")}</span></li>
+          <li><strong>candidate metadata</strong><span class="meta">${escapeHtml(!("candidate_metadata" in promoted) ? "removed" : "present")}</span></li>
+          <li><strong>auto promote</strong><span class="meta">${escapeHtml(String(metadata.auto_promote))}</span></li>
+          <li><strong>proof claim</strong><span class="meta">${escapeHtml(String(metadata.proof_claim_allowed))}</span></li>
+          <li><strong>sale ready</strong><span class="meta">${escapeHtml(String(marketplace.sale_ready))}</span></li>
+          <li><strong>hash link</strong><span class="meta">${escapeHtml(hashesLinked ? "linked" : "check required")}</span></li>
+          <li><strong>changed files</strong><span class="meta">${escapeHtml(shortPathList((record.applied_change_summary || {}).changed_files || []))}</span></li>
+        </ul>
+      `;
+    }
+
+    function renderHubPreview(handoff) {
+      const storage = handoff.storage_policy || {};
+      const privacy = handoff.privacy || {};
+      const proof = handoff.proof_boundary || {};
+      const promoted = handoff.promoted_pack || {};
+      const record = handoff.promotion_record || {};
+      const metadata = promoted.promotion_metadata || {};
+      hubPreview.hidden = false;
+      hubPreview.innerHTML = `
+        <div class="alert green">
+          <strong>Private Hub handoff 미리보기</strong>
+          <p class="meta">localStorage 저장과 화면 이동 전, Hub로 넘길 산출물 경계를 확인합니다.</p>
+        </div>
+        <ul class="summary-list">
+          <li><strong>handoff kind</strong><span class="meta">${escapeHtml(handoff.handoff_kind || "unknown")}</span></li>
+          <li><strong>single use</strong><span class="meta">${escapeHtml(String(storage.single_use))}</span></li>
+          <li><strong>server sync</strong><span class="meta">${escapeHtml(String(storage.server_sync))}</span></li>
+          <li><strong>runtime send</strong><span class="meta">${escapeHtml(String(storage.sends_to_cambrian_runtime))}</span></li>
+          <li><strong>api key</strong><span class="meta">${escapeHtml(String(privacy.api_key_collected))}</span></li>
+          <li><strong>secrets</strong><span class="meta">${escapeHtml(String(privacy.stores_secrets))}</span></li>
+          <li><strong>proof</strong><span class="meta">${escapeHtml(`${proof.evidence_status || "unknown"} / claim ${String(proof.proof_claim_allowed)}`)}</span></li>
+          <li><strong>payload</strong><span class="meta">${escapeHtml(`${metadata.promotion_status || "unknown"} + ${record.record_kind || "unknown"}`)}</span></li>
+        </ul>
+      `;
+    }
+
+    function changedFiles(changes) {
+      const files = new Set();
+      for (const change of changes) {
+        const path = change.path;
+        if (!path.startsWith("files.")) {
+          files.add(path);
+          continue;
+        }
+        const withoutPrefix = path.replace(/^files\./, "");
+        const jsonMarker = ".json.";
+        const mdMarker = ".md.";
+        if (withoutPrefix.includes(jsonMarker)) {
+          files.add(withoutPrefix.split(jsonMarker, 1)[0] + ".json");
+        } else if (withoutPrefix.includes(mdMarker)) {
+          files.add(withoutPrefix.split(mdMarker, 1)[0] + ".md");
+        } else {
+          files.add(withoutPrefix);
+        }
+      }
+      return Array.from(files).sort();
+    }
+
+    function allowedPathsForDecisions(decisions, options = {}) {
+      const allowed = {
+        candidate_metadata: {
+          source_decision_id: "candidate_metadata",
+          reason: "candidate pack 생성 경계와 승인 decision 요약을 남긴다.",
+        },
+        generated_by: {
+          source_decision_id: "candidate_metadata",
+          reason: "candidate pack 생성 도구 출처를 남긴다.",
+        },
+        "files.agent.json.provenance": {
+          source_decision_id: "candidate_metadata",
+          reason: "evolution_candidate provenance를 남긴다.",
+        },
+      };
+      if (options.allowPromotionMetadataRemoval) {
+        allowed.promotion_metadata = {
+          source_decision_id: "candidate_metadata",
+          reason: "promoted_private_version을 새 candidate review 초안으로 만들기 위해 이전 promotion_metadata를 제거한다.",
+        };
+      }
+
+      for (const item of decisions) {
+        const recId = item.recommendation_id;
+        if (item.target === "instructions.md") {
+          allowed["files.instructions.md"] = {
+            source_decision_id: recId,
+            reason: "승인된 instructions.md 진화 제안을 반영한다.",
+          };
+        } else if (item.target === "agent.json.known_limits") {
+          allowed["files.agent.json.known_limits"] = {
+            source_decision_id: recId,
+            reason: "승인된 agent known_limits 진화 제안을 반영한다.",
+          };
+          allowed["files.agent_card.json.known_limits"] = {
+            source_decision_id: recId,
+            reason: "agent card의 known limits를 agent 계약과 맞춘다.",
+          };
+        } else if (item.target === "agent.json.validation_criteria") {
+          allowed["files.agent.json.validation_criteria"] = {
+            source_decision_id: recId,
+            reason: "승인된 validation_criteria 진화 제안을 반영한다.",
+          };
+        } else if (item.target === "agent_card.json") {
+          allowed["files.agent_card.json.known_limits"] = {
+            source_decision_id: recId,
+            reason: "승인된 agent card 진화 제안을 반영한다.",
+          };
+        }
+      }
+
+      return allowed;
+    }
+
+    function blockedDecisionsNotApplied(changes, decisions) {
+      const blockedAllowed = allowedPathsForDecisions(decisions);
+      delete blockedAllowed.candidate_metadata;
+      delete blockedAllowed.generated_by;
+      delete blockedAllowed["files.agent.json.provenance"];
+      delete blockedAllowed.promotion_metadata;
+      const changed = new Set(changes.map((item) => item.path));
+      return !Object.keys(blockedAllowed).some((path) => changed.has(path));
+    }
+
+    function appendUnique(items, value) {
+      if (!Array.isArray(items)) return;
+      if (!items.includes(value)) items.push(value);
+    }
+
+    function appendInstructionsChecklist(markdown, criteria) {
+      const marker = "## 수동 검증 체크리스트";
+      if (String(markdown).includes(marker)) return markdown;
+      const checklist = Array.isArray(criteria) ? criteria.map((item) => `- ${item}`).join("\n") : "";
+      return `${String(markdown).trim()}\n\n${marker}\n이 항목은 proof가 아니라 사용자가 직접 확인할 체크리스트입니다.\n${checklist}\n`;
+    }
+
+    function appendInstructionsEvolutionNote(markdown, recommendation) {
+      const marker = "## 승인된 instructions 진화 제안";
+      const line = `- ${recommendation.title}: ${recommendation.proposed_change}`;
+      const current = String(markdown).trim();
+      if (current.includes(line)) return current;
+      if (current.includes(marker)) return `${current}\n${line}\n`;
+      return `${current}\n\n${marker}\n이 섹션은 자동 적용 완료가 아니라 후보 pack 검토용입니다.\n${line}\n`;
+    }
+
+    function candidateMetadata(suggestion, decision, approved, generatedAt) {
+      return {
+        metadata_kind: "candidate_agent_pack_metadata_v0_1",
+        source_suggestion_kind: suggestion.suggestion_kind,
+        source_decision_kind: decision.decision_kind,
+        apply_status: "candidate_not_applied",
+        auto_apply: false,
+        auto_promote: false,
+        approved_decision_ids: approved.map((item) => item.id),
+        approved_recommendation_ids: approved.map((item) => item.recommendation_id),
+        deferred_recommendation_ids: decision.decisions.filter((item) => item.decision === "deferred").map((item) => item.recommendation_id),
+        rejected_recommendation_ids: decision.decisions.filter((item) => item.decision === "rejected").map((item) => item.recommendation_id),
+        requires_user_final_review: true,
+        original_pack_preserved: true,
+        generated_at: generatedAt,
+      };
+    }
+
+    function replaceCandidateNotice(items) {
+      const candidateNotice = "이 후보 pack은 evolution_review_decision_v0_1 기반이며, 최종 적용 전 사용자가 다시 검토해야 합니다.";
+      const promotedNotice = "이 private version은 candidate diff gate를 통과했지만 runtime evidence, proof, 공개 판매 준비 상태가 아닙니다.";
+      if (!Array.isArray(items)) return;
+      const index = items.indexOf(candidateNotice);
+      if (index >= 0) {
+        items[index] = promotedNotice;
+      } else {
+        appendUnique(items, promotedNotice);
+      }
+    }
+
+    function buildCandidatePackAfterUserCommand(decision) {
+      const decisionErrors = reviewDecisionErrors(decision);
+      if (decisionErrors.length) return { errors: decisionErrors };
+      if (!currentSourceBundle) return { errors: ["Runner handoff로 연결된 원본 pack이 필요합니다."] };
+
+      const approved = decision.decisions.filter((item) => item.decision === "approved");
+      if (!approved.length) return { errors: ["approved decision이 없으면 candidate pack을 생성하지 않습니다."] };
+
+      const sourceValidation = validateSourceBundleForCandidate(currentSourceBundle, currentSuggestion);
+      if (!sourceValidation.ok) return { errors: sourceValidation.errors };
+
+      const candidate = JSON.parse(JSON.stringify(currentSourceBundle));
+      const files = candidate.files;
+      const agent = files["agent.json"];
+      const card = files["agent_card.json"];
+      const recommendations = Object.fromEntries(currentSuggestion.recommendations.map((item) => [item.id, item]));
+      const generatedAt = new Date().toISOString();
+
+      candidate.generated_by = "tools/generate_candidate_pack.py";
+      delete candidate.promotion_metadata;
+      candidate.candidate_metadata = candidateMetadata(currentSuggestion, decision, approved, generatedAt);
+      appendUnique(agent.known_limits, "이 후보 pack은 evolution_review_decision_v0_1 기반이며, 최종 적용 전 사용자가 다시 검토해야 합니다.");
+      appendUnique(card.known_limits, "이 후보 pack은 evolution_review_decision_v0_1 기반이며, 최종 적용 전 사용자가 다시 검토해야 합니다.");
+      agent.provenance.push({
+        source: "web/evolution/index.html",
+        kind: "evolution_candidate",
+        generated_at: generatedAt,
+      });
+
+      for (const decisionItem of approved) {
+        const recommendation = recommendations[decisionItem.recommendation_id];
+        if (!recommendation) return { errors: [`recommendation을 찾을 수 없습니다: ${decisionItem.recommendation_id}`] };
+        if (recommendation.target === "instructions.md") {
+          files["instructions.md"] = appendInstructionsChecklist(files["instructions.md"], agent.validation_criteria);
+          files["instructions.md"] = appendInstructionsEvolutionNote(files["instructions.md"], recommendation);
+        } else if (recommendation.target === "agent.json.known_limits") {
+          appendUnique(agent.known_limits, recommendation.proposed_change);
+          appendUnique(card.known_limits, recommendation.proposed_change);
+        } else if (recommendation.target === "agent.json.validation_criteria") {
+          appendUnique(agent.validation_criteria, "각 결과 항목은 사용자가 예/아니오로 확인할 수 있게 작성되어야 한다.");
+        } else if (recommendation.target === "agent_card.json") {
+          appendUnique(card.known_limits, recommendation.proposed_change);
+        }
+      }
+
+      if ((files["manifest.json"].marketplace || {}).sale_ready !== false) return { errors: ["candidate pack sale_ready는 false여야 합니다."] };
+      if ((files["manifest.json"].marketplace || {}).proof_claim_allowed !== false) return { errors: ["candidate pack proof_claim_allowed는 false여야 합니다."] };
+      if (files["manifest.json"].evidence_status !== "no_runtime_evidence") return { errors: ["candidate pack은 no_runtime_evidence를 유지해야 합니다."] };
+      if (candidate.candidate_metadata.auto_apply !== false || candidate.candidate_metadata.auto_promote !== false) {
+        return { errors: ["candidate pack은 auto_apply와 auto_promote를 false로 유지해야 합니다."] };
+      }
+
+      return { candidate, errors: [] };
+    }
+
+    async function buildPromotionOutputsAfterUserCommand(decision) {
+      const decisionHash = decisionSignature(decision);
+      if (currentPromotionOutputs && currentPromotionDecisionHash === decisionHash) {
+        return { ...currentPromotionOutputs, errors: [] };
+      }
+      const decisionErrors = reviewDecisionErrors(decision);
+      if (decisionErrors.length) return { errors: decisionErrors };
+      if (!currentSourceBundle) return { errors: ["Runner handoff로 연결된 원본 pack이 필요합니다."] };
+      if (!currentCandidatePack || !currentDiffReport || currentDiffDecisionHash !== decisionHash) {
+        return { errors: ["승격 전에 현재 decision으로 diff report를 먼저 내보내야 합니다."] };
+      }
+      if (currentCandidatePack.generated_by !== "tools/generate_candidate_pack.py") {
+        return { errors: ["candidate pack은 tools/generate_candidate_pack.py 산출물이어야 합니다."] };
+      }
+      if (!currentCandidatePack.candidate_metadata || currentCandidatePack.candidate_metadata.apply_status !== "candidate_not_applied") {
+        return { errors: ["candidate pack은 candidate_not_applied 상태여야 합니다."] };
+      }
+      if (currentDiffReport.diff_status !== "review_pass_not_promoted") {
+        return { errors: ["diff report는 review_pass_not_promoted 상태여야 합니다."] };
+      }
+      if ((currentDiffReport.next_step || {}).allowed !== "promote_candidate_after_user_command") {
+        return { errors: ["diff report가 별도 사용자 명령 promotion을 허용하지 않습니다."] };
+      }
+
+      const originalHash = await sha256Payload(currentSourceBundle);
+      const candidateHash = await sha256Payload(currentCandidatePack);
+      const diffHash = await sha256Payload(currentDiffReport);
+      if (currentDiffReport.source.original_pack_hash !== originalHash) {
+        return { errors: ["diff report의 original pack hash가 현재 원본과 일치하지 않습니다."] };
+      }
+      if (currentDiffReport.source.candidate_pack_hash !== candidateHash) {
+        return { errors: ["diff report의 candidate pack hash가 현재 후보와 일치하지 않습니다."] };
+      }
+
+      const generatedAt = new Date().toISOString();
+      const candidateMetadata = currentCandidatePack.candidate_metadata;
+      const promoted = JSON.parse(JSON.stringify(currentCandidatePack));
+      promoted.generated_by = "tools/promote_candidate_pack.py";
+      delete promoted.candidate_metadata;
+      promoted.promotion_metadata = {
+        metadata_kind: "promoted_agent_pack_metadata_v0_1",
+        source_candidate_metadata_kind: candidateMetadata.metadata_kind,
+        source_candidate_generated_by: currentCandidatePack.generated_by,
+        source_diff_report_kind: currentDiffReport.report_kind,
+        source_diff_report_generated_by: currentDiffReport.generated_by,
+        promotion_status: "promoted_private_version",
+        candidate_apply_status_before_promotion: candidateMetadata.apply_status,
+        user_command_required: true,
+        auto_promote: false,
+        approved_decision_ids: candidateMetadata.approved_decision_ids,
+        approved_recommendation_ids: candidateMetadata.approved_recommendation_ids,
+        original_pack_preserved: true,
+        candidate_pack_preserved: true,
+        proof_claim_allowed: false,
+        marketplace_sale_ready: false,
+        promoted_from_candidate_hash: candidateHash,
+        diff_report_hash: diffHash,
+        generated_at: generatedAt,
+      };
+      replaceCandidateNotice(promoted.files["agent.json"].known_limits);
+      replaceCandidateNotice(promoted.files["agent_card.json"].known_limits);
+      promoted.files["agent.json"].provenance.push({
+        source: "candidate_diff_report_v0_1",
+        kind: "evolution_promoted",
+        generated_at: generatedAt,
+      });
+
+      if ("candidate_metadata" in promoted) return { errors: ["promoted pack은 candidate_metadata를 포함할 수 없습니다."] };
+      if (promoted.promotion_metadata.auto_promote !== false) return { errors: ["promotion auto_promote는 false여야 합니다."] };
+      if (promoted.promotion_metadata.proof_claim_allowed !== false || promoted.promotion_metadata.marketplace_sale_ready !== false) {
+        return { errors: ["promoted pack은 proof claim과 marketplace sale ready를 false로 유지해야 합니다."] };
+      }
+      if ((promoted.files["manifest.json"].marketplace || {}).sale_ready !== false) return { errors: ["promoted pack sale_ready는 false여야 합니다."] };
+      if ((promoted.files["manifest.json"].marketplace || {}).proof_claim_allowed !== false) return { errors: ["promoted pack proof_claim_allowed는 false여야 합니다."] };
+
+      const promotedHash = await sha256Payload(promoted);
+      const record = {
+        "$schema": "https://cambrian.local/schemas/candidate_promotion_record_v0_1.schema.json",
+        schema_version: "0.1",
+        record_kind: "candidate_promotion_record_v0_1",
+        generated_by: "tools/promote_candidate_pack.py",
+        generated_at: generatedAt,
+        agent_id: promoted.files["agent.json"].agent_id,
+        promotion_status: "promoted_private_version",
+        source: {
+          original_pack_hash: originalHash,
+          candidate_pack_hash: candidateHash,
+          diff_report_hash: diffHash,
+          promoted_pack_hash: promotedHash,
+          candidate_diff_status: currentDiffReport.diff_status,
+        },
+        gate: {
+          user_command_required: true,
+          auto_promote: false,
+          source_diff_report_required: true,
+          output_overwrite_blocked: true,
+        },
+        proof_boundary: {
+          uses_runtime_evidence: false,
+          proof_claim_allowed: false,
+          success_rate_claim_allowed: false,
+          marketplace_sale_ready: false,
+        },
+        applied_change_summary: {
+          changed_path_count: currentDiffReport.change_summary.changed_path_count,
+          changed_files: currentDiffReport.change_summary.changed_files,
+          approved_recommendation_ids: currentDiffReport.change_summary.approved_decision_ids,
+          deferred_or_rejected_recommendation_ids: currentDiffReport.change_summary.deferred_or_rejected_decision_ids,
+        },
+        outputs: {
+          promoted_pack_kind: promoted.package_kind,
+          promotion_metadata_kind: promoted.promotion_metadata.metadata_kind,
+          candidate_metadata_removed: !("candidate_metadata" in promoted),
+          private_visibility: promoted.files["manifest.json"].marketplace.visibility === "private",
+        },
+      };
+
+      if (record.gate.auto_promote !== false || record.proof_boundary.proof_claim_allowed !== false) {
+        return { errors: ["promotion record는 자동 승격과 proof claim을 차단해야 합니다."] };
+      }
+      if (record.source.promoted_pack_hash !== promotedHash) return { errors: ["promotion record promoted hash가 일치하지 않습니다."] };
+
+      currentPromotionOutputs = { promoted, record };
+      currentPromotionDecisionHash = decisionHash;
+      return { promoted, record, errors: [] };
+    }
+
+    async function buildCandidateDiffReportAfterUserCommand(decision, candidate) {
+      const decisionErrors = reviewDecisionErrors(decision);
+      if (decisionErrors.length) return { errors: decisionErrors };
+      if (!currentSourceBundle) return { errors: ["Runner handoff로 연결된 원본 pack이 필요합니다."] };
+      if (!candidate) return { errors: ["candidate pack을 먼저 생성해야 합니다."] };
+
+      const sourceValidation = validateSourceBundleForCandidate(currentSourceBundle, currentSuggestion);
+      if (!sourceValidation.ok) return { errors: sourceValidation.errors };
+      if (candidate.generated_by !== "tools/generate_candidate_pack.py") return { errors: ["candidate pack 생성 출처가 올바르지 않습니다."] };
+      if (!candidate.candidate_metadata || candidate.candidate_metadata.apply_status !== "candidate_not_applied") return { errors: ["candidate_not_applied metadata가 필요합니다."] };
+
+      const changes = changedPaths(currentSourceBundle, candidate);
+      const approvedDecisions = decision.decisions.filter((item) => item.decision === "approved");
+      const blockedDecisions = decision.decisions.filter((item) => item.decision !== "approved");
+      const sourceLifecycle = sourceBundleLifecycleStage(currentSourceBundle);
+      const allowedPathReasons = allowedPathsForDecisions(approvedDecisions, {
+        allowPromotionMetadataRemoval: sourceLifecycle === "promoted_private_version",
+      });
+      const allowedChanges = [];
+      const unexpectedChanges = [];
+
+      for (const change of changes) {
+        let reason = allowedPathReasons[change.path];
+        if (!reason && change.path.startsWith("candidate_metadata.")) {
+          reason = allowedPathReasons.candidate_metadata;
+        }
+        if (!reason && change.path.startsWith("promotion_metadata.") && change.change_type === "removed") {
+          reason = allowedPathReasons.promotion_metadata;
+        }
+        if (reason) {
+          allowedChanges.push({ ...change, ...reason });
+        } else {
+          unexpectedChanges.push(change);
+        }
+      }
+
+      const report = {
+        "$schema": "https://cambrian.local/schemas/candidate_diff_report_v0_1.schema.json",
+        schema_version: "0.1",
+        report_kind: "candidate_diff_report_v0_1",
+        generated_by: "tools/generate_candidate_diff_report.py",
+        generated_at: new Date().toISOString(),
+        source: {
+          agent_id: currentSourceBundle.files["agent.json"].agent_id,
+          original_pack_hash: await sha256Payload(currentSourceBundle),
+          candidate_pack_hash: await sha256Payload(candidate),
+          decision_kind: decision.decision_kind,
+          decision_review_status: decision.review_status,
+        },
+        diff_status: unexpectedChanges.length ? "review_fail" : "review_pass_not_promoted",
+        comparison: {
+          agent_id_matches: currentSourceBundle.files["agent.json"].agent_id === candidate.files["agent.json"].agent_id,
+          original_pack_valid: true,
+          candidate_pack_valid: true,
+          candidate_is_distinct: stableJson(currentSourceBundle) !== stableJson(candidate),
+          only_approved_decisions_applied: unexpectedChanges.length === 0,
+          deferred_and_rejected_not_applied: blockedDecisionsNotApplied(changes, blockedDecisions),
+        },
+        approval_gate: {
+          auto_promote: false,
+          candidate_review_required: true,
+          promotion_requires_separate_command: true,
+        },
+        proof_boundary: {
+          uses_runtime_evidence: false,
+          proof_claim_allowed: false,
+          success_rate_claim_allowed: false,
+          marketplace_sale_ready: false,
+        },
+        change_summary: {
+          changed_path_count: changes.length,
+          changed_files: changedFiles(changes),
+          approved_decision_ids: approvedDecisions.map((item) => item.recommendation_id),
+          deferred_or_rejected_decision_ids: blockedDecisions.map((item) => item.recommendation_id),
+        },
+        allowed_changes: allowedChanges,
+        unexpected_changes: unexpectedChanges,
+        next_step: {
+          allowed: "promote_candidate_after_user_command",
+          blocked: "automatic_candidate_promotion",
+        },
+      };
+
+      const errors = [];
+      if (report.diff_status !== "review_pass_not_promoted") errors.push("diff_status는 review_pass_not_promoted여야 합니다.");
+      if (!report.comparison.only_approved_decisions_applied) errors.push("승인되지 않은 변경이 포함되어 있습니다.");
+      if (!report.comparison.deferred_and_rejected_not_applied) errors.push("보류/거절된 decision 대상이 변경되었습니다.");
+      if (report.approval_gate.auto_promote !== false) errors.push("auto_promote는 false여야 합니다.");
+      if (report.proof_boundary.proof_claim_allowed !== false || report.proof_boundary.success_rate_claim_allowed !== false) errors.push("diff report는 proof나 성공률을 주장할 수 없습니다.");
+      if (report.unexpected_changes.length) errors.push("unexpected_changes는 비어 있어야 합니다.");
+      return { report, errors };
+    }
+
+    async function buildAndStoreDiffReportForCurrentDecision() {
+      const decision = buildDecision();
+      let candidate = currentCandidatePack;
+      if (!candidate || currentCandidateDecisionHash !== decisionSignature(decision)) {
+        const candidateResult = buildCandidatePackAfterUserCommand(decision);
+        if (candidateResult.errors.length) {
+          return { errors: candidateResult.errors };
+        }
+        candidate = candidateResult.candidate;
+        currentCandidatePack = candidate;
+        currentCandidateDecisionHash = decisionSignature(decision);
+      }
+
+      try {
+        const diffResult = await buildCandidateDiffReportAfterUserCommand(decision, candidate);
+        if (diffResult.errors.length) {
+          return { errors: diffResult.errors };
+        }
+        currentDiffReport = diffResult.report;
+        currentDiffDecisionHash = decisionSignature(decision);
+        currentPromotionOutputs = null;
+        currentPromotionDecisionHash = "";
+        clearPromotionPreview();
+        clearHubPreview();
+        previewPromotionButton.disabled = false;
+        exportPromotedButton.disabled = false;
+        exportPromotionRecordButton.disabled = false;
+        previewHubButton.disabled = false;
+        sendHubButton.disabled = false;
+        renderCandidatePreview(candidate, diffResult.report);
+        return { candidate, report: diffResult.report, errors: [] };
+      } catch (error) {
+        console.error("candidate diff report 생성 실패", error);
+        return { errors: ["candidate diff report를 생성하지 못했습니다. 브라우저 sha256 기능을 확인하세요."] };
+      }
+    }
+
+    function downloadJson(filename, payload) {
+      const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = filename;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(url);
+    }
+
+    async function loadSuggestionFile(event) {
+      const file = event.target.files && event.target.files[0];
+      if (!file) return;
+
+      try {
+        const text = await file.text();
+        const suggestion = JSON.parse(text);
+        currentSuggestion = suggestion;
+        currentSourceBundle = null;
+        currentCandidatePack = null;
+        currentCandidateDecisionHash = "";
+        currentDiffReport = null;
+        currentDiffDecisionHash = "";
+        currentPromotionOutputs = null;
+        currentPromotionDecisionHash = "";
+        currentValidation = validateSuggestion(suggestion);
+        clearRunnerHandoffSummary();
+        renderSuggestion();
+      } catch (error) {
+        console.error("evolution suggestion 로드 실패", error);
+        currentSuggestion = null;
+        currentSourceBundle = null;
+        currentCandidatePack = null;
+        currentCandidateDecisionHash = "";
+        currentDiffReport = null;
+        currentDiffDecisionHash = "";
+        currentPromotionOutputs = null;
+        currentPromotionDecisionHash = "";
+        currentValidation = { ok: false, status: "fail", errors: ["JSON 파일을 읽거나 해석하지 못했습니다."] };
+        clearRunnerHandoffSummary();
+        renderSuggestion();
+      } finally {
+        event.target.value = "";
+      }
+    }
+
+    exportDecisionButton.addEventListener("click", () => {
+      const decision = buildDecision();
+      const errors = reviewDecisionErrors(decision);
+      if (errors.length) {
+        gateStatus.className = "alert red";
+        gateStatus.textContent = errors.join(" / ");
+        return;
+      }
+      const safeAgentId = String(decision.source_suggestion.agent_id || "agent").replace(/[^a-z0-9_-]/gi, "-").toLowerCase();
+      downloadJson(`${safeAgentId}-evolution-review-decision.json`, decision);
+      gateStatus.className = "alert green";
+      gateStatus.textContent = "evolution_review_decision_v0_1을 내보냈습니다. pack은 수정되지 않았습니다.";
+    });
+
+    exportCandidateButton.addEventListener("click", () => {
+      const decision = buildDecision();
+      const result = buildCandidatePackAfterUserCommand(decision);
+      if (result.errors.length) {
+        candidateStatus.className = "alert red";
+        candidateStatus.textContent = result.errors.join(" / ");
+        return;
+      }
+      currentCandidatePack = result.candidate;
+      currentCandidateDecisionHash = decisionSignature(decision);
+      resetDiffAndPromotionOutputs();
+      renderCandidatePreview(currentCandidatePack, null);
+      const safeAgentId = String(result.candidate.files["agent.json"].agent_id || "agent").replace(/[^a-z0-9_-]/gi, "-").toLowerCase();
+      downloadJson(`${safeAgentId}-candidate.agent-pack.json`, result.candidate);
+      candidateStatus.className = "alert green";
+      candidateStatus.textContent = "candidate agent pack을 내보냈습니다. 원본 pack은 수정되지 않았고 최종 적용 전 사용자 재검토가 필요합니다.";
+    });
+
+    previewDiffButton.addEventListener("click", async () => {
+      const result = await buildAndStoreDiffReportForCurrentDecision();
+      if (result.errors.length) {
+        candidateStatus.className = "alert red";
+        candidateStatus.textContent = result.errors.join(" / ");
+        return;
+      }
+      candidateStatus.className = "alert green";
+      candidateStatus.textContent = "candidate_diff_report_v0_1 미리보기를 만들었습니다. 파일은 아직 다운로드하지 않았고 자동 승격은 차단됩니다.";
+    });
+
+    exportDiffButton.addEventListener("click", async () => {
+      const result = await buildAndStoreDiffReportForCurrentDecision();
+      if (result.errors.length) {
+        candidateStatus.className = "alert red";
+        candidateStatus.textContent = result.errors.join(" / ");
+        return;
+      }
+      const safeAgentId = String(result.candidate.files["agent.json"].agent_id || "agent").replace(/[^a-z0-9_-]/gi, "-").toLowerCase();
+      downloadJson(`${safeAgentId}-candidate-diff-report.json`, result.report);
+      candidateStatus.className = "alert green";
+      candidateStatus.textContent = "candidate_diff_report_v0_1을 내보냈습니다. diff gate는 review_pass_not_promoted이며 자동 승격을 차단합니다.";
+    });
+
+    previewPromotionButton.addEventListener("click", async () => {
+      const decision = buildDecision();
+      try {
+        const result = await buildPromotionOutputsAfterUserCommand(decision);
+        if (result.errors.length) {
+          candidateStatus.className = "alert red";
+          candidateStatus.textContent = result.errors.join(" / ");
+          return;
+        }
+        renderPromotionPreview(result.promoted, result.record);
+        candidateStatus.className = "alert green";
+        candidateStatus.textContent = "promotion 미리보기를 만들었습니다. promoted pack과 promotion record는 아직 다운로드하지 않았습니다.";
+      } catch (error) {
+        console.error("promotion 미리보기 생성 실패", error);
+        candidateStatus.className = "alert red";
+        candidateStatus.textContent = "promotion 미리보기를 생성하지 못했습니다.";
+      }
+    });
+
+    exportPromotedButton.addEventListener("click", async () => {
+      const decision = buildDecision();
+      try {
+        const result = await buildPromotionOutputsAfterUserCommand(decision);
+        if (result.errors.length) {
+          candidateStatus.className = "alert red";
+          candidateStatus.textContent = result.errors.join(" / ");
+          return;
+        }
+        renderPromotionPreview(result.promoted, result.record);
+        const safeAgentId = String(result.promoted.files["agent.json"].agent_id || "agent").replace(/[^a-z0-9_-]/gi, "-").toLowerCase();
+        downloadJson(`${safeAgentId}-promoted.agent-pack.json`, result.promoted);
+        candidateStatus.className = "alert green";
+        candidateStatus.textContent = "promoted private version pack을 내보냈습니다. promotion record도 같은 승격 산출물에서 내려받으세요.";
+      } catch (error) {
+        console.error("promoted pack 생성 실패", error);
+        candidateStatus.className = "alert red";
+        candidateStatus.textContent = "promoted pack을 생성하지 못했습니다.";
+      }
+    });
+
+    exportPromotionRecordButton.addEventListener("click", async () => {
+      const decision = buildDecision();
+      try {
+        const result = await buildPromotionOutputsAfterUserCommand(decision);
+        if (result.errors.length) {
+          candidateStatus.className = "alert red";
+          candidateStatus.textContent = result.errors.join(" / ");
+          return;
+        }
+        renderPromotionPreview(result.promoted, result.record);
+        const safeAgentId = String(result.record.agent_id || "agent").replace(/[^a-z0-9_-]/gi, "-").toLowerCase();
+        downloadJson(`${safeAgentId}.candidate-promotion-record.json`, result.record);
+        candidateStatus.className = "alert green";
+        candidateStatus.textContent = "candidate_promotion_record_v0_1을 내보냈습니다. promoted pack 해시와 연결됩니다.";
+      } catch (error) {
+        console.error("promotion record 생성 실패", error);
+        candidateStatus.className = "alert red";
+        candidateStatus.textContent = "promotion record를 생성하지 못했습니다.";
+      }
+    });
+
+    async function sendPromotionOutputsToHub() {
+      const result = await buildPrivateHubHandoffForCurrentDecision();
+      if (result.errors.length) {
+        return { errors: result.errors };
+      }
+
+      try {
+        window.localStorage.setItem(HUB_HANDOFF_STORAGE_KEY, JSON.stringify(result.handoff));
+        window.location.href = "../platform/index.html?handoff=evolution";
+        return { errors: [] };
+      } catch (error) {
+        console.error("Private Hub handoff 저장 실패", error);
+        return { errors: ["Private Hub handoff를 저장하지 못했습니다. promoted pack과 promotion record를 내려받아 Hub에서 직접 가져오세요."] };
+      }
+    }
+
+    async function buildPrivateHubHandoffForCurrentDecision() {
+      const decision = buildDecision();
+      const result = await buildPromotionOutputsAfterUserCommand(decision);
+      if (result.errors.length) {
+        return { errors: result.errors };
+      }
+
+      const handoff = {
+        handoff_schema: "agent_platform_hub_handoff_v0_1",
+        handoff_kind: "evolution_review_to_private_download_hub",
+        generated_at: new Date().toISOString(),
+        storage_policy: {
+          single_use: true,
+          server_sync: false,
+          sends_to_cambrian_runtime: false,
+        },
+        privacy: {
+          api_key_collected: false,
+          stores_raw_inputs: false,
+          stores_raw_outputs: false,
+          stores_secrets: false,
+        },
+        proof_boundary: {
+          evidence_status: "no_runtime_evidence",
+          proof_claim_allowed: false,
+          success_rate_claim_allowed: false,
+          marketplace_sale_ready: false,
+        },
+        promoted_pack: result.promoted,
+        promotion_record: result.record,
+      };
+
+      return { handoff, promoted: result.promoted, record: result.record, errors: [] };
+    }
+
+    previewHubButton.addEventListener("click", async () => {
+      try {
+        const result = await buildPrivateHubHandoffForCurrentDecision();
+        if (result.errors.length) {
+          candidateStatus.className = "alert red";
+          candidateStatus.textContent = result.errors.join(" / ");
+          return;
+        }
+        renderPromotionPreview(result.promoted, result.record);
+        renderHubPreview(result.handoff);
+        candidateStatus.className = "alert green";
+        candidateStatus.textContent = "Private Hub handoff 미리보기를 만들었습니다. 아직 저장하거나 이동하지 않았습니다.";
+      } catch (error) {
+        console.error("Private Hub handoff 미리보기 생성 실패", error);
+        candidateStatus.className = "alert red";
+        candidateStatus.textContent = "Private Hub handoff 미리보기를 생성하지 못했습니다.";
+      }
+    });
+
+    sendHubButton.addEventListener("click", async () => {
+      try {
+        const result = await sendPromotionOutputsToHub();
+        if (result.errors.length) {
+          candidateStatus.className = "alert red";
+          candidateStatus.textContent = result.errors.join(" / ");
+          return;
+        }
+        candidateStatus.className = "alert green";
+        candidateStatus.textContent = "Private Hub handoff를 저장했습니다. Hub에서 promoted pack과 promotion record를 검증합니다.";
+      } catch (error) {
+        console.error("Private Hub handoff 생성 실패", error);
+        candidateStatus.className = "alert red";
+        candidateStatus.textContent = "Private Hub handoff를 생성하지 못했습니다.";
+      }
+    });
+
+    suggestionInput.addEventListener("change", loadSuggestionFile);
+    loadEvolutionHandoffButton.addEventListener("click", () => loadEvolutionHandoff());
+    recommendationList.addEventListener("change", (event) => {
+      if (event.target.matches("[data-decision]")) {
+        refreshCandidatePreviewAfterDecisionEdit();
+      }
+    });
+    recommendationList.addEventListener("input", (event) => {
+      if (event.target.matches("[data-note]")) {
+        refreshCandidatePreviewAfterDecisionEdit();
+      }
+    });
+    clearButton.addEventListener("click", () => {
+      currentSuggestion = null;
+      currentSourceBundle = null;
+      currentCandidatePack = null;
+      currentCandidateDecisionHash = "";
+      currentDiffReport = null;
+      currentDiffDecisionHash = "";
+      currentPromotionOutputs = null;
+      currentPromotionDecisionHash = "";
+      currentValidation = null;
+      clearRunnerHandoffSummary();
+      renderSuggestion();
+    });
+
+    renderSuggestion();
+    loadEvolutionHandoff({ auto: new URLSearchParams(window.location.search).get("handoff") === "runner" });
+  </script>
+</body>
+</html>

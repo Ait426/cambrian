@@ -45,7 +45,13 @@ python tools/generate_web_catalog.py
 Result:
 
 ```text
-web catalog generated: C:\Users\user\Desktop\cambrain\cambrian\web
+web catalog generated: web
+```
+
+Latest RC re-run:
+
+```text
+PASS - web catalog generated: web
 ```
 
 ### Web Catalog Test Gate
@@ -76,6 +82,18 @@ Final result:
 
 ```text
 6 passed in 0.24s
+```
+
+### Web + Launch Surface Regression
+
+```bash
+python -m pytest -q tests\test_web_catalog.py tests\test_web_tools_slice_ready.py tests\test_launch_surface.py
+```
+
+Current result:
+
+```text
+17 passed in 0.35s
 ```
 
 ## Review Notes

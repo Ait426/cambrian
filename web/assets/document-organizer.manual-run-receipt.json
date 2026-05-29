@@ -1,0 +1,63 @@
+{
+  "$schema": "https://cambrian.local/schemas/manual_run_receipt_v0_1.schema.json",
+  "schema_version": "0.1",
+  "receipt_kind": "manual_run_receipt_v0_1",
+  "runner_mode": "manual_no_api",
+  "generated_by": "web/runner/index.html",
+  "generated_at": "2026-05-10T00:00:00Z",
+  "agent_id": "document-organizer",
+  "agent_name": "문서 정리 에이전트",
+  "source_bundle": {
+    "bundle_schema": "agent_pack_bundle_v0_1",
+    "package_kind": "agent_pack_bundle",
+    "evidence_status": "no_runtime_evidence",
+    "preflight_status": "pass",
+    "card_kind": "private_agent_card",
+    "marketplace_review_status": "not_ready"
+  },
+  "run_status": "manual_review_only",
+  "prompt_status": "prompt_generated",
+  "result_status": "result_pasted_for_manual_review",
+  "input_summary": {
+    "input_length": 1200,
+    "stores_raw_input": false
+  },
+  "output_summary": {
+    "output_length": 860,
+    "stores_raw_output": false
+  },
+  "manual_checks": [
+    {
+      "id": "manual_check_1",
+      "criterion": "출처가 분리되어 있어야 한다.",
+      "status": "user_review_required"
+    },
+    {
+      "id": "manual_check_2",
+      "criterion": "요약과 원문 추정이 구분되어야 한다.",
+      "status": "user_review_required"
+    },
+    {
+      "id": "manual_check_3",
+      "criterion": "개인정보가 있으면 공개 결과물에 포함하지 않는다.",
+      "status": "user_review_required"
+    }
+  ],
+  "privacy": {
+    "stores_raw_inputs": false,
+    "stores_raw_outputs": false,
+    "stores_secrets": false,
+    "api_key_collected": false
+  },
+  "proof_boundary": {
+    "evidence_status": "no_runtime_evidence",
+    "proof_claim_allowed": false,
+    "success_rate_claim_allowed": false,
+    "marketplace_sale_ready": false
+  },
+  "evolution_signal": {
+    "eligible_for_suggestion": true,
+    "source": "manual_review_receipt",
+    "requires_user_approval": true
+  }
+}

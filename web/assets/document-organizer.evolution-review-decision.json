@@ -1,0 +1,74 @@
+{
+  "$schema": "https://cambrian.local/schemas/evolution_review_decision_v0_1.schema.json",
+  "schema_version": "0.1",
+  "decision_kind": "evolution_review_decision_v0_1",
+  "generated_by": "web/evolution/index.html",
+  "generated_at": "2026-05-10T00:00:00Z",
+  "source_suggestion": {
+    "suggestion_kind": "evolution_suggestion_v0_1",
+    "agent_id": "document-organizer",
+    "proposal_status": "draft_requires_user_approval",
+    "recommendation_count": 3,
+    "recommendation_ids": [
+      "evo_1",
+      "evo_2",
+      "evo_3"
+    ],
+    "source_receipt_eligible_for_suggestion": true,
+    "source_receipt_requires_user_approval": true
+  },
+  "review_status": "reviewed_not_applied",
+  "approval_gate": {
+    "user_reviewed": true,
+    "auto_apply": false,
+    "auto_promote": false,
+    "apply_requires_separate_step": true,
+    "can_create_new_version": false
+  },
+  "proof_boundary": {
+    "uses_runtime_evidence": false,
+    "proof_claim_allowed": false,
+    "success_rate_claim_allowed": false,
+    "marketplace_sale_ready": false
+  },
+  "privacy": {
+    "stores_raw_inputs": false,
+    "stores_raw_outputs": false,
+    "stores_secrets": false,
+    "uses_only_suggestion_metadata": true
+  },
+  "decisions": [
+    {
+      "id": "decision_1",
+      "recommendation_id": "evo_1",
+      "target": "instructions.md",
+      "decision": "approved",
+      "reviewer_note": "출력 말미의 수동 체크리스트는 사용자 검토에 도움이 된다.",
+      "risk_level": "low"
+    },
+    {
+      "id": "decision_2",
+      "recommendation_id": "evo_2",
+      "target": "agent.json.known_limits",
+      "decision": "approved",
+      "reviewer_note": "manual_no_api 한계를 명확히 남긴다.",
+      "risk_level": "low"
+    },
+    {
+      "id": "decision_3",
+      "recommendation_id": "evo_3",
+      "target": "agent.json.validation_criteria",
+      "decision": "deferred",
+      "reviewer_note": "다음 실행 데이터를 더 본 뒤 다듬는다.",
+      "risk_level": "medium"
+    }
+  ],
+  "next_step": {
+    "allowed": "generate_candidate_pack_after_user_command",
+    "blocked": "automatic_pack_mutation"
+  },
+  "rollback": {
+    "required_before_apply": true,
+    "strategy": "save_previous_agent_pack_before_new_version"
+  }
+}

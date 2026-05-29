@@ -1,0 +1,63 @@
+{
+  "$schema": "https://cambrian.local/schemas/candidate_promotion_record_v0_1.schema.json",
+  "schema_version": "0.1",
+  "record_kind": "candidate_promotion_record_v0_1",
+  "generated_by": "tools/promote_candidate_pack.py",
+  "generated_at": "2026-05-10T00:00:00Z",
+  "agent_id": "document-organizer",
+  "promotion_status": "promoted_private_version",
+  "source": {
+    "original_pack_hash": "sha256:b28347b485cd189e609ec53761fbffc25994e848a29823cd87e35763d20a4128",
+    "candidate_pack_hash": "sha256:4de674556b1ab780dfc62fe513b71485e12aa5d7c357b38565931d90f9bffe6e",
+    "diff_report_hash": "sha256:911bf157fe1d3fa2965d2fae176da70c23e89c91a12d26a1749201cbdd68e00d",
+    "promoted_pack_hash": "sha256:8290d3ee81a01a2308bded9b813ef98cb67b5371fff8dcf8e7a2c16f4e33b4fb",
+    "candidate_diff_status": "review_pass_not_promoted"
+  },
+  "gate": {
+    "user_command_required": true,
+    "auto_promote": false,
+    "source_diff_report_required": true,
+    "output_overwrite_blocked": true
+  },
+  "proof_boundary": {
+    "uses_runtime_evidence": false,
+    "proof_claim_allowed": false,
+    "success_rate_claim_allowed": false,
+    "marketplace_sale_ready": false
+  },
+  "applied_change_summary": {
+    "changed_path_count": 18,
+    "changed_files": [
+      "agent.json",
+      "agent_card.json",
+      "candidate_metadata.apply_status",
+      "candidate_metadata.approved_decision_ids",
+      "candidate_metadata.approved_recommendation_ids",
+      "candidate_metadata.auto_apply",
+      "candidate_metadata.auto_promote",
+      "candidate_metadata.deferred_recommendation_ids",
+      "candidate_metadata.generated_at",
+      "candidate_metadata.metadata_kind",
+      "candidate_metadata.original_pack_preserved",
+      "candidate_metadata.rejected_recommendation_ids",
+      "candidate_metadata.requires_user_final_review",
+      "candidate_metadata.source_decision_kind",
+      "candidate_metadata.source_suggestion_kind",
+      "generated_by",
+      "instructions.md"
+    ],
+    "approved_recommendation_ids": [
+      "evo_1",
+      "evo_2"
+    ],
+    "deferred_or_rejected_recommendation_ids": [
+      "evo_3"
+    ]
+  },
+  "outputs": {
+    "promoted_pack_kind": "agent_pack_bundle",
+    "promotion_metadata_kind": "promoted_agent_pack_metadata_v0_1",
+    "candidate_metadata_removed": true,
+    "private_visibility": true
+  }
+}

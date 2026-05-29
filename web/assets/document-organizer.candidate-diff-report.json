@@ -1,0 +1,178 @@
+{
+  "$schema": "https://cambrian.local/schemas/candidate_diff_report_v0_1.schema.json",
+  "schema_version": "0.1",
+  "report_kind": "candidate_diff_report_v0_1",
+  "generated_by": "tools/generate_candidate_diff_report.py",
+  "generated_at": "2026-05-10T00:00:00Z",
+  "source": {
+    "agent_id": "document-organizer",
+    "original_pack_hash": "sha256:b28347b485cd189e609ec53761fbffc25994e848a29823cd87e35763d20a4128",
+    "candidate_pack_hash": "sha256:4de674556b1ab780dfc62fe513b71485e12aa5d7c357b38565931d90f9bffe6e",
+    "decision_kind": "evolution_review_decision_v0_1",
+    "decision_review_status": "reviewed_not_applied"
+  },
+  "diff_status": "review_pass_not_promoted",
+  "comparison": {
+    "agent_id_matches": true,
+    "original_pack_valid": true,
+    "candidate_pack_valid": true,
+    "candidate_is_distinct": true,
+    "only_approved_decisions_applied": true,
+    "deferred_and_rejected_not_applied": true
+  },
+  "approval_gate": {
+    "auto_promote": false,
+    "candidate_review_required": true,
+    "promotion_requires_separate_command": true
+  },
+  "proof_boundary": {
+    "uses_runtime_evidence": false,
+    "proof_claim_allowed": false,
+    "success_rate_claim_allowed": false,
+    "marketplace_sale_ready": false
+  },
+  "change_summary": {
+    "changed_path_count": 18,
+    "changed_files": [
+      "agent.json",
+      "agent_card.json",
+      "candidate_metadata.apply_status",
+      "candidate_metadata.approved_decision_ids",
+      "candidate_metadata.approved_recommendation_ids",
+      "candidate_metadata.auto_apply",
+      "candidate_metadata.auto_promote",
+      "candidate_metadata.deferred_recommendation_ids",
+      "candidate_metadata.generated_at",
+      "candidate_metadata.metadata_kind",
+      "candidate_metadata.original_pack_preserved",
+      "candidate_metadata.rejected_recommendation_ids",
+      "candidate_metadata.requires_user_final_review",
+      "candidate_metadata.source_decision_kind",
+      "candidate_metadata.source_suggestion_kind",
+      "generated_by",
+      "instructions.md"
+    ],
+    "approved_decision_ids": [
+      "evo_1",
+      "evo_2"
+    ],
+    "deferred_or_rejected_decision_ids": [
+      "evo_3"
+    ]
+  },
+  "allowed_changes": [
+    {
+      "path": "candidate_metadata.apply_status",
+      "change_type": "added",
+      "source_decision_id": "candidate_metadata",
+      "reason": "candidate pack 생성 경계와 승인 decision 요약을 남긴다."
+    },
+    {
+      "path": "candidate_metadata.approved_decision_ids",
+      "change_type": "added",
+      "source_decision_id": "candidate_metadata",
+      "reason": "candidate pack 생성 경계와 승인 decision 요약을 남긴다."
+    },
+    {
+      "path": "candidate_metadata.approved_recommendation_ids",
+      "change_type": "added",
+      "source_decision_id": "candidate_metadata",
+      "reason": "candidate pack 생성 경계와 승인 decision 요약을 남긴다."
+    },
+    {
+      "path": "candidate_metadata.auto_apply",
+      "change_type": "added",
+      "source_decision_id": "candidate_metadata",
+      "reason": "candidate pack 생성 경계와 승인 decision 요약을 남긴다."
+    },
+    {
+      "path": "candidate_metadata.auto_promote",
+      "change_type": "added",
+      "source_decision_id": "candidate_metadata",
+      "reason": "candidate pack 생성 경계와 승인 decision 요약을 남긴다."
+    },
+    {
+      "path": "candidate_metadata.deferred_recommendation_ids",
+      "change_type": "added",
+      "source_decision_id": "candidate_metadata",
+      "reason": "candidate pack 생성 경계와 승인 decision 요약을 남긴다."
+    },
+    {
+      "path": "candidate_metadata.generated_at",
+      "change_type": "added",
+      "source_decision_id": "candidate_metadata",
+      "reason": "candidate pack 생성 경계와 승인 decision 요약을 남긴다."
+    },
+    {
+      "path": "candidate_metadata.metadata_kind",
+      "change_type": "added",
+      "source_decision_id": "candidate_metadata",
+      "reason": "candidate pack 생성 경계와 승인 decision 요약을 남긴다."
+    },
+    {
+      "path": "candidate_metadata.original_pack_preserved",
+      "change_type": "added",
+      "source_decision_id": "candidate_metadata",
+      "reason": "candidate pack 생성 경계와 승인 decision 요약을 남긴다."
+    },
+    {
+      "path": "candidate_metadata.rejected_recommendation_ids",
+      "change_type": "added",
+      "source_decision_id": "candidate_metadata",
+      "reason": "candidate pack 생성 경계와 승인 decision 요약을 남긴다."
+    },
+    {
+      "path": "candidate_metadata.requires_user_final_review",
+      "change_type": "added",
+      "source_decision_id": "candidate_metadata",
+      "reason": "candidate pack 생성 경계와 승인 decision 요약을 남긴다."
+    },
+    {
+      "path": "candidate_metadata.source_decision_kind",
+      "change_type": "added",
+      "source_decision_id": "candidate_metadata",
+      "reason": "candidate pack 생성 경계와 승인 decision 요약을 남긴다."
+    },
+    {
+      "path": "candidate_metadata.source_suggestion_kind",
+      "change_type": "added",
+      "source_decision_id": "candidate_metadata",
+      "reason": "candidate pack 생성 경계와 승인 decision 요약을 남긴다."
+    },
+    {
+      "path": "files.agent.json.known_limits",
+      "change_type": "modified",
+      "source_decision_id": "evo_2",
+      "reason": "승인된 agent known_limits 진화 제안을 반영한다."
+    },
+    {
+      "path": "files.agent.json.provenance",
+      "change_type": "modified",
+      "source_decision_id": "candidate_metadata",
+      "reason": "evolution_candidate provenance를 남긴다."
+    },
+    {
+      "path": "files.agent_card.json.known_limits",
+      "change_type": "modified",
+      "source_decision_id": "evo_2",
+      "reason": "agent card의 known limits를 agent 계약과 맞춘다."
+    },
+    {
+      "path": "files.instructions.md",
+      "change_type": "modified",
+      "source_decision_id": "evo_1",
+      "reason": "승인된 instructions.md 진화 제안을 반영한다."
+    },
+    {
+      "path": "generated_by",
+      "change_type": "modified",
+      "source_decision_id": "candidate_metadata",
+      "reason": "candidate pack 생성 도구 출처를 남긴다."
+    }
+  ],
+  "unexpected_changes": [],
+  "next_step": {
+    "allowed": "promote_candidate_after_user_command",
+    "blocked": "automatic_candidate_promotion"
+  }
+}
