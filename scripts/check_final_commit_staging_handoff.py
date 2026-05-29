@@ -1323,14 +1323,23 @@ def plan_all_slice_paths(
     active_slice_ids = [
         slice_id for slice_id, plan in slice_plans.items() if plan["candidate_count"] > 0
     ]
+    worktree_clean = not entries
     checks = {
         "no_forbidden_sensitive_paths": not blockers,
         "no_manual_review_paths": not manual_review,
-        "active_slice_candidates_present": bool(active_slice_ids),
+        "active_slice_candidates_present": bool(active_slice_ids) or worktree_clean,
         "excluded_default_paths_named": True,
     }
-    status = "all_slices_worktree_ready" if all(checks.values()) else "all_slices_worktree_blocked"
-    verdict = "GO" if status == "all_slices_worktree_ready" else "NO_GO"
+    if worktree_clean and checks["no_forbidden_sensitive_paths"] and checks["no_manual_review_paths"]:
+        status = "all_slices_worktree_complete"
+    else:
+        status = "all_slices_worktree_ready" if all(checks.values()) else "all_slices_worktree_blocked"
+    verdict = "GO" if status in {"all_slices_worktree_ready", "all_slices_worktree_complete"} else "NO_GO"
+    next_action = (
+        "No slice candidates remain; final staging is complete."
+        if status == "all_slices_worktree_complete"
+        else "한 slice를 골라 candidate_paths만 stage한 뒤 --staged --slice 검증을 실행한다."
+    )
     return {
         "schema_version": SCHEMA_VERSION,
         "source": "worktree",
@@ -1346,7 +1355,7 @@ def plan_all_slice_paths(
         "manual_review": manual_review,
         "entries": entries,
         "git_status_entries": status_entries or [],
-        "next_action": "한 slice를 골라 candidate_paths만 stage한 뒤 --staged --slice 검증을 실행한다.",
+        "next_action": next_action,
     }
 
 
@@ -1728,7 +1737,13 @@ def _receipt_payload(plan: dict[str, Any], output_dir: Path) -> dict[str, Any]:
     payload = {
         "schema_version": RECEIPT_SCHEMA_VERSION,
         "source_schema_version": plan["schema_version"],
-        "status": "receipt_ready" if plan["verdict"] == "GO" else "receipt_blocked",
+        "status": (
+            "receipt_complete"
+            if plan.get("status") == "all_slices_worktree_complete"
+            else "receipt_ready"
+            if plan["verdict"] == "GO"
+            else "receipt_blocked"
+        ),
         "verdict": plan["verdict"],
         "safe_to_stage_all": False,
         "total_paths": plan["total_paths"],
@@ -1769,7 +1784,7 @@ def _receipt_payload(plan: dict[str, Any], output_dir: Path) -> dict[str, Any]:
 def _verify_staging_receipt_payload(payload: dict[str, Any]) -> None:
     if payload.get("schema_version") != RECEIPT_SCHEMA_VERSION:
         raise ValueError("receipt schema_version이 일치하지 않습니다.")
-    if payload.get("status") not in {"receipt_ready", "receipt_blocked"}:
+    if payload.get("status") not in {"receipt_ready", "receipt_complete", "receipt_blocked"}:
         raise ValueError("receipt status가 알 수 없는 값입니다.")
     if payload.get("verdict") not in {"GO", "NO_GO"}:
         raise ValueError("receipt verdict가 알 수 없는 값입니다.")

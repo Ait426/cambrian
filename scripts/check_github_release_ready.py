@@ -355,7 +355,7 @@ def _final_staging_gate(path: Path, *, root: Path, require_current: bool) -> dic
     try:
         receipt = verify_staging_receipt_file(path)
         plan = plan_all_worktree_slices(root)
-        if plan.get("status") != "all_slices_worktree_ready":
+        if plan.get("status") not in {"all_slices_worktree_ready", "all_slices_worktree_complete"}:
             raise ValueError(f"final staging worktree plan is not ready: {plan.get('status')}")
         current = verify_staging_receipt_against_plan(receipt, plan)
         pathspecs = verify_staging_receipt_pathspec_files(receipt, root)

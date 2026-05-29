@@ -425,6 +425,36 @@ def test_final_commit_all_slices_plan_groups_candidates_without_staging_all() ->
     assert payload["next_action"] == "한 slice를 골라 candidate_paths만 stage한 뒤 --staged --slice 검증을 실행한다."
 
 
+def test_final_commit_all_slices_plan_treats_clean_worktree_as_complete() -> None:
+    payload = plan_all_slice_paths([])
+
+    assert payload["verdict"] == "GO"
+    assert payload["status"] == "all_slices_worktree_complete"
+    assert payload["safe_to_stage_all"] is False
+    assert payload["total_paths"] == 0
+    assert payload["active_slice_ids"] == []
+    assert payload["checks"]["active_slice_candidates_present"] is True
+    assert payload["next_action"] == "No slice candidates remain; final staging is complete."
+
+
+def test_final_commit_staging_receipt_accepts_clean_complete_plan(tmp_path: Path) -> None:
+    plan = plan_all_slice_paths([])
+    result = write_staging_receipt_from_plan(tmp_path, plan)
+    receipt_path = Path(result["receipt_json"])
+    payload = json.loads(receipt_path.read_text(encoding="utf-8"))
+
+    assert result["status"] == "receipt_complete"
+    assert result["verdict"] == "GO"
+    assert payload["status"] == "receipt_complete"
+    assert payload["active_slice_ids"] == []
+    receipt = verify_staging_receipt_file(receipt_path)
+    current_check = verify_staging_receipt_against_plan(receipt, plan)
+    all_artifacts_check = verify_staging_receipt_all_artifacts(receipt, receipt_path, plan, base_dir=tmp_path)
+    assert current_check["status"] == "receipt_current"
+    assert all_artifacts_check["status"] == "receipt_all_artifacts_current"
+    assert all_artifacts_check["verdict"] == "GO"
+
+
 def test_final_commit_staging_receipt_writes_reviewable_json_and_markdown(tmp_path: Path) -> None:
     plan = plan_all_slice_paths(
         [
