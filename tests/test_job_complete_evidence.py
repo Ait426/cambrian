@@ -1,12 +1,15 @@
 from __future__ import annotations
 
 import json
+import logging
 import os
 import subprocess
 import sys
 from pathlib import Path
 
 import yaml
+
+from engine.project_evidence import complete_job
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -118,6 +121,29 @@ def ingest_and_validate_patch_candidate(root: Path) -> dict:
     return json.loads(validate.stdout)
 
 
+def mark_latest_validation_evidence_passed(root: Path, validation: dict) -> None:
+    evidence_ref = str(validation.get("evidence_ref") or "")
+    assert evidence_ref
+    evidence_path = root / evidence_ref
+    evidence = yaml.safe_load(evidence_path.read_text(encoding="utf-8"))
+    evidence["validation_status"] = "passed"
+    evidence["validation_contract_status"] = "commands_executed"
+    evidence["trust_gate_status"] = "verified"
+    evidence["manual_validation_required"] = False
+    evidence["unchecked_items"] = []
+    execution = evidence.get("validation_command_execution")
+    if isinstance(execution, dict):
+        execution["status"] = "passed"
+        results = execution.get("results")
+        if isinstance(results, list):
+            for item in results:
+                if isinstance(item, dict):
+                    item["status"] = "passed"
+                    item["returncode"] = 0
+                    item["stderr"] = ""
+    evidence_path.write_text(yaml.safe_dump(evidence, allow_unicode=True, sort_keys=False), encoding="utf-8")
+
+
 def test_job_complete_records_outcome_and_evidence(tmp_path: Path) -> None:
     prepare_custom_harness_project(tmp_path)
 
@@ -167,10 +193,105 @@ def test_job_complete_links_validation_evidence_for_evolution(tmp_path: Path) ->
     assert payload["source_code_modified_by_cambrian"] is False
     assert "npm test" in payload["validation_commands"]
     assert payload["checked_artifacts"]
-    assert "Patch proposal was not applied to source code" in payload["unchecked_items"]
+    assert "Patch proposal was not applied to source code" not in payload["unchecked_items"]
+    assert any("AI reply evidence compliance incomplete" in item for item in payload["unchecked_items"])
     outcome = yaml.safe_load((tmp_path / payload["outcome_ref"]).read_text(encoding="utf-8"))
     assert outcome["validation_evidence_ref"] == validation["evidence_ref"]
     assert outcome["ready_for_evolution"] is True
     assert outcome["source_code_modified_by_cambrian"] is False
     ledger = yaml.safe_load((tmp_path / ".cambrian" / "evidence" / "outcomes.yaml").read_text(encoding="utf-8"))
     assert ledger["outcomes"][0]["validation_evidence_ref"] == validation["evidence_ref"]
+
+
+def test_job_company_loop_records_ledgers_and_feeds_next_job_start(tmp_path: Path) -> None:
+    prepare_custom_harness_project(tmp_path)
+    validation = ingest_and_validate_patch_candidate(tmp_path)
+
+    payload = complete_latest_job(tmp_path)
+
+    assert validation["company_verification_record"]["status"] == "verification_recorded"
+    assert payload["company_context_record"]["status"] == "context_recorded"
+    assert payload["company_context_record"]["promotion_review_ref"] == ".cambrian/company/context/promotion_review.yaml"
+    assert payload["company_verification_record"]["status"] == "verification_recorded"
+    context_records = yaml.safe_load(
+        (tmp_path / ".cambrian" / "company" / "context" / "records.yaml").read_text(encoding="utf-8")
+    )
+    assert context_records["records"][0]["promotion_status"] == "candidate"
+    assert context_records["records"][0]["promotion_policy"]["auto_promote"] is False
+    promotion_review = yaml.safe_load(
+        (tmp_path / ".cambrian" / "company" / "context" / "promotion_review.yaml").read_text(encoding="utf-8")
+    )
+    assert promotion_review["status"] == "pending_user_review"
+    assert promotion_review["review_items"][0]["approval_state"] == "pending_user_review"
+    assert promotion_review["review_items"][0]["auto_promote"] is False
+    verification_ledger = yaml.safe_load(
+        (tmp_path / ".cambrian" / "company" / "verification" / "ledger.yaml").read_text(encoding="utf-8")
+    )
+    stages = [entry["stage"] for entry in verification_ledger["entries"]]
+    assert stages == ["validate", "complete"]
+    assert verification_ledger["entries"][0]["validation_evidence_ref"] == validation["evidence_ref"]
+    assert verification_ledger["entries"][0]["unchecked_risk_count"] >= 1
+    assert verification_ledger["entries"][0]["context_intent"]["target_product_level"] == "upper"
+    assert verification_ledger["entries"][0]["context_intent"]["candidate_context_is_unapproved_signal"] is True
+    assert verification_ledger["entries"][1]["context_evidence_ref"] == payload["company_context_record"]["saved_path"]
+    assert verification_ledger["entries"][1]["promotion_policy"]["auto_promote"] is False
+    assert verification_ledger["entries"][1]["context_intent"]["target_product_level"] == "upper"
+
+    next_start = run_cli(tmp_path, "job", "start", "follow up on prior unchecked validation risk", "--json")
+
+    assert next_start.returncode == 0, next_start.stderr
+    next_payload = json.loads(next_start.stdout)
+    packet = yaml.safe_load((tmp_path / next_payload["request_packet_ref"]).read_text(encoding="utf-8"))
+    loop_context = packet["execution_contract"]["company_loop_context"]
+    assert loop_context["status"] == "available"
+    assert loop_context["context_records"]
+    assert loop_context["candidate_context_records"]
+    assert loop_context["promoted_memory"]["total_count"] == 0
+    assert loop_context["promotion_review_ref"] == ".cambrian/company/context/promotion_review.yaml"
+    assert loop_context["verification_entries"]
+    assert loop_context["promotion_policy"]["auto_promote"] is False
+    intent_snapshot = packet["execution_contract"]["context_intent_snapshot"]
+    assert intent_snapshot["detected_intent"]["primary"] == "validation_followup"
+    assert intent_snapshot["detected_intent"]["confidence"] == "high"
+    assert intent_snapshot["context_policy"]["memory_is_not_context"] is True
+    assert intent_snapshot["context_policy"]["candidate_context_is_unapproved_signal"] is True
+    assert intent_snapshot["relevance_filter"]["selected_context_count"] >= 1
+    assert intent_snapshot["relevance_filter"]["discarded_as_irrelevant_count"] >= 0
+    assert any("company_loop_context" in item for item in packet["execution_contract"]["must_do"])
+    assert any("promoted_memory" in item for item in packet["execution_contract"]["must_do"])
+    assert any("context_intent_snapshot" in item for item in packet["execution_contract"]["must_do"])
+    assert "Company ledger" in packet["codex_claude_instruction"]
+    assert "Context intent:" in packet["codex_claude_instruction"]
+
+    promote = run_cli(tmp_path, "company", "context", "promote", "context-record-0001", "--confirm", "--json")
+    assert promote.returncode == 0, promote.stderr
+    promote_payload = json.loads(promote.stdout)
+    assert promote_payload["status"] == "context_promoted"
+    assert promote_payload["auto_promote"] is False
+
+    promoted_start = run_cli(tmp_path, "job", "start", "use approved company memory only", "--json")
+    assert promoted_start.returncode == 0, promoted_start.stderr
+    promoted_payload = json.loads(promoted_start.stdout)
+    promoted_packet = yaml.safe_load((tmp_path / promoted_payload["request_packet_ref"]).read_text(encoding="utf-8"))
+    promoted_loop = promoted_packet["execution_contract"]["company_loop_context"]
+    assert promoted_loop["candidate_context_records"] == []
+    assert promoted_loop["promoted_memory"]["total_count"] >= 1
+
+
+def test_job_complete_logs_malformed_validation_evidence(caplog, tmp_path: Path) -> None:
+    prepare_custom_harness_project(tmp_path)
+    bad_evidence = tmp_path / ".cambrian" / "evidence" / "validation" / "zz_bad.yaml"
+    bad_evidence.parent.mkdir(parents=True, exist_ok=True)
+    bad_evidence.write_text("broken: [\n", encoding="utf-8")
+
+    caplog.set_level(logging.WARNING, logger="engine.project_evidence")
+    result = complete_job(
+        tmp_path,
+        "latest",
+        "partial",
+        "malformed validation evidence should be logged and skipped",
+    )
+
+    assert result.status == "recorded"
+    assert result.validation_evidence_ref is None
+    assert any("검증 evidence 파일을 읽지 못해 건너뜁니다" in record.message for record in caplog.records)

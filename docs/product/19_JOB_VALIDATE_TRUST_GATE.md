@@ -89,3 +89,27 @@ The evidence file records the job id, checked artifacts, unchecked items, valida
 
 If the project uses a custom harness or TypeScript/Jest lane, Cambrian may return `manual_validation_required`.
 That is not a fake pass. It means Cambrian produced the validation handoff and evidence, and the human must run the listed command before recording the outcome.
+## Verified Gate Rule
+
+`trust_gate_status: verified` is allowed only when all of these are true:
+
+```text
+validation commands executed
+validation commands passed
+reply_evidence_compliance.status == satisfied
+unchecked_items == []
+```
+
+The required reply evidence envelope is:
+
+```text
+codebase_evidence_path_citation
+risk_boundary_check
+validation_command_selection
+patch_application_state
+verdict_rationale
+context_intent_resolution
+project_discussion_role_check
+```
+
+`cambrian job complete --outcome success` may produce `verdict: pass` only when validation evidence exists, validation passed, and unchecked risk is empty. A manual success note alone is not enough.

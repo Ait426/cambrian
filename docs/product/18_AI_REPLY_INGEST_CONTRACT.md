@@ -154,3 +154,45 @@ cambrian job validate latest --json
 ```
 
 `job validate`는 patch candidate가 현재 하네스, 검증 명령, evidence 규칙 기준으로 사용 가능한지 판단한다.
+## Evidence Envelope V2
+
+Every serious AI reply should now include the evidence envelope below.
+Without it, `job validate` may run commands but must keep the verdict on hold.
+
+```yaml
+response_kind: review
+summary: Short answer.
+codebase_evidence_paths:
+  - path/to/file.py
+risk_boundary_check:
+  checked: true
+  summary: Forbidden paths and external side effects were checked.
+validation_command_selection:
+  commands:
+    - python -m pytest tests/ -v
+  reason: Why these commands prove the claim.
+patch_application_state:
+  patch_applied: false
+  source_code_modified: false
+  summary: Proposal-only; Cambrian did not auto-apply source mutations.
+verdict_rationale: Why the evidence supports pass, hold, or rollback.
+context_intent_resolution:
+  resolved: true
+  reason: Why this answer matches the current user intent.
+project_discussion_role_check:
+  checked: true
+  reason: Which role owns this judgment.
+```
+
+`patch_application_state` records the reply's claim about the target work.
+The top-level Cambrian safety flags still describe Cambrian's own behavior:
+
+```json
+{
+  "patch_applied": false,
+  "source_code_modified": false,
+  "ai_provider_called": false
+}
+```
+
+Cambrian must not turn a missing evidence envelope into a pass verdict.

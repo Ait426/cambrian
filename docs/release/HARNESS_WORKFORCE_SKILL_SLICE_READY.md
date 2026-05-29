@@ -49,8 +49,21 @@ python -m pytest -q tests/test_project_harness_profile.py tests/test_project_har
 Result:
 
 ```text
-59 passed in 138.72s
+128 passed across split groups
 ```
+
+The combined focused command exceeded the local interactive timeout. The
+release gate therefore uses bounded split groups:
+
+- project/harness basics: `40 passed`
+- engineering/workforce/agent/skill: `29 passed`
+- job/dispatch: `23 passed`
+- evolution review: `7 passed`
+- evolution proposal: `9 passed`
+- confirm-gated evolution apply: `16 passed`
+- skill evolution and AI company bootstrap: `4 passed`
+
+This timeout is classified as `SPLIT_RUN_REQUIRED`, not as a product failure.
 
 ## Review Notes
 

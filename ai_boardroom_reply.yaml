@@ -1,0 +1,155 @@
+schema_version: 1.0.0
+generated_at: "2026-05-22T19:36:20Z"
+artifact_kind: product_boardroom_ai_agent_reply
+topic: Next Cambrian CEO/CTO/COO AI agent product decision (post-sync)
+request_ref: .cambrian/company/product_boardroom/requests/next-cambrian-ceo-cto-coo-ai-agent-product-decision-post-sync-20260522_193615_821743.yaml
+role_views:
+  ceo-agent:
+    ai_agent: true
+    turn_authorship: ai_agent
+    position: >-
+      The completed mission job is valid local operating evidence: it had a fresh
+      AI boardroom decision, an AI-worker evidence envelope with LLM invocation
+      evidence, local codebase refs, a satisfied reply evidence gate, executed local
+      validation commands, verified trust gate, and zero unchecked items. This still
+      does not prove external recipient success or release readiness.
+    decision: >-
+      Accept the completed job as another local reliability proof for the Cambrian
+      24h company loop. The next product move should start from saved operator
+      readiness and keep first-recipient proof as the unresolved market gate, not
+      run another job inside this same cycle.
+    evidence_refs:
+      - .cambrian/company/product_boardroom/latest_ai_request.yaml
+      - .cambrian/company/product_boardroom/decision_packet.yaml
+      - .cambrian/company/product_boardroom/meeting_protocol.md
+      - .cambrian/company/product_boardroom/agenda.yaml
+      - .cambrian/company/product_boardroom/decision_history.yaml
+      - .cambrian/company/product_boardroom/open_questions.yaml
+      - .cambrian/company/product_boardroom/agent_prompts/ceo-agent.md
+      - .cambrian/mission.yaml
+      - .cambrian/mission/operator.yaml
+      - .cambrian/jobs/job-custom-cambrian-mission-company-20260522_193329_857384/outcome.yaml
+      - .cambrian/evidence/validation/job-custom-cambrian-mission-company-20260522_193329_857384.yaml
+      - .cambrian/reports/latest_verdict.json
+      - ai_reply_patch_candidate.yaml
+      - CONTEXT_INDEX.md
+      - PROJECT_BRIEF.md
+      - README.md
+      - TODO.md
+      - docs/product/00_INDEX.md
+      - docs/product/14_PRODUCT_CONSTITUTION.md
+      - docs/product/42_TEN_YEAR_ARCHITECTURE.md
+      - docs/release/NEXT_SESSION_HANDOFF.md
+    assumptions:
+      - The latest job outcome remains success with verdict=pass and trust_gate_status=verified.
+      - The completed local reliability cycle is operating proof, not customer proof.
+      - A human still needs to approve the first real external recipient and send channel.
+    risks:
+      - More local cycles can delay the harder external-user validation decision.
+      - Calling this release-ready would confuse validated loop reliability with market proof.
+      - Auto-promoting candidate context without review would weaken the evidence discipline.
+    next_constraint: >-
+      Save mission operator state and stop this cycle. The next automation may begin
+      from saved operator readiness, but must repeat boardroom and validation gates
+      before any new completion claim.
+  cto-agent:
+    ai_agent: true
+    turn_authorship: ai_agent
+    position: >-
+      The trust architecture held: no source patch was applied, source_code_modified
+      remained false, reply evidence compliance was satisfied, pytest reported 33
+      passed, py_compile passed, and the trust gate was verified. No protocol or
+      source change is justified by this run.
+    decision: >-
+      Keep the current boardroom-to-mission-to-job protocol unchanged. Treat the
+      completed job as validation evidence for the operating loop only, and keep all
+      mutation, release, deploy, secret, spend, and migration gates closed.
+    evidence_refs:
+      - engine/project_company_layer.py
+      - engine/project_mission.py
+      - engine/project_evidence.py
+      - engine/project_llm_assist.py
+      - engine/cli.py
+      - tests/test_mission_company.py
+      - tests/test_job_start_runtime_contract.py
+      - tests/test_job_complete_evidence.py
+      - .cambrian/company/product_boardroom/agent_prompts/cto-agent.md
+      - .cambrian/company/product_boardroom/meeting_protocol.md
+      - .cambrian/company/product_boardroom/decision_packet.yaml
+      - .cambrian/evidence/validation/job-custom-cambrian-mission-company-20260522_193329_857384.yaml
+      - .cambrian/jobs/job-custom-cambrian-mission-company-20260522_193329_857384/outcome.yaml
+      - ai_reply_patch_candidate.yaml
+    assumptions:
+      - The validation evidence file accurately records both executed commands.
+      - The source patch boundary applies to future implementation jobs unless the human explicitly overrides it.
+      - The post-sync boardroom should refresh context, not launch work.
+    risks:
+      - Running another tick now would blur job boundaries and make validation lineage harder to audit.
+      - Relying on stale operator.yaml without a fresh save can mislead the next run.
+      - Treating deterministic Cambrian state changes as AI reasoning would weaken the agent-authorship contract.
+    next_constraint: >-
+      Ingest this post-sync reply, then run mission operator --save. Do not run a
+      second mission tick in this cycle.
+  coo-agent:
+    ai_agent: true
+    turn_authorship: ai_agent
+    position: >-
+      Operationally, the bounded cycle has reached its stop condition: one job was
+      opened, evidence was ingested, validation passed, the job was completed as
+      success, and mission sync recorded the result. The remaining work is state
+      capture for the next run.
+    decision: >-
+      Close this cycle after post-sync boardroom ingest and operator save. The next
+      run should follow the saved blocker or next command, and should not assume a
+      job is still open.
+    evidence_refs:
+      - .cambrian/company/product_boardroom/latest_ai_request.yaml
+      - .cambrian/company/product_boardroom/agenda.yaml
+      - .cambrian/company/product_boardroom/meeting_protocol.md
+      - .cambrian/company/product_boardroom/decision_history.yaml
+      - .cambrian/company/product_boardroom/open_questions.yaml
+      - .cambrian/company/product_boardroom/agent_prompts/coo-agent.md
+      - .cambrian/company/discussion/agents.yaml
+      - .cambrian/company/status.yaml
+      - .cambrian/mission.yaml
+      - .cambrian/mission/operator.yaml
+      - .cambrian/packs/jobs/job-custom-cambrian-mission-company-20260522_193329_857384.yaml
+      - .cambrian/jobs/job-custom-cambrian-mission-company-20260522_193329_857384/outcome.yaml
+      - .cambrian/evidence/validation/job-custom-cambrian-mission-company-20260522_193329_857384.yaml
+      - docs/release/NEXT_SESSION_HANDOFF.md
+    assumptions:
+      - The final operator save will refresh run_count, last_job_id, and scheduler readiness from synced mission state.
+      - No additional job should be processed in this automation turn.
+      - If the final operator reports unsafe scheduling, the blocker and exact next command become the handoff.
+    risks:
+      - Skipping operator save would leave the next automation dependent on stale pre-sync operator data.
+      - Running more work now would violate the one-job cycle boundary.
+      - A vague handoff would cause the next run to repeat diagnostic work instead of following the state machine.
+    next_constraint: >-
+      Run mission operator --save after ingest. Stop with either operator_ready plus
+      the next command, or the exact blocker if scheduling is unsafe.
+consensus:
+  decision: >-
+    The completed job is accepted as local operating reliability evidence. This cycle
+    should close after post-sync boardroom ingest and mission operator save; the next
+    cycle must begin from saved operator state and still obey all hard gates.
+  scope: >-
+    Allowed now: post-sync boardroom ingest and mission operator save. Forbidden:
+    another tick in this cycle, source patch application, git push, deploy, publish,
+    secret access, spending, database migration, real external send, and public
+    readiness claims.
+  recommended_next_mission: >-
+    Start the next automation from mission operator readiness. If safe, a future
+    cycle may open one job; if unsafe, report the blocker and exact next command.
+open_questions:
+  - id: first-recipient-proof
+    question: Who is the first real external recipient and what private channel is approved for the install/use proof?
+    owner: ceo-agent
+  - id: patch-approval-boundary
+    question: What explicit human signal authorizes a future source patch instead of evidence-only operation?
+    owner: cto-agent
+  - id: operator-command-preference
+    question: When operator next_command differs from mission tick, should automation prefer the operator command or the fixed tick instruction?
+    owner: coo-agent
+source_code_modified_by_cambrian: false
+provider_api_called_by_cambrian: false

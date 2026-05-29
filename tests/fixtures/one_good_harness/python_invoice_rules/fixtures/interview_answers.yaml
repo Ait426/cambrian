@@ -1,0 +1,25 @@
+session_id: one-good-harness-python-invoice-rules
+answers:
+  primary_goal: Keep invoice total rules reliable while preserving proposal-only source changes.
+  test_command: python -m pytest -q
+  build_command: python -m py_compile src/invoice_rules.py
+  change_policy: proposal_only
+  forbidden_scope:
+    - no automatic source patch apply
+    - no secrets
+    - no network calls
+    - no package publish
+  allowed_scope:
+    - read fixture files
+    - create Cambrian harness artifacts
+    - record validation evidence
+  important_paths:
+    - src/invoice_rules.py
+    - tests/test_invoice_rules.py
+    - pyproject.toml
+  validation_standard: Pytest passes and source files remain unchanged unless an explicit apply step is requested.
+  agent_roles:
+    - invoice-rules-inspector: Inspect invoice totals, rounding, and tax-region behavior with code evidence.
+    - pytest-regression-guardian: Own pytest command selection and regression risk.
+    - proposal-safety-reviewer: Keep source changes proposal-only and block unsafe scope.
+    - harness-replay-auditor: Verify replay artifacts, receipt hashes, and proof boundaries.

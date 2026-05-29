@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import tempfile
 from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
@@ -14,12 +15,80 @@ from engine.project_harness_profile import (
     ProjectHarnessProfileStore,
     default_project_profile_path,
 )
+from engine.project_llm_assist import LLM_GENERATION_EVIDENCE_KEY, call_llm_for_generation
 from engine.project_pack_catalog import PackCatalogResolver, PackCatalogStore, resolve_pack_catalog_path
 from engine.project_pack_install import PackManifestLoader
 
 
 SCHEMA_VERSION = "1.0.0"
 REQUIRED_ANSWER_IDS = {"primary_goal", "test_command", "change_policy"}
+INTERVIEW_INFERENCE_STAGE = "harness_generation"
+DOC_CONTEXT_LIMIT_CHARS = 24000
+DOC_CONTEXT_PER_FILE_LIMIT_CHARS = 6000
+DOC_CONTEXT_SKIP_DIRS = {
+    ".cambrian",
+    ".git",
+    ".hg",
+    ".svn",
+    ".venv",
+    "venv",
+    "env",
+    "node_modules",
+    "__pycache__",
+    ".pytest_cache",
+    "dist",
+    "build",
+    "coverage",
+    "archive",
+    "demo",
+    "examples",
+    "fixtures",
+    "sample",
+    "samples",
+    "skill_pool",
+    ".launch_runs",
+    "logs",
+    "tmp",
+    "temp",
+}
+DOC_CONTEXT_SKIP_DIR_PREFIXES = (
+    ".pytest",
+    ".launch_runs",
+)
+DOC_CONTEXT_PRIORITY_NAMES = {
+    "AGENTS.md",
+    "CLAUDE.md",
+    "README.md",
+    "README.ko.md",
+    "PROJECT.md",
+    "PROJECT_BRIEF.md",
+    "CONTEXT_INDEX.md",
+    "ARCHITECTURE.md",
+    "NEXT_SESSION_HANDOFF.md",
+}
+DOC_CONTEXT_AUTHORITY_POLICY = {
+    "source_of_truth": [
+        "root identity docs such as README.md, AGENTS.md, CLAUDE.md, PROJECT_BRIEF.md, and CONTEXT_INDEX.md",
+        "explicit architecture, release, and decision docs selected from the active project tree",
+    ],
+    "excluded_generated_or_sample_docs": [
+        ".cambrian/",
+        ".pytest*/",
+        ".launch_runs/",
+        "archive/",
+        "demo/",
+        "examples/",
+        "fixtures/",
+        "sample/",
+        "samples/",
+        "skill_pool/",
+        "dist/",
+        "build/",
+        "logs/",
+        "tmp/",
+    ],
+    "promotion_rule": "interview answers may use selected docs, but generated, demo, sample, fixture, and runtime documents must not override active project identity",
+}
 
 
 def _now() -> str:
@@ -130,6 +199,32 @@ class HarnessInterviewAnswerResult:
         return payload
 
 
+@dataclass
+class HarnessInterviewAutoDraftResult:
+    schema_version: str
+    generated_at: str
+    status: str
+    session_id: str
+    answers_ref: str | None
+    source_mode: str
+    answers: dict[str, Any]
+    missing: list[str]
+    questions: list[HarnessQuestion]
+    document_context: dict[str, Any]
+    llm_assist_policy: dict[str, Any]
+    llm_generation_evidence: dict[str, Any]
+    llm_notes: str | None
+    next_command: str | None
+    warnings: list[str] = field(default_factory=list)
+    errors: list[str] = field(default_factory=list)
+
+    def to_dict(self) -> dict[str, Any]:
+        payload = asdict(self)
+        payload["ok"] = self.status == "ready_for_plan"
+        payload["questions"] = [question.to_dict() for question in self.questions]
+        return payload
+
+
 class HarnessInterviewBuilder:
     def start(self, project_root: Path) -> HarnessInterviewSession:
         root = Path(project_root).resolve()
@@ -205,6 +300,78 @@ class HarnessInterviewStore:
         return _load_yaml(path)
 
 
+def infer_interview_answers_from_project_docs(
+    project_root: Path,
+    *,
+    provider: Any | None = None,
+    save: bool = True,
+) -> HarnessInterviewAutoDraftResult:
+    root = Path(project_root).resolve()
+    profile = _load_or_scan_profile(root)
+    session = HarnessInterviewBuilder().start(root)
+    document_context = _collect_project_document_context(root)
+    answers = _infer_answers_from_profile_and_docs(profile, document_context)
+    llm_assist = _interview_inference_llm_assist(profile, document_context, answers, provider=provider)
+    llm_suggested_answers = _llm_suggested_interview_answers(str(llm_assist.get("llm_notes") or ""))
+    if llm_suggested_answers:
+        _merge_missing_answers(answers, llm_suggested_answers)
+    if llm_assist.get("llm_notes"):
+        answers["llm_project_summary"] = str(llm_assist.get("llm_notes") or "").strip()[:4000]
+    missing = _missing_required_answers(answers)
+    source_mode = "project_docs_llm_assisted" if llm_assist.get(LLM_GENERATION_EVIDENCE_KEY, {}).get("called") else "project_docs_bootstrap"
+    payload = {
+        "schema_version": SCHEMA_VERSION,
+        "generated_at": _now(),
+        "session_id": session.session_id,
+        "source_mode": source_mode,
+        "source": {
+            "kind": "project_docs_interview_inference",
+            "project_profile_ref": ".cambrian/project/profile.yaml",
+            "questions_ref": ".cambrian/interview/questions.yaml",
+            "documents": list(document_context.get("docs_found", [])),
+        },
+        "draft_policy": {
+            "interview_is_fallback": True,
+            "ask_user_only_for_missing_or_low_confidence_answers": True,
+            "llm_enrichment_required": bool(llm_assist.get("policy", {}).get("llm_enrichment_required")),
+        },
+        "answers": answers,
+        "llm_suggested_answers": llm_suggested_answers,
+        "document_context": document_context,
+        "llm_assist_policy": llm_assist.get("policy", {}),
+        LLM_GENERATION_EVIDENCE_KEY: llm_assist.get(LLM_GENERATION_EVIDENCE_KEY, {}),
+    }
+    answers_ref: str | None = None
+    if save:
+        answers_path = HarnessInterviewStore().save_answers(root, payload)
+        answers_ref = _relative(answers_path, root)
+    questions = [_question_by_id(item) for item in missing]
+    warnings: list[str] = []
+    if not document_context.get("docs_found"):
+        warnings.append("No project Markdown documents were found; manual interview remains necessary.")
+    if missing:
+        warnings.append("Some required answers still need user confirmation.")
+    status = "ready_for_plan" if not missing else "needs_more_info"
+    return HarnessInterviewAutoDraftResult(
+        schema_version=SCHEMA_VERSION,
+        generated_at=_now(),
+        status=status,
+        session_id=session.session_id,
+        answers_ref=answers_ref,
+        source_mode=source_mode,
+        answers=answers,
+        missing=missing,
+        questions=questions,
+        document_context=document_context,
+        llm_assist_policy=llm_assist.get("policy", {}),
+        llm_generation_evidence=llm_assist.get(LLM_GENERATION_EVIDENCE_KEY, {}),
+        llm_notes=llm_assist.get("llm_notes"),
+        next_command="cambrian harness plan --json" if not missing else "cambrian harness interview answer --answers .cambrian/interview/answers.yaml --json",
+        warnings=warnings,
+        errors=[] if not missing else ["Required harness interview answers are still missing."],
+    )
+
+
 def render_harness_interview_session(session: HarnessInterviewSession) -> str:
     lines = [
         "Harness Interview",
@@ -254,6 +421,26 @@ def render_harness_interview_answer_result(result: HarnessInterviewAnswerResult)
     return "\n".join(lines)
 
 
+def render_harness_interview_auto_draft_result(result: HarnessInterviewAutoDraftResult) -> str:
+    lines = [
+        "Harness interview inference",
+        "==================================================",
+        "",
+        f"Status: {result.status}",
+        f"Source: {result.source_mode}",
+        f"Documents: {result.document_context.get('document_count', 0)}",
+        f"LLM called: {str(bool(result.llm_generation_evidence.get('called'))).lower()}",
+    ]
+    if result.answers_ref:
+        lines.extend(["", "Saved:", f"  {result.answers_ref}"])
+    if result.missing:
+        lines.extend(["", "Missing:"])
+        lines.extend([f"  - {item}" for item in result.missing])
+    if result.next_command:
+        lines.extend(["", "Next:", f"  {result.next_command}"])
+    return "\n".join(lines)
+
+
 def _load_or_scan_profile(root: Path) -> ProjectHarnessProfile:
     path = default_project_profile_path(root)
     if path.exists():
@@ -261,6 +448,305 @@ def _load_or_scan_profile(root: Path) -> ProjectHarnessProfile:
     profile = ProjectHarnessScanner().scan(root)
     ProjectHarnessProfileStore().save(profile, path)
     return profile
+
+
+def _collect_project_document_context(root: Path) -> dict[str, Any]:
+    candidates = _project_markdown_candidates(root)
+    snippets: list[dict[str, Any]] = []
+    total = 0
+    for path in candidates:
+        if total >= DOC_CONTEXT_LIMIT_CHARS:
+            break
+        try:
+            text = path.read_text(encoding="utf-8", errors="ignore")
+        except OSError:
+            continue
+        stripped = text.strip()
+        if not stripped:
+            continue
+        excerpt = stripped[: min(DOC_CONTEXT_PER_FILE_LIMIT_CHARS, DOC_CONTEXT_LIMIT_CHARS - total)]
+        total += len(excerpt)
+        snippets.append(
+            {
+                "path": _relative(path, root),
+                "chars": len(stripped),
+                "excerpt": excerpt,
+            }
+        )
+    combined_parts = [f"--- {item['path']} ---\n{item['excerpt']}" for item in snippets]
+    return {
+        "docs_found": [str(item["path"]) for item in snippets],
+        "document_count": len(snippets),
+        "combined_chars": total,
+        "has_strong_docs": bool(snippets and total >= 500),
+        "combined_excerpt": "\n\n".join(combined_parts)[:DOC_CONTEXT_LIMIT_CHARS],
+        "document_authority": dict(DOC_CONTEXT_AUTHORITY_POLICY),
+        "noise_filter": {
+            "excluded_dirs": sorted(DOC_CONTEXT_SKIP_DIRS),
+            "excluded_dir_prefixes": list(DOC_CONTEXT_SKIP_DIR_PREFIXES),
+            "policy": "generated, demo, sample, fixture, and runtime docs are excluded before answer inference",
+        },
+    }
+
+
+def _project_markdown_candidates(root: Path) -> list[Path]:
+    root = Path(root).resolve()
+    paths: list[Path] = []
+    for path in root.rglob("*.md"):
+        try:
+            rel_parts = path.relative_to(root).parts
+        except ValueError:
+            continue
+        if any(_is_doc_context_skipped_part(part) for part in rel_parts[:-1]):
+            continue
+        paths.append(path)
+
+    def rank(path: Path) -> tuple[int, int, str]:
+        name = path.name
+        try:
+            depth = len(path.relative_to(root).parts)
+        except ValueError:
+            depth = 99
+        priority = 0 if name in DOC_CONTEXT_PRIORITY_NAMES else 1
+        if name.upper().startswith("README"):
+            priority = 0
+        return (priority, depth, str(path).lower())
+
+    return sorted(paths, key=rank)[:24]
+
+
+def _is_doc_context_skipped_part(part: str) -> bool:
+    text = str(part or "")
+    if text in DOC_CONTEXT_SKIP_DIRS:
+        return True
+    if text.startswith("."):
+        return True
+    return any(text.startswith(prefix) for prefix in DOC_CONTEXT_SKIP_DIR_PREFIXES)
+
+
+def _infer_answers_from_profile_and_docs(profile: ProjectHarnessProfile, document_context: dict[str, Any]) -> dict[str, Any]:
+    docs_text = str(document_context.get("combined_excerpt") or "")
+    domains = list(profile.domains)
+    important_paths = _important_paths_from_profile(profile)
+    test_command = _infer_test_command(profile, docs_text)
+    answers = {
+        "primary_goal": _infer_primary_goal(profile, docs_text, domains),
+        "allowed_scope": important_paths or ["documented project files and validation evidence"],
+        "forbidden_scope": [
+            "do not expose or print secrets",
+            "do not git push, deploy, or publish without explicit approval",
+            "do not apply source changes when the harness policy is proposal_only",
+        ],
+        "test_command": test_command,
+        "build_command": _infer_build_command(profile, docs_text),
+        "validation_standard": "Use project documents, local file evidence, and validation command output before claiming success.",
+        "agent_roles": _infer_agent_roles(domains, docs_text),
+        "change_policy": _infer_change_policy(docs_text),
+        "risk_level": "medium",
+        "important_paths": important_paths,
+    }
+    return {key: value for key, value in answers.items() if value not in (None, [], "")}
+
+
+def _interview_inference_llm_assist(
+    profile: ProjectHarnessProfile,
+    document_context: dict[str, Any],
+    answers: dict[str, Any],
+    *,
+    provider: Any | None,
+) -> dict[str, Any]:
+    system = (
+        "You are Cambrian's harness interview inference assistant. "
+        "Read project documents and scanner evidence, then summarize the project's domain, "
+        "validation commands, safety policy, and missing interview fields. "
+        "Do not invent commands that are not supported by evidence. "
+        "Return compact JSON with an answers object when you can infer fields."
+    )
+    user = json.dumps(
+        {
+            "project_profile": _profile_summary(profile),
+            "document_context": {
+                "docs_found": document_context.get("docs_found", []),
+                "combined_excerpt": document_context.get("combined_excerpt", ""),
+            },
+            "deterministic_answers": answers,
+            "required_answer_ids": sorted(REQUIRED_ANSWER_IDS),
+        },
+        ensure_ascii=False,
+        indent=2,
+    )
+    return call_llm_for_generation(
+        provider,
+        stage=INTERVIEW_INFERENCE_STAGE,
+        system=system,
+        user=user,
+        max_tokens=1800,
+    )
+
+
+def _llm_suggested_interview_answers(text: str) -> dict[str, Any]:
+    payload = _extract_json_object(text)
+    if not isinstance(payload, dict):
+        return {}
+    raw_answers = payload.get("answers", payload)
+    if not isinstance(raw_answers, dict):
+        return {}
+    allowed = {
+        "primary_goal",
+        "allowed_scope",
+        "forbidden_scope",
+        "test_command",
+        "build_command",
+        "validation_standard",
+        "agent_roles",
+        "change_policy",
+        "risk_level",
+        "important_paths",
+    }
+    return {str(key): value for key, value in raw_answers.items() if str(key) in allowed and _answer_has_value(value)}
+
+
+def _extract_json_object(text: str) -> dict[str, Any] | None:
+    stripped = str(text or "").strip()
+    if not stripped:
+        return None
+    candidates = [stripped]
+    first = stripped.find("{")
+    last = stripped.rfind("}")
+    if 0 <= first < last:
+        candidates.append(stripped[first : last + 1])
+    for candidate in candidates:
+        try:
+            payload = json.loads(candidate)
+        except json.JSONDecodeError:
+            continue
+        if isinstance(payload, dict):
+            return payload
+    return None
+
+
+def _merge_missing_answers(answers: dict[str, Any], suggested: dict[str, Any]) -> None:
+    for key, value in suggested.items():
+        if not _answer_has_value(answers.get(key)) and _answer_has_value(value):
+            answers[key] = value
+
+
+def _answer_has_value(value: Any) -> bool:
+    if value is None:
+        return False
+    if isinstance(value, str):
+        return bool(value.strip())
+    if isinstance(value, list):
+        return bool([item for item in value if str(item).strip()])
+    return True
+
+
+def _infer_primary_goal(profile: ProjectHarnessProfile, docs_text: str, domains: list[str]) -> str:
+    explicit = _first_markdown_heading(docs_text)
+    project_name = profile.project_name or "project"
+    if explicit:
+        return f"{project_name}: {explicit}"
+    if domains:
+        return f"Build and maintain a project-specific Cambrian harness for {project_name}, focused on {', '.join(domains[:4])}."
+    language = profile.language if profile.language != "unknown" else "documented"
+    return f"Build and maintain a project-specific Cambrian harness for the {language} project {project_name}."
+
+
+def _first_markdown_heading(text: str) -> str:
+    for raw_line in text.splitlines():
+        line = raw_line.strip()
+        if line.startswith("#"):
+            heading = line.lstrip("#").strip()
+            if heading:
+                return heading[:240]
+    return ""
+
+
+def _infer_test_command(profile: ProjectHarnessProfile, docs_text: str) -> str:
+    for command in (
+        "python -m pytest",
+        "pytest -q",
+        "pytest",
+        "npm test",
+        "npm run test",
+        "pnpm test",
+        "yarn test",
+        "npm run verify",
+        "python tools/verify_static_project.py",
+    ):
+        if command.lower() in docs_text.lower():
+            return command
+    package_test = _package_script_command(profile, "test")
+    if package_test:
+        return package_test
+    framework = (profile.test_framework or "").lower()
+    frameworks = {str(item).lower() for item in profile.test_frameworks if item}
+    if "jest" in framework or "jest" in frameworks:
+        return "npm test"
+    if "pytest" in framework or "pytest" in frameworks:
+        return "python -m pytest"
+    return ""
+
+
+def _infer_build_command(profile: ProjectHarnessProfile, docs_text: str) -> str:
+    for command in ("npm run build", "pnpm build", "yarn build", "python -m build"):
+        if command.lower() in docs_text.lower():
+            return command
+    package_build = _package_script_command(profile, "build")
+    if package_build:
+        return package_build
+    return ""
+
+
+def _package_script_command(profile: ProjectHarnessProfile, script_name: str) -> str:
+    root = Path(profile.project_root or "")
+    if not root.is_dir():
+        return ""
+    package_json = root / "package.json"
+    if not package_json.exists():
+        return ""
+    try:
+        payload = json.loads(package_json.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return ""
+    scripts = payload.get("scripts", {}) if isinstance(payload, dict) else {}
+    if not isinstance(scripts, dict):
+        return ""
+    script = scripts.get(script_name)
+    if not str(script or "").strip():
+        return ""
+    return "npm test" if script_name == "test" else f"npm run {script_name}"
+
+
+def _infer_change_policy(docs_text: str) -> str:
+    lowered = docs_text.lower()
+    proposal_markers = ("proposal_only", "proposal only", "제안", "자동 적용 금지", "수동 승인", "approval")
+    if any(marker in lowered for marker in proposal_markers):
+        return "proposal_only"
+    return "proposal_only"
+
+
+def _infer_agent_roles(domains: list[str], docs_text: str) -> list[str]:
+    roles = ["context-evidence-reader", "verification-owner", "risk-reviewer"]
+    lowered = docs_text.lower()
+    for domain in domains[:4]:
+        roles.append(f"{domain}-specialist")
+    if "stage" in lowered or "pipeline" in lowered:
+        roles.append("pipeline-stage-validator")
+    if "llm" in lowered or "anthropic" in lowered or "openai" in lowered:
+        roles.append("llm-api-failure-analyst")
+    return list(dict.fromkeys(roles))[:5]
+
+
+def _important_paths_from_profile(profile: ProjectHarnessProfile) -> list[str]:
+    paths: list[str] = []
+    for key in ("package_json", "pyproject", "tests", "python", "typescript", "javascript"):
+        paths.extend([str(item) for item in profile.detected_paths.get(key, []) if item])
+    evidence_card = profile.evidence_card if isinstance(profile.evidence_card, dict) else {}
+    for item in evidence_card.get("identity_evidence", []) if isinstance(evidence_card.get("identity_evidence"), list) else []:
+        if isinstance(item, dict) and item.get("path"):
+            paths.append(str(item.get("path")))
+    return list(dict.fromkeys(paths))[:12]
 
 
 def _profile_summary(profile: ProjectHarnessProfile) -> dict[str, Any]:

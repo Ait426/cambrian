@@ -1,0 +1,9 @@
+[project]
+name = "python-invoice-rules-fixture"
+version = "0.1.0"
+description = "Safe invoice rules fixture for Cambrian One Good Harness replay"
+requires-python = ">=3.11"
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
+testpaths = ["tests"]

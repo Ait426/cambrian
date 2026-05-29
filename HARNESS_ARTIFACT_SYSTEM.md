@@ -75,6 +75,10 @@ MVP에서는 파일 수를 최소화해야 함
 - 대상 언어/프레임워크
 - 주요 검증 목표
 - 주요 capability gap
+- 작업 설명과 통과 기준
+- 허용 쓰기 범위와 금지 범위
+- evaluator가 사용할 검증 명령과 verdict 계약
+- 실행 sandbox, timeout, approval policy
 - 어떤 아티팩트를 참조하는지
 - 기본 verdict 기준
 
@@ -88,6 +92,26 @@ objective: "AI 변경이 merge 가능한지 검증"
 focus_areas:
   - testing
   - documentation
+domain_spec:
+  task_description: "todo_cli 변경 후보가 실제 사용자 흐름을 깨지 않는지 검증"
+  allowed_write_paths:
+    - "src/"
+    - "tests/"
+  forbidden_paths:
+    - ".env"
+    - ".git/"
+  validation_commands:
+    - "python -m pytest -q"
+  pass_criteria:
+    min_success_rate: 0.9
+    max_regressions: 0
+  evaluator:
+    kind: "local_validation"
+    verdict_contract: "pass, hold, rollback 중 하나를 기록"
+  execution_policy:
+    sandbox: "workspace"
+    timeout_sec: 120
+    approval_policy: "explicit"
 artifacts:
   eval_cases: ".cambrian/harness/eval_cases.jsonl"
   replay_cases: ".cambrian/harness/replay_cases.jsonl"
@@ -98,6 +122,12 @@ default_verdict: hold
 ```
 
 **성격**: source of truth / 사람이 수정 가능 / scan+bootstrap이 초안 생성
+
+**Meta-Harness 대응**:
+
+`harness.yaml`은 Cambrian에서 domain spec의 루트 파일 역할을 한다.
+초기에는 별도 `domain_spec.yaml`을 만들지 않는다.
+작업 설명, 허용 범위, 검증 명령, 통과 기준, evaluator, 실행 정책을 이 파일에 넣어 review와 install gate가 같은 계약을 보게 한다.
 
 ### B. `.cambrian/harness/eval_cases.jsonl`
 
@@ -196,31 +226,59 @@ default_verdict: hold
 
 ### G. `.cambrian/reports/latest_verdict.json`
 
-**역할**: 가장 최근 Cambrian 판정 결과
+**역할**: 가장 최근 Cambrian evaluator 판정 결과
 
-**왜 필요한가**: 사용자에게 보여줄 최종 결과는 이 파일로 고정할 수 있다.
+**왜 필요한가**: 사용자에게 보여줄 최종 결과와 다음 승격 가능 여부는 이 파일로 고정할 수 있다.
+Meta-Harness 관점에서는 evaluator가 후보를 판정한 최신 verdict다.
 
 **예시**:
 
 ```json
 {
-  "run_id": "run-20260412-0017",
+  "report_kind": "evaluator_verdict",
+  "job_id": "job-custom-auth-20260511",
+  "harness_id": "custom-auth-work",
+  "verdict_contract": ["pass", "hold", "rollback"],
   "verdict": "hold",
-  "summary": "2 replay failures detected",
-  "passed_eval": 4,
-  "failed_eval": 2,
-  "failed_replay": 2,
-  "recommended_next_action": "inspect failing replay cases"
+  "verdict_reason": "manual_validation_required",
+  "promotion_readiness": "blocked",
+  "metrics": {
+    "validation_commands_count": 2,
+    "checked_artifacts_count": 4,
+    "unchecked_items_count": 2,
+    "patch_applied": false,
+    "source_code_modified": false
+  },
+  "evidence_ref": ".cambrian/evidence/validation/job-custom-auth-20260511.yaml",
+  "next_action": "Run the listed validation commands manually, then record job completion outcome."
 }
 ```
 
-**성격**: generated / 사람이 직접 수정하지 않음 / CLI 출력과 연결 가능
+**성격**: generated / 사람이 직접 수정하지 않음 / CLI 출력과 연결 가능 / promotion gate 입력
+
+**갱신 규칙**:
+
+- `job validate`는 자동 적용이나 테스트 실행 없이 수동 검증 필요 상태를 `hold`로 기록한다.
+- `job complete --outcome success`는 수동 결과를 `pass`로 반영한다.
+- `job complete --outcome partial` 또는 `needs_more_info`는 `hold`로 유지한다.
+- `job complete --outcome failed` 또는 `rejected`는 `rollback`으로 반영한다.
+- 어떤 경우에도 이 파일만으로 자동 promotion을 실행하지 않는다.
 
 ### H. `.cambrian/reports/latest_benchmark.json`
 
 **역할**: 후보 비교 결과 저장
 
-**왜 필요한가**: 누가 1등이었는지, 왜 이겼는지 남겨야 한다.
+**왜 필요한가**: 누가 1등이었는지, 왜 이겼는지, 어떤 기준에서는 졌는지 남겨야 한다.
+
+**담아야 할 것**:
+- candidate_id
+- parent_candidate_id
+- generation_id
+- evaluator_version
+- metrics
+- verdict
+- promotion_readiness
+- rollback_reason 후보
 
 **성격**: generated / benchmark 실행 시 갱신
 
@@ -229,6 +287,16 @@ default_verdict: hold
 **역할**: 실행 기록 누적
 
 **왜 필요한가**: 나중에 replay, failure mining, threshold 보정에 필요하다.
+
+**담아야 할 것**:
+- run_id
+- candidate_id
+- parent_candidate_id
+- mutation_summary
+- input_hash
+- output_hash
+- evaluator_result
+- decision
 
 **성격**: generated / 계속 append
 
@@ -289,6 +357,9 @@ default_verdict: hold
 **scan → harness 생성 → 후보 실행 → 판정 → replay 축적**
 흐름으로 가야 한다.
 
+Meta-Harness식 세대 진화는 이 흐름 위에 올라가는 상위 루프다.
+먼저 단일 후보 실행과 판정 계약을 안정화하고, 그 다음 여러 후보를 같은 domain spec과 evaluator로 비교한다.
+
 ## 7. source of truth 구분
 
 ### 사람이 관리해야 하는 것
@@ -336,9 +407,11 @@ default_verdict: hold
 ### 바로 다음 Task 추천
 
 1. `.cambrian/harness/` 아티팩트 스펙 확정
-2. scan 이후 bootstrap 명령 추가
-3. `latest_verdict.json` 출력 계약 정의
-4. replay 축적 규칙 정의
+2. `harness.yaml`의 domain spec 최소 필드 확정
+3. evaluator verdict 출력 계약 정의
+4. scan 이후 bootstrap 명령 추가
+5. `latest_verdict.json` 출력 계약 정의
+6. candidate lineage와 replay 축적 규칙 정의
 
 ## 10. 최종 한 줄
 

@@ -1,0 +1,220 @@
+schema_version: 1.0.0
+response_kind: review
+generated_at: "2026-05-23T18:30:34+09:00"
+summary: >-
+  Completed one verified release-hardening step for mission job
+  job-custom-cambrian-mission-company-20260523_084835_715388. The install-kit
+  recipient checkpoint now rejects missing or still-placeholder returned install,
+  gold-path, and MCP receipt paths before JSON parsing or hashing, and the
+  first-recipient post-send sequence records a share-safe blocked receipt instead
+  of crashing when a requested returned receipt file is absent.
+job_id: job-custom-cambrian-mission-company-20260523_084835_715388
+job_ref: .cambrian/packs/jobs/job-custom-cambrian-mission-company-20260523_084835_715388.yaml
+task_ref: .cambrian/mission/tasks/mission-step-20260523_084835_578997-001.yaml
+bridge_packet_ref: .cambrian/bridge/packets/packet_20260523_084836_44af.yaml
+codebase_evidence_path_citation:
+  inspected_paths:
+    - .cambrian/packs/jobs/job-custom-cambrian-mission-company-20260523_084835_715388.yaml
+    - .cambrian/mission/tasks/mission-step-20260523_084835_578997-001.yaml
+    - .cambrian/bridge/packets/packet_20260523_084836_44af.yaml
+    - scripts/check_cambrian_install_kit_recipient_checkpoint.py
+    - scripts/check_cambrian_install_kit_first_recipient_post_send_sequence.py
+    - tests/test_cambrian_install_kit.py
+    - docs/release/NEXT_SESSION_HANDOFF.md
+    - docs/product/45_AI_COMPANY_OS_TASK_BACKLOG.md
+  changed_paths:
+    - scripts/check_cambrian_install_kit_recipient_checkpoint.py
+    - scripts/check_cambrian_install_kit_first_recipient_post_send_sequence.py
+    - tests/test_cambrian_install_kit.py
+    - docs/release/NEXT_SESSION_HANDOFF.md
+    - docs/product/45_AI_COMPANY_OS_TASK_BACKLOG.md
+    - ai_reply_patch_candidate.yaml
+  runtime_evidence:
+    - >-
+      python -m py_compile scripts\check_cambrian_install_kit_recipient_checkpoint.py
+      scripts\check_cambrian_install_kit_first_recipient_post_send_sequence.py
+      tests\test_cambrian_install_kit.py -> PASS
+    - >-
+      python -m pytest -q tests/test_cambrian_install_kit.py -k
+      "recipient_checkpoint and (missing_returned_receipts or
+      placeholder_returned_receipt or confirms_gold_path or accepts_windows_bom)" -> 6 passed
+    - >-
+      python -m pytest -q tests/test_cambrian_install_kit.py -k
+      "post_send_sequence and (missing_returned_receipt or confirms_gold_path or
+      placeholder_sent_at)" -> 3 passed
+    - "python -m pytest -q tests/test_cambrian_install_kit.py -> 72 passed"
+    - "python -m pytest -q tests/test_ai_company_os_task_backlog.py -> 2 passed"
+    - >-
+      python -m pytest -q tests/test_mission_company.py
+      tests/test_job_start_runtime_contract.py tests/test_job_complete_evidence.py -> 33 passed
+    - >-
+      python -m py_compile engine/project_mission.py engine/cli.py
+      engine/project_custom_harness.py engine/project_bridge.py -> PASS
+codebase_evidence_paths:
+  - scripts/check_cambrian_install_kit_recipient_checkpoint.py
+  - scripts/check_cambrian_install_kit_first_recipient_post_send_sequence.py
+  - tests/test_cambrian_install_kit.py
+  - docs/release/NEXT_SESSION_HANDOFF.md
+  - docs/product/45_AI_COMPANY_OS_TASK_BACKLOG.md
+risk_boundary_check:
+  checked: true
+  summary: >-
+    Work stayed local and private-safe. The patch changes only install-kit
+    returned-receipt evidence gates, related tests, and release/backlog notes.
+    It does not fill recipient, channel, acknowledgement, install receipt,
+    gold-path receipt, MCP receipt, feedback, issue, or decision private values.
+    No real send, deploy, publish, upload, package release, payment, database
+    migration, git push, or secret access occurred.
+  source_code_modified_by_cambrian: false
+  provider_api_called_by_cambrian: false
+  forbidden_actions_not_taken:
+    - git_push
+    - deploy
+    - publish
+    - package_upload
+    - secret_read_or_write
+    - payment_or_external_spend
+    - database_migration
+    - real_external_send
+    - private_recipient_data_entry
+    - public_readiness_claim
+validation_command_selection:
+  commands:
+    - >-
+      python -m py_compile scripts\check_cambrian_install_kit_recipient_checkpoint.py
+      scripts\check_cambrian_install_kit_first_recipient_post_send_sequence.py
+      tests\test_cambrian_install_kit.py
+    - >-
+      python -m pytest -q tests/test_cambrian_install_kit.py -k
+      "recipient_checkpoint and (missing_returned_receipts or
+      placeholder_returned_receipt or confirms_gold_path or accepts_windows_bom)"
+    - >-
+      python -m pytest -q tests/test_cambrian_install_kit.py -k
+      "post_send_sequence and (missing_returned_receipt or confirms_gold_path or
+      placeholder_sent_at)"
+    - python -m pytest -q tests/test_cambrian_install_kit.py
+    - python -m pytest -q tests/test_ai_company_os_task_backlog.py
+    - >-
+      python -m pytest -q tests/test_mission_company.py
+      tests/test_job_start_runtime_contract.py tests/test_job_complete_evidence.py
+    - >-
+      python -m py_compile engine/project_mission.py engine/cli.py
+      engine/project_custom_harness.py engine/project_bridge.py
+  rationale: >-
+    The focused recipient-checkpoint tests prove all three returned receipt
+    surfaces fail closed when missing or placeholder paths are supplied. The
+    post-send focused tests prove the operator-facing sequence records a blocked
+    share-safe receipt instead of crashing. The full install-kit suite protects
+    the actual external-user release path, the backlog test prevents overstated
+    OS-11 status, and the mission/job tests verify the 24h-company loop still
+    validates. A first parallel mission validation attempt timed out due to a
+    lingering pytest process; split reruns and the final combined rerun passed.
+validation_commands:
+  - >-
+    python -m py_compile scripts\check_cambrian_install_kit_recipient_checkpoint.py
+    scripts\check_cambrian_install_kit_first_recipient_post_send_sequence.py
+    tests\test_cambrian_install_kit.py
+  - >-
+    python -m pytest -q tests/test_cambrian_install_kit.py -k
+    "recipient_checkpoint and (missing_returned_receipts or
+    placeholder_returned_receipt or confirms_gold_path or accepts_windows_bom)"
+  - >-
+    python -m pytest -q tests/test_cambrian_install_kit.py -k
+    "post_send_sequence and (missing_returned_receipt or confirms_gold_path or
+    placeholder_sent_at)"
+  - python -m pytest -q tests/test_cambrian_install_kit.py
+  - python -m pytest -q tests/test_ai_company_os_task_backlog.py
+  - >-
+    python -m pytest -q tests/test_mission_company.py
+    tests/test_job_start_runtime_contract.py tests/test_job_complete_evidence.py
+  - >-
+    python -m py_compile engine/project_mission.py engine/cli.py
+    engine/project_custom_harness.py engine/project_bridge.py
+patch_application_state:
+  stated: true
+  applied: true
+  patch_applied: true
+  source_code_modified: true
+  applied_by: codex
+  product_source_code_modified: true
+  test_code_modified: true
+  docs_modified: true
+  summary: >-
+    Applied a narrow source/test/docs hardening patch for missing or placeholder
+    returned receipt handling in the install-kit recipient checkpoint and
+    first-recipient post-send sequence.
+  changed_files:
+    - scripts/check_cambrian_install_kit_recipient_checkpoint.py
+    - scripts/check_cambrian_install_kit_first_recipient_post_send_sequence.py
+    - tests/test_cambrian_install_kit.py
+    - docs/release/NEXT_SESSION_HANDOFF.md
+    - docs/product/45_AI_COMPANY_OS_TASK_BACKLOG.md
+  key_changes:
+    - >-
+      install-kit recipient-checkpoint now resolves returned install, gold-path,
+      and MCP receipt paths through a fail-closed placeholder/missing-file guard
+      before JSON parsing or hashing.
+    - >-
+      install-kit first-recipient post-send sequence now records returned receipt
+      requested vs present and avoids hashing absent paths.
+    - >-
+      Added function, CLI, and post-send sequence regressions proving no
+      placeholder, local path, or private recipient/operator text is echoed.
+verdict_rationale:
+  verdict: pass
+  rationale: >-
+    Returned install, gold-path, and MCP receipts are the actual external-user
+    proof for OS-11. Previously a requested-but-missing path could fall into
+    generic JSON/hash behavior or crash the operator-facing post-send sequence.
+    The patch turns that into an auditable fail-closed gate and a share-safe
+    blocked receipt. All selected validations passed. External-user proof remains
+    pending because no real recipient has received the bundle.
+context_intent_resolution:
+  resolved: true
+  latest_user_intent: "다음 스탭으로 넘어가"
+  resolved_as: >-
+    Continue the OS-11 launch-hardening loop by removing one more local evidence
+    failure mode before the human-only first external recipient send.
+  task_alignment: >-
+    OS-11 remains the launch blocker, and the current step strengthens the
+    returned install/gold-path/MCP receipt boundary that external-user proof
+    depends on.
+project_discussion_role_check:
+  checked: true
+  roles_used:
+    ceo-agent: >-
+      Kept the work tied to external-user trust rather than adding new product
+      surface.
+    cto-agent: >-
+      Converted brittle missing-file/hash paths into explicit returned-receipt
+      evidence gates.
+    coo-agent: >-
+      Preserved the human-only manual-send boundary and kept all private
+      recipient evidence out of chat, docs, and receipts.
+    pm-agent: >-
+      Reduced operator confusion when returned receipt placeholders are passed to
+      CLI commands after a manual send.
+    context-archivist-agent: >-
+      Recorded the proof in NEXT_SESSION_HANDOFF and the OS-11 backlog without
+      marking OS-11 complete.
+  context_docs_used:
+    - docs/release/NEXT_SESSION_HANDOFF.md
+    - docs/product/45_AI_COMPANY_OS_TASK_BACKLOG.md
+  missing_context_docs: []
+llm_invocation_evidence:
+  satisfied: true
+  called: true
+  mode: current_codex_session
+  provider: codex
+  agent_ids:
+    - mission-control-architect
+    - safety-boundary-reviewer
+    - pytest-regression-guardian
+  summary: >-
+    The current Codex LLM worker selected and executed a bounded release-hardening
+    step for the installed mission-company agents; Cambrian itself did not call a
+    live provider API.
+unchecked_items:
+  - Real first-recipient private recipient/channel values are still missing by design.
+  - No bundle was manually sent to an external user in this step.
+  - Returned install, gold-path, and MCP receipts are still pending.

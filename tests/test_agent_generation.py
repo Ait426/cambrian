@@ -70,6 +70,10 @@ def test_install_generates_workforce_agents_and_skills(tmp_path: Path) -> None:
     assert (skills_dir / "inspect-jest-auth-test.yaml").exists()
     auth_agent = yaml.safe_load((agent_dir / "auth-flow-investigator.yaml").read_text(encoding="utf-8"))
     assert auth_agent["type"] == "generated_agent"
+    assert auth_agent["agent_kind"] == "ai_agent"
+    assert auth_agent["requires_llm_call"] is True
+    assert auth_agent["runtime_contract"]["llm_invocation"]["required"] is True
+    assert auth_agent["runtime_contract"]["llm_invocation"]["evidence_key"] == "llm_invocation_evidence"
     assert auth_agent["harness_id"].startswith("custom-")
     assert "자동 patch apply 금지" in auth_agent["forbidden"]
     trace_skill = yaml.safe_load((skills_dir / "trace-auth-token-flow.yaml").read_text(encoding="utf-8"))

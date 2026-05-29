@@ -88,7 +88,7 @@ def test_project_first_cli_flow_creates_custom_agent_dispatch_job(tmp_path: Path
 
     assert payload["ok"] is True
     assert payload["harness_id"].startswith("custom-")
-    assert payload["harness_status"] == "draft"
+    assert payload["harness_status"] == "active"
     assert payload["change_policy"] == "proposal_only"
     assert payload["job_id"].startswith("job-custom-")
     assert any(command.startswith("cambrian job ingest ") for command in payload["next_commands"])

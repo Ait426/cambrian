@@ -30,7 +30,8 @@ def test_harness_workforce_skill_slice_ready_records_validation_results() -> Non
         "tests/test_workforce_builder.py",
         "tests/test_skill_generation.py",
         "tests/test_ai_company_bootstrap.py",
-        "59 passed in 138.72s",
+        "128 passed across split groups",
+        "SPLIT_RUN_REQUIRED",
         "GO for review/staging as Slice 3",
     ]:
         assert phrase in text

@@ -5,7 +5,19 @@ from pathlib import Path
 import yaml
 
 from engine.project_harness_interview import HarnessInterviewAnswerHandler, HarnessInterviewBuilder
-from engine.project_workforce_builder import build_workforce
+from engine.project_workforce_builder import _attach_agent_runtime_contract, build_workforce
+
+
+class _FakeProvider:
+    def __init__(self) -> None:
+        self.calls: list[tuple[str, str, int]] = []
+
+    def complete(self, system: str, user: str, max_tokens: int = 8192) -> str:
+        self.calls.append((system, user, max_tokens))
+        return "Prefer one domain specialist, one verification guardian, and one risk reviewer."
+
+    def provider_name(self) -> str:
+        return "fake"
 
 
 def _write(path: Path, text: str) -> None:
@@ -64,4 +76,50 @@ def test_workforce_generate_uses_project_and_answers(tmp_path: Path) -> None:
     assert "auth-flow-investigator" in agent_ids
     assert "jest-regression-guardian" in agent_ids
     assert "risk-reviewer" in agent_ids
+    by_id = {agent["id"]: agent for agent in result.agents}
+    assert by_id["auth-flow-investigator"]["agent_kind"] == "ai_agent"
+    assert by_id["auth-flow-investigator"]["requires_llm_call"] is True
+    assert by_id["auth-flow-investigator"]["runtime_contract"]["llm_invocation"]["required"] is True
+    assert by_id["jest-regression-guardian"]["agent_kind"] == "ai_agent"
+    assert by_id["risk-reviewer"]["runtime_contract"]["llm_invocation"]["evidence_key"] == "llm_invocation_evidence"
     assert result.next_command == "cambrian harness install --confirm --json"
+
+
+def test_workforce_generation_uses_llm_provider_when_supplied(tmp_path: Path) -> None:
+    _make_project(tmp_path)
+    _answers(tmp_path)
+    provider = _FakeProvider()
+
+    result = build_workforce(tmp_path, provider=provider)
+    payload = result.to_dict()
+
+    assert provider.calls
+    assert payload["llm_assist_policy"]["provider_used"] is True
+    assert payload["llm_assist_policy"]["quality_status"] == "llm_assisted"
+    assert payload["llm_generation_evidence"]["called"] is True
+    assert payload["llm_generation_evidence"]["provider"] == "fake"
+    assert "domain specialist" in payload["llm_generation_evidence"]["response_excerpt"]
+
+
+def test_workforce_generation_without_provider_is_bootstrap_draft(tmp_path: Path) -> None:
+    _make_project(tmp_path)
+    _answers(tmp_path)
+
+    result = build_workforce(tmp_path)
+    payload = result.to_dict()
+
+    assert payload["llm_assist_policy"]["provider_used"] is False
+    assert payload["llm_assist_policy"]["quality_status"] == "bootstrap_draft"
+    assert payload["llm_assist_policy"]["llm_enrichment_required"] is True
+    assert payload["llm_generation_evidence"]["called"] is False
+
+
+def test_deterministic_generated_worker_can_be_general_agent() -> None:
+    agent = _attach_agent_runtime_contract({"id": "command-runner", "role": "Run approved validation commands"})
+
+    assert agent["agent_kind"] == "general_agent"
+    assert agent["responsibility_class"] == "tool_execution"
+    assert agent["requires_reasoning"] is False
+    assert agent["requires_llm_call"] is False
+    assert agent["runtime_contract"]["llm_invocation"]["required"] is False
+    assert agent["runtime_contract"]["template_output_allowed"] is True

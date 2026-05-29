@@ -1,0 +1,1 @@
+verify invoice total rules fixture

@@ -1,0 +1,6 @@
+schema_version: 1.0.0
+response_kind: analysis
+summary: >
+  This intentionally weak fixture reply omits the required evidence envelope.
+  Cambrian must not treat it as a verified pass even if the configured validation
+  command itself succeeds.

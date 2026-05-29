@@ -1,0 +1,82 @@
+schema_version: 1.0.0
+response_kind: analysis
+summary: >
+  The fixture invoice rules module already satisfies the requested total, rounding,
+  and validation behavior. No source patch is needed; the replay should prove that
+  One Good Harness works on a second project shape without provider calls or source
+  mutation.
+codebase_evidence_path_citation:
+  changed_paths: []
+  inspected_paths:
+    - src/invoice_rules.py
+    - tests/test_invoice_rules.py
+    - pyproject.toml
+  runtime_evidence:
+    - .cambrian/profile.yaml
+    - .cambrian/harness.yaml
+    - .cambrian/packs/jobs/latest.yaml
+evidence_paths:
+  - src/invoice_rules.py
+  - tests/test_invoice_rules.py
+  - pyproject.toml
+  - .cambrian/profile.yaml
+  - .cambrian/harness.yaml
+  - .cambrian/packs/jobs/latest.yaml
+risk_boundary_check:
+  checked: true
+  source_code_modified_by_cambrian: false
+  provider_api_called_by_cambrian: false
+  forbidden_actions_not_taken:
+    - git_push
+    - deploy
+    - publish
+    - package_upload
+    - secret_read_or_write
+    - external_transfer
+validation_command_selection:
+  selected_commands:
+    - python -m pytest -q
+    - python -m py_compile src/invoice_rules.py
+  rationale: >
+    The fixture is a Python invoice-rules project and pytest is the declared validation
+    command in the harness interview answers.
+  observed_results:
+    - pending Cambrian job validate --run
+validation_commands:
+  - python -m pytest -q
+  - python -m py_compile src/invoice_rules.py
+patch_application_state:
+  stated: true
+  patch_applied: false
+  source_code_modified: false
+  source_code_files_modified: []
+  applied_by: none
+verdict_rationale: >
+  PASS is allowed only if Cambrian runs the configured pytest command and records a
+  verified job verdict. The AI reply itself does not claim runtime proof.
+context_intent_resolution:
+  resolved: true
+  user_intent: Verify One Good Harness as a reproducible product proof on a second safe fixture.
+  selected_next_step: Run the closed-loop fixture replay without provider calls or source apply.
+project_discussion_role_check:
+  checked: true
+  role_ownership:
+    ceo-agent: external-user trust requires more than one replayable fixture
+    cto-agent: the second fixture must reuse the same Cambrian CLI contracts
+    coo-agent: stop after one verified receipt and do not claim OS-11 completion
+  conclusion: >
+    This reply is a deterministic canned AI worker response for the second fixture replay.
+llm_invocation_evidence:
+  satisfied: true
+  called: true
+  mode: canned_fixture_ai_turn
+  provider: fixture
+  agent_ids:
+    - invoice-rules-inspector
+    - pytest-regression-guardian
+    - proposal-safety-reviewer
+    - harness-replay-auditor
+  summary: >
+    This deterministic fixture uses a canned AI-worker turn to keep replay stable.
+    Cambrian itself does not call a live provider API during the replay.
+manual_review_required: false
