@@ -26,12 +26,15 @@ def test_runtime_evidence_archive_records_selected_release_gates() -> None:
     text = _read("docs/release/RUNTIME_EVIDENCE_ARCHIVE_SLICE_READY.md")
 
     for phrase in [
-        "release-gate-20260509-162228",
-        "release-gate-20260509-162905",
-        "release-gate-20260509-163438",
-        "release-gate-20260509-171309",
-        "release-gate-20260509-173239",
-        "release-gate-20260509-174102",
+        "Installed Wheel Smoke",
+        "Packaging And Launch",
+        "AI Company Auto Runtime",
+        "Harness Workforce Skill",
+        "Web Tools",
+        "release-gate-20260513-142945",
+        "93 passed",
+        "128 passed",
+        "17 passed",
         "Quality score: 95",
         "Required before release: none",
     ]:

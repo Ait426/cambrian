@@ -49,19 +49,19 @@ Do not commit the raw .cambrian runtime evidence tree unless the commit is expli
 
 Selected release gate evidence:
 
-| Slice | Area | Release Gate | Verdict |
-|---|---|---:|---|
-| Slice 1 | Packaging RC Runtime | `release-gate-20260509-162228` | GO |
-| Slice 2 | AI Company Auto Runtime | `release-gate-20260509-162905` | GO |
-| Slice 3 | Harness Workforce Skill | `release-gate-20260509-163438` | GO |
-| Slice 4 | Pack Template Benchmark | `release-gate-20260509-171309` | GO |
-| Slice 5 | Launch Pilot Release Docs | `release-gate-20260509-173239` | GO |
-| Slice 6 | Web Tools | `release-gate-20260509-174102` | GO |
+| Area | Current Evidence | Verdict |
+|---|---|---|
+| Installed Wheel Smoke | `python scripts/smoke_installed_wheel.py` | PASS |
+| Packaging And Launch | `61 passed` | PASS |
+| AI Company Auto Runtime | `93 passed` | PASS |
+| Harness Workforce Skill | `128 passed` across split groups | PASS |
+| Web Tools | catalog generation plus `17 passed` | PASS |
+| Auto Release Gate | `release-gate-20260513-142945` | GO |
 
 Latest current release gate:
 
 ```text
-release-gate-20260509-174102
+release-gate-20260513-142945
 Verdict: GO
 Reason: Strong validated result has release gate evidence.
 Quality score: 95
@@ -78,8 +78,8 @@ Completed slice readiness gates:
 
 ```text
 Packaging Slice Gate: PASS
-Auto Runtime Slice Gate: PASS
-Harness Workforce Skill Slice Gate: PASS
+Auto Runtime Slice Gate: PASS (`93 passed`)
+Harness Workforce Skill Slice Gate: PASS (`128 passed` split total)
 Pack Template Benchmark Slice Gate: PASS
 Launch Pilot Release Docs Slice Gate: PASS
 Web Tools Slice Gate: PASS
