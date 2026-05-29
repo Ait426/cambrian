@@ -31,7 +31,8 @@ def test_launch_pilot_release_docs_slice_ready_records_validation_results() -> N
         "tests/test_pilot_outreach_kit.py",
         "tests/test_pilot_learning_board.py",
         "tests/test_pack_template_benchmark_slice_ready.py",
-        "90 passed in 1.96s",
+        "tests/test_launch_pilot_release_docs_slice_ready.py",
+        "94 passed in 0.78s",
         "GO for review/staging as Slice 5",
     ]:
         assert phrase in text

@@ -8,14 +8,19 @@ The repo contains a large product evolution batch. Reviewers should not treat th
 
 ## Current Snapshot
 
-- Total git status entries: 257
-- Tracked modified files: 21
-- Untracked files/directories: 236
-- Engine/runtime area entries: 106
-- Test area entries: 131
-- Docs area entries: 7
-- Script area entries: 3
-- Runtime evidence entry: `.cambrian/`
+- Total git status entries: 188
+- Tracked modified files: 26
+- Untracked files/directories: 162
+- Slice candidate entries: 188
+- Excluded-by-default entries: 0
+- Manual review entries: 0
+- Engine/runtime slice entries: 0
+- Harness/workforce/skill slice entries: 0
+- Launch/pilot/release docs slice entries: 173
+- Pack/template/benchmark slice entries: 0
+- Web/tool slice entries: 12
+- Runtime evidence archive entries: 3
+- Generated test/tool caches and local session handoff notes are ignored before staging. Runtime evidence and noisy generated entries remain excluded by default if they appear in git status.
 
 ## Primary Change Areas
 
@@ -89,25 +94,27 @@ Review focus:
 Latest evidence recorded in this worktree:
 
 - Installed wheel smoke: PASS
-- Packaging and launch core gate: `60 passed`
-- Auto mode gate: `77 passed`
-- Harness/company runtime gate: `59 passed`
+- Packaging and launch focused gate: `61 passed`
+- Auto runtime focused gate: `93 passed`
+- Harness/company focused split groups: `132 passed`
 - Broad split-run chunks: 1413 passed, 14 skipped before template isolation
 - Template isolation group: `73 passed`
 - Final broad chunk: `62 passed`
 - Auto/release regression subset after stale blocker fixes: `48 passed`
 - Split-run gate doc subset: `29 passed`
 - Latest auto release gate: GO
+- `.cambrian/auto/report.yaml` open blockers: `0`
+- Auto report source code modified: `false`
 
 ## Release Blocking Checklist
 
-- [ ] `python scripts/smoke_installed_wheel.py` is PASS.
-- [ ] Split-run regression evidence has no failed chunk.
-- [ ] `docs/release/SPLIT_RUN_REGRESSION_GATE.md` is current.
-- [ ] `.cambrian/auto/report.yaml` has no open blockers.
-- [ ] `.cambrian/auto/release_gate/*.yaml` latest verdict is GO.
-- [ ] No source code was automatically patched by auto mode.
-- [ ] `.env`, API keys, private usernames, and private project data are not included in docs or tests.
+- [x] `python scripts/smoke_installed_wheel.py` is PASS.
+- [x] Split-run regression evidence has no failed chunk.
+- [x] `docs/release/SPLIT_RUN_REGRESSION_GATE.md` is current.
+- [x] `.cambrian/auto/report.yaml` has no open blockers.
+- [x] `.cambrian/auto/release_gate/*.yaml` latest verdict is GO.
+- [x] No source code was automatically patched by auto mode.
+- [x] `.env`, API keys, private usernames, and private project data are not included in release candidate docs or tests.
 
 ## Review Order
 

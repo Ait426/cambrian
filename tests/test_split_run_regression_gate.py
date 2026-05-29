@@ -25,6 +25,10 @@ def test_split_run_gate_records_current_evidence_baseline() -> None:
     text = _read("docs/release/SPLIT_RUN_REGRESSION_GATE.md")
 
     for phrase in [
+        "Packaging/launch focused gate: `61 passed`",
+        "Auto runtime focused gate: initial 120s interactive run timed out",
+        "Auto runtime focused gate: initial 120s interactive run timed out; same focused gate passed with extended timeout as `93 passed`",
+        "Harness/company focused split total: `128 passed`",
         "Chunk 1: `281 passed`",
         "Chunk 6c isolated files: `73 passed`",
         "Chunk 7: `62 passed`",

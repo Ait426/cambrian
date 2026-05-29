@@ -41,6 +41,18 @@ Recommended chunk policy:
 - If a chunk times out, isolate the files inside that chunk before classifying it as a product failure.
 - If every isolated file passes and only the combined chunk times out, classify the issue as `SPLIT_RUN_REQUIRED`.
 
+## Current RC Focused Re-Run
+
+Latest release-finishing re-run:
+
+- Installed wheel smoke: `PASS`
+- Packaging/launch focused gate: `61 passed`
+- Auto runtime focused gate: initial 120s interactive run timed out; same focused gate passed with extended timeout as `93 passed`
+- Harness/company focused gate: combined command timed out; split groups passed as `40 passed`, `29 passed`, `23 passed`, `7 passed`, `9 passed`, `16 passed`, and `4 passed`
+- Harness/company focused split total: `128 passed`
+
+The auto and harness timeouts above are classified as `SPLIT_RUN_REQUIRED`, not release-blocking product failures, because the bounded split or extended gate runs passed.
+
 ## Current Evidence Baseline
 
 The latest broad validation evidence recorded:

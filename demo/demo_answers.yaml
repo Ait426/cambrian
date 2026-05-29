@@ -1,0 +1,26 @@
+project_name: cambrian-login-demo
+project_type: python
+stack:
+  - python
+  - pytest
+
+test_command: "pytest -q"
+
+primary_use_cases:
+  - bug_fix
+  - regression_test
+  - review_candidate
+
+protected_paths:
+  - ".git"
+  - ".cambrian"
+  - ".venv"
+  - "venv"
+  - "__pycache__"
+
+mode: balanced
+max_variants: 2
+auto_adoption: false
+
+notes:
+  - "Demo project for Cambrian first-run walkthrough."

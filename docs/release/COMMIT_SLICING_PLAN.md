@@ -6,25 +6,47 @@ The current Cambrian worktree should not be committed as one large opaque change
 
 This plan defines the recommended commit order, validation gate, and review focus for turning the current worktree into reviewable commits.
 
-## Current Worktree Size
+## Current Handoff Snapshot
 
-- Total git status entries: 258
-- Tracked modified files: 21
-- Untracked files/directories: 237
-- Engine/runtime area entries: 106
-- Test area entries: 132
-- Docs area entries: 7
-- Script area entries: 3
-- Runtime evidence entry: `.cambrian/`
+Authoritative staging counts come from:
 
-Refresh these counts before actually committing.
+```bash
+python scripts/check_final_commit_staging_handoff.py --worktree --all-slices --json
+```
+
+Current snapshot:
+
+- File-level git status entries: 188
+- Active candidate paths: 188
+- Excluded by default: 0
+- Manual review paths: 0
+- Blockers: 0
+- Active slices: 5, 6, 7
+
+The count uses `git status --porcelain=v1 -z --untracked-files=all`, so untracked directories are expanded to file-level paths before slice digests are calculated. Generated pytest/tool caches are ignored at source by `.gitignore`, and regular `git status --short` is not the source of truth for commit slicing.
+
+## Receipt-Locked Slice Snapshot
+
+| Slice | Candidate paths | Candidate paths SHA-256 | Staging status |
+| --- | ---: | --- | --- |
+| Slice 1 — Packaging RC Runtime | 0 | `4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945` | Committed locally |
+| Slice 2 — AI Company Auto Runtime | 0 | `4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945` | Committed locally |
+| Slice 3 — Conversational Harness, Workforce, Skill System | 0 | `4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945` | Committed locally |
+| Slice 4 — Pack, Template, Benchmark Advanced Surfaces | 0 | `4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945` | Committed locally |
+| Slice 5 — Launch, Pilot, Release Docs | 173 | `1239b3a69d9169fa85cb5f2ed8480902adff70a090d99d074c156e0bd48cb78f` | Ready for manual slice staging |
+| Slice 6 — Web And Tools | 12 | `d786f469da7364a023f124cd4b09d269ade6be883dbdecb949c30ca513fc99b5` | Ready for manual slice staging |
+| Slice 7 — Runtime Evidence Archive | 3 | `aac9d033dd84aced11f5bf8cb2d40db2fa5b246dff57eb8b6d3e65db64e7f2bd` | Ready for manual slice staging |
+
+Before staging a slice, regenerate `dist/final-commit-staging-receipt.json`, `dist/final-commit-staging-runbook.md`, the per-slice pathspec files, and `dist/final-commit-test-gate-evidence/*.template.json`. Run `python scripts/check_final_commit_staging_handoff.py --verify-all-artifacts dist/final-commit-staging-receipt.json` and require `receipt_all_artifacts_current`; this single preflight covers the receipt, current worktree, pathspec files, runbook, and test gate evidence templates. Then run `python scripts/check_final_commit_staging_handoff.py --verify-prestage-from-receipt dist/final-commit-staging-receipt.json --slice <slice_id>` to confirm the selected slice is current and the index is empty. Stage only paths listed in that receipt for the selected slice, preferably through `git add --pathspec-from-file=dist/final-commit-staging-pathspecs/<slice_id>.pathspec`, then run the receipt-backed staged verifier and `python scripts/check_final_commit_staging_handoff.py --verify-commit-ready-from-receipt dist/final-commit-staging-receipt.json --slice <slice_id>` before committing. After the slice test evidence returns `test_gate_evidence_ready`, run `python scripts/check_final_commit_staging_handoff.py --verify-final-commit-from-receipt dist/final-commit-staging-receipt.json --slice <slice_id> --test-gate-evidence dist/final-commit-test-gate-evidence/<slice_id>.json` and require `slice_final_commit_gate_ready`; this final command also requires `receipt_all_artifacts_current`, empty `blocking_reasons`, empty `blocking_details`, empty `recovery_commands`, empty `recovery_command_plan`, `recovery_command_summary.total_count` equal to `0`, and `recovery_execution_policy.script_executes_recovery_commands` equal to `false`. If blocked, review `recovery_execution_policy`, `recovery_command_plan`, and `recovery_command_summary` first; returned `recovery_commands` are suggestions only and the script does not execute `git add`, `git commit`, or `git push`. `dist/final-commit-staging-runbook.md` mirrors this sequence for every active slice and includes the receipt-locked suggested commit message plus the slice-specific `test_gate_commands`; the commit-ready command also echoes those commands so the final terminal output names the required test gate before `git commit`.
 
 ## Commit Rules
 
 - Do not mix product runtime changes with launch copy in the same commit.
 - Do not mix `.cambrian/` local evidence with source code commits unless the commit is explicitly an evidence artifact commit.
 - Do not include `.env`, secrets, private user data, or private project data.
-- Run the slice-specific test gate before each commit.
+- Run the receipt-locked slice-specific `test_gate_commands` before each commit.
+- Verify the completed slice evidence JSON returns `test_gate_evidence_ready` before each commit; it must be saved at the receipt-designated `test_gate_evidence_file`, and every PASS command result must include a unique non-empty portable local `evidence_ref` under `dist/final-commit-test-gate-logs/` plus matching `evidence_sha256`; each referenced evidence file must contain the exact expected command string.
+- Verify the integrated final commit gate returns `slice_final_commit_gate_ready`, includes `receipt_all_artifacts_current`, has empty `blocking_reasons`, empty `blocking_details`, empty `recovery_commands`, empty `recovery_command_plan`, `recovery_command_summary.total_count` of `0`, and `recovery_execution_policy.script_executes_git_add` set to `false` before each commit.
 - Keep commit messages in the project format: `{feat|fix|refactor|docs|test}(scope): 한국어 설명`.
 
 ## Recommended Commit Slices
@@ -96,6 +118,8 @@ Include:
 - `engine/project_workforce_builder.py`
 - `engine/project_skill_builder.py`
 - `engine/project_agent_dispatch.py`
+- `HARNESS_ARTIFACT_SYSTEM.md`
+- harness/evolution product contracts
 - job start, dispatch, evolution, and harness tests
 
 Gate:
@@ -117,6 +141,7 @@ Include:
 - pack lifecycle, proof, release, registry, rollout, trust modules
 - template bootstrap, canary, challenge, qualification modules
 - benchmark/proof modules
+- agent platform schemas, validators, candidate promotion tools, and platform tests
 - related tests
 
 Gate:
@@ -141,6 +166,8 @@ Include:
 
 - `docs/launch/`
 - `docs/release/`
+- external alpha root launcher/support files
+- demo fixture files used by the external alpha install surface
 - launch, pilot, RC, split-run, handoff docs
 - docs tests
 

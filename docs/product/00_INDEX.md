@@ -1,5 +1,18 @@
 # Cambrian Product Documents
 
+## 165R Platform-first build track
+
+플랫폼-first 작업에서는 아래 문서를 먼저 읽는다.
+
+1. `../platform/00_AGENT_PLATFORM_FOUNDATION.md`
+
+이 track은 Cambrian Runtime을 초기 필수 조건으로 두지 않는다.
+초기 제품은 브라우저에서 AI 에이전트를 만들고, 패키지로 내려받아, 사용자의 PC에서 쓸 수 있게 하는 온라인 제작 플랫폼이다.
+Cambrian은 나중에 붙일 수 있는 고급 실행·검증·진화 adapter다.
+
+사용자가 온라인 AI 에이전트 제작 플랫폼을 말할 때는 marketplace proof, runtime status, Cambrian-only install 흐름을 먼저 만들지 않는다.
+먼저 플랫폼 아키텍처, 법률 철학, 위험 게이트, 다운로드 가능한 agent package 계약을 고정한다.
+
 ## 166R Current Product Identity
 
 Cambrian is an installable AI company runtime.
@@ -11,39 +24,41 @@ The current source of truth is:
 
 1. `14_PRODUCT_CONSTITUTION.md`
 2. `42_TEN_YEAR_ARCHITECTURE.md`
-3. `15_AI_COMPANY_BOOTSTRAP.md`
-4. `16_JOB_START_RUNTIME_CONTRACT.md`
-5. `17_CODEX_CLAUDE_REQUEST_PACKET.md`
-6. `18_AI_REPLY_INGEST_CONTRACT.md`
-7. `19_JOB_VALIDATE_TRUST_GATE.md`
-8. `20_JOB_COMPLETE_OUTCOME_CONTRACT.md`
-9. `21_EVOLUTION_REVIEW_SIGNAL_CONTRACT.md`
-10. `22_EVOLUTION_PROPOSAL_PREVIEW_CONTRACT.md`
-11. `23_EVOLUTION_APPLY_AUDIT_CONTRACT.md`
-12. `24_EVOLUTION_ROLLBACK_CONTRACT.md`
-13. `25_AUTO_TASK_DIRECTIVE_BRIDGE.md`
-14. `26_AUTO_STEP_RESULT_INTAKE.md`
-15. `27_AUTO_RESULT_REPORT_HANDOFF.md`
-16. `28_AUTO_BOARDROOM_REPORT_REVIEW.md`
-17. `29_AUTO_PLAN_FROM_HANDOFF.md`
-18. `30_AUTO_CYCLE_COMMAND.md`
-19. `31_CODEX_RESULT_CONTRACT_HARDENING.md`
-20. `32_AUTO_LOOP_DONE_GATE.md`
-21. `33_AUTO_NEXT_ITERATION_GATE.md`
-22. `34_ROLE_SPECIFIC_AUTO_DIRECTIVES.md`
-23. `35_ROLE_SPECIFIC_RESULT_COMPLIANCE.md`
-24. `36_AUTO_RESULT_QUALITY_SCORING.md`
-25. `37_QUALITY_AWARE_AUTO_PLAN_SELECTION.md`
-26. `38_RELEASE_GATE_EVIDENCE_PACKAGE.md`
-27. `39_RELEASE_GATE_DECISION_LOOP.md`
-28. `40_AUTO_ITERATION_ARCHIVE_FRESH_START.md`
-29. `41_EXPLICIT_NEXT_GOAL_CONTRACT.md`
-30. `13_AI_COMPANY_RUNTIME.md`
-31. `02_PRODUCT_DEFINITION.md`
-32. `04_SYSTEM_ARCHITECTURE.md`
-33. `11_CONVERSATIONAL_HARNESS_BUILDER.md`
-34. `12_HARNESS_ENGINEERING_SYSTEM.md`
-35. `44_CAMBRIAN_STUDIO.md`
+3. `46_TRUE_HARNESS_CONTRACT.md`
+4. `45_AI_COMPANY_OS_TASK_BACKLOG.md`
+5. `15_AI_COMPANY_BOOTSTRAP.md`
+6. `16_JOB_START_RUNTIME_CONTRACT.md`
+7. `17_CODEX_CLAUDE_REQUEST_PACKET.md`
+8. `18_AI_REPLY_INGEST_CONTRACT.md`
+9. `19_JOB_VALIDATE_TRUST_GATE.md`
+10. `20_JOB_COMPLETE_OUTCOME_CONTRACT.md`
+11. `21_EVOLUTION_REVIEW_SIGNAL_CONTRACT.md`
+12. `22_EVOLUTION_PROPOSAL_PREVIEW_CONTRACT.md`
+13. `23_EVOLUTION_APPLY_AUDIT_CONTRACT.md`
+14. `24_EVOLUTION_ROLLBACK_CONTRACT.md`
+15. `25_AUTO_TASK_DIRECTIVE_BRIDGE.md`
+16. `26_AUTO_STEP_RESULT_INTAKE.md`
+17. `27_AUTO_RESULT_REPORT_HANDOFF.md`
+18. `28_AUTO_BOARDROOM_REPORT_REVIEW.md`
+19. `29_AUTO_PLAN_FROM_HANDOFF.md`
+20. `30_AUTO_CYCLE_COMMAND.md`
+21. `31_CODEX_RESULT_CONTRACT_HARDENING.md`
+22. `32_AUTO_LOOP_DONE_GATE.md`
+23. `33_AUTO_NEXT_ITERATION_GATE.md`
+24. `34_ROLE_SPECIFIC_AUTO_DIRECTIVES.md`
+25. `35_ROLE_SPECIFIC_RESULT_COMPLIANCE.md`
+26. `36_AUTO_RESULT_QUALITY_SCORING.md`
+27. `37_QUALITY_AWARE_AUTO_PLAN_SELECTION.md`
+28. `38_RELEASE_GATE_EVIDENCE_PACKAGE.md`
+29. `39_RELEASE_GATE_DECISION_LOOP.md`
+30. `40_AUTO_ITERATION_ARCHIVE_FRESH_START.md`
+31. `41_EXPLICIT_NEXT_GOAL_CONTRACT.md`
+32. `13_AI_COMPANY_RUNTIME.md`
+33. `02_PRODUCT_DEFINITION.md`
+34. `04_SYSTEM_ARCHITECTURE.md`
+35. `11_CONVERSATIONAL_HARNESS_BUILDER.md`
+36. `12_HARNESS_ENGINEERING_SYSTEM.md`
+37. `44_CAMBRIAN_STUDIO.md`
 
 All older AI worker, pack, lane, and preset language is compatibility vocabulary unless a section explicitly marks it as current product identity.
 
@@ -53,6 +68,33 @@ Current Studio surface:
 
 Studio is the browser creation surface for local agent contracts. It does not replace the local Cambrian Runtime; it creates installable manifests that the runtime installs, validates, proves, and evolves.
 
+True harness source-of-truth:
+
+1. `46_TRUE_HARNESS_CONTRACT.md`
+2. `47_PERFECT_HARNESS_RESEARCH.md`
+3. `48_AI_EVOLUTION_RESEARCH.md`
+4. `49_META_HARNESS_CAMBRIAN_DIFFERENTIATION.md`
+5. `50_CAMBRIAN_EVOLUTION_RESEARCH_PROGRAM.md`
+6. `51_HARNESS_FIRST_REALITY_CHECK.md`
+7. `52_LOCAL_MCP_ADAPTER.md`
+
+Cambrian is not a harness description generator.
+It is an enforceable AI execution control plane: scope, authority, validation, proof, status truth, outcome learning, and evolution must be connected before a feature counts as core harness work.
+
+Research direction:
+
+`47_PERFECT_HARNESS_RESEARCH.md` collects outside work on Meta-Harness, agent evals, guardrails, trace-based evaluation, CI evals, and harness-native software engineering. Use it before adding new harness features.
+
+`48_AI_EVOLUTION_RESEARCH.md` collects outside work on self-improving agents, evolutionary program search, prompt optimization, skill/memory evolution, agent workflow evolution, RL for agents, eval benchmarks, and agent safety. Use it before adding Cambrian evolution, learning, promotion, or rollback features.
+
+`49_META_HARNESS_CAMBRIAN_DIFFERENTIATION.md` defines why Cambrian must not become a Meta-Harness clone. Use it before positioning, implementing, or naming any automated harness optimization feature.
+
+`50_CAMBRIAN_EVOLUTION_RESEARCH_PROGRAM.md` defines Cambrian's own research agenda for evolution beyond Meta-Harness: memory learning, skill-graph promotion, plan search, process rewards, causal replay, routing bandits, and human-governed learning.
+
+`51_HARNESS_FIRST_REALITY_CHECK.md` records the current restraint decision: before evolution, marketplace, or broad evidence systems, Cambrian must make One Good Harness work end-to-end.
+
+`52_LOCAL_MCP_ADAPTER.md` defines the thin local MCP adapter that lets Claude, Codex, Cursor, and other MCP clients operate Cambrian's allowlisted local control plane. It is a connection layer, not the product core.
+
 Long-term future branch:
 
 1. `43_AGENT_MARKETPLACE_FUTURE.md`
@@ -60,43 +102,50 @@ Long-term future branch:
 This future document does not replace the current product identity.
 It frames a possible proof-backed agent marketplace after Cambrian has strong runtime, proof, signed pack, evolution, and registry foundations.
 
+Next-step task source-of-truth:
+
+1. `45_AI_COMPANY_OS_TASK_BACKLOG.md`
+
+When the user says `다음단계`, read this backlog first and select the first `status: pending` OS task.
+
 먼저 읽을 문서:
 
 1. `14_PRODUCT_CONSTITUTION.md`
 2. `42_TEN_YEAR_ARCHITECTURE.md`
-3. `15_AI_COMPANY_BOOTSTRAP.md`
-4. `16_JOB_START_RUNTIME_CONTRACT.md`
-5. `17_CODEX_CLAUDE_REQUEST_PACKET.md`
-6. `18_AI_REPLY_INGEST_CONTRACT.md`
-7. `19_JOB_VALIDATE_TRUST_GATE.md`
-8. `20_JOB_COMPLETE_OUTCOME_CONTRACT.md`
-9. `21_EVOLUTION_REVIEW_SIGNAL_CONTRACT.md`
-10. `22_EVOLUTION_PROPOSAL_PREVIEW_CONTRACT.md`
-11. `23_EVOLUTION_APPLY_AUDIT_CONTRACT.md`
-12. `24_EVOLUTION_ROLLBACK_CONTRACT.md`
-13. `25_AUTO_TASK_DIRECTIVE_BRIDGE.md`
-14. `26_AUTO_STEP_RESULT_INTAKE.md`
-15. `27_AUTO_RESULT_REPORT_HANDOFF.md`
-16. `28_AUTO_BOARDROOM_REPORT_REVIEW.md`
-17. `29_AUTO_PLAN_FROM_HANDOFF.md`
-18. `30_AUTO_CYCLE_COMMAND.md`
-19. `31_CODEX_RESULT_CONTRACT_HARDENING.md`
-20. `32_AUTO_LOOP_DONE_GATE.md`
-21. `33_AUTO_NEXT_ITERATION_GATE.md`
-22. `34_ROLE_SPECIFIC_AUTO_DIRECTIVES.md`
-23. `35_ROLE_SPECIFIC_RESULT_COMPLIANCE.md`
-24. `36_AUTO_RESULT_QUALITY_SCORING.md`
-25. `37_QUALITY_AWARE_AUTO_PLAN_SELECTION.md`
-26. `38_RELEASE_GATE_EVIDENCE_PACKAGE.md`
-27. `39_RELEASE_GATE_DECISION_LOOP.md`
-28. `40_AUTO_ITERATION_ARCHIVE_FRESH_START.md`
-29. `41_EXPLICIT_NEXT_GOAL_CONTRACT.md`
-30. `13_AI_COMPANY_RUNTIME.md`
-31. `02_PRODUCT_DEFINITION.md`
-32. `04_SYSTEM_ARCHITECTURE.md`
-33. `11_CONVERSATIONAL_HARNESS_BUILDER.md`
-34. `12_HARNESS_ENGINEERING_SYSTEM.md`
-35. `44_CAMBRIAN_STUDIO.md`
+3. `45_AI_COMPANY_OS_TASK_BACKLOG.md`
+4. `15_AI_COMPANY_BOOTSTRAP.md`
+5. `16_JOB_START_RUNTIME_CONTRACT.md`
+6. `17_CODEX_CLAUDE_REQUEST_PACKET.md`
+7. `18_AI_REPLY_INGEST_CONTRACT.md`
+8. `19_JOB_VALIDATE_TRUST_GATE.md`
+9. `20_JOB_COMPLETE_OUTCOME_CONTRACT.md`
+10. `21_EVOLUTION_REVIEW_SIGNAL_CONTRACT.md`
+11. `22_EVOLUTION_PROPOSAL_PREVIEW_CONTRACT.md`
+12. `23_EVOLUTION_APPLY_AUDIT_CONTRACT.md`
+13. `24_EVOLUTION_ROLLBACK_CONTRACT.md`
+14. `25_AUTO_TASK_DIRECTIVE_BRIDGE.md`
+15. `26_AUTO_STEP_RESULT_INTAKE.md`
+16. `27_AUTO_RESULT_REPORT_HANDOFF.md`
+17. `28_AUTO_BOARDROOM_REPORT_REVIEW.md`
+18. `29_AUTO_PLAN_FROM_HANDOFF.md`
+19. `30_AUTO_CYCLE_COMMAND.md`
+20. `31_CODEX_RESULT_CONTRACT_HARDENING.md`
+21. `32_AUTO_LOOP_DONE_GATE.md`
+22. `33_AUTO_NEXT_ITERATION_GATE.md`
+23. `34_ROLE_SPECIFIC_AUTO_DIRECTIVES.md`
+24. `35_ROLE_SPECIFIC_RESULT_COMPLIANCE.md`
+25. `36_AUTO_RESULT_QUALITY_SCORING.md`
+26. `37_QUALITY_AWARE_AUTO_PLAN_SELECTION.md`
+27. `38_RELEASE_GATE_EVIDENCE_PACKAGE.md`
+28. `39_RELEASE_GATE_DECISION_LOOP.md`
+29. `40_AUTO_ITERATION_ARCHIVE_FRESH_START.md`
+30. `41_EXPLICIT_NEXT_GOAL_CONTRACT.md`
+31. `13_AI_COMPANY_RUNTIME.md`
+32. `02_PRODUCT_DEFINITION.md`
+33. `04_SYSTEM_ARCHITECTURE.md`
+34. `11_CONVERSATIONAL_HARNESS_BUILDER.md`
+35. `12_HARNESS_ENGINEERING_SYSTEM.md`
+36. `44_CAMBRIAN_STUDIO.md`
 
 ## 1. 문서 목적
 
@@ -211,34 +260,35 @@ Cambrian의 진화는 새로운 artifact를 많이 만드는 것이 아니다.
 14. `13_AI_COMPANY_RUNTIME.md`
 15. `14_PRODUCT_CONSTITUTION.md`
 16. `42_TEN_YEAR_ARCHITECTURE.md`
-17. `15_AI_COMPANY_BOOTSTRAP.md`
-18. `16_JOB_START_RUNTIME_CONTRACT.md`
-19. `17_CODEX_CLAUDE_REQUEST_PACKET.md`
-20. `18_AI_REPLY_INGEST_CONTRACT.md`
-21. `19_JOB_VALIDATE_TRUST_GATE.md`
-22. `20_JOB_COMPLETE_OUTCOME_CONTRACT.md`
-23. `21_EVOLUTION_REVIEW_SIGNAL_CONTRACT.md`
-24. `22_EVOLUTION_PROPOSAL_PREVIEW_CONTRACT.md`
-25. `23_EVOLUTION_APPLY_AUDIT_CONTRACT.md`
-26. `24_EVOLUTION_ROLLBACK_CONTRACT.md`
-27. `25_AUTO_TASK_DIRECTIVE_BRIDGE.md`
-28. `26_AUTO_STEP_RESULT_INTAKE.md`
-29. `27_AUTO_RESULT_REPORT_HANDOFF.md`
-30. `28_AUTO_BOARDROOM_REPORT_REVIEW.md`
-31. `29_AUTO_PLAN_FROM_HANDOFF.md`
-32. `30_AUTO_CYCLE_COMMAND.md`
-33. `31_CODEX_RESULT_CONTRACT_HARDENING.md`
-34. `32_AUTO_LOOP_DONE_GATE.md`
-35. `33_AUTO_NEXT_ITERATION_GATE.md`
-36. `34_ROLE_SPECIFIC_AUTO_DIRECTIVES.md`
-37. `35_ROLE_SPECIFIC_RESULT_COMPLIANCE.md`
-38. `36_AUTO_RESULT_QUALITY_SCORING.md`
-39. `37_QUALITY_AWARE_AUTO_PLAN_SELECTION.md`
-40. `38_RELEASE_GATE_EVIDENCE_PACKAGE.md`
-41. `39_RELEASE_GATE_DECISION_LOOP.md`
-42. `40_AUTO_ITERATION_ARCHIVE_FRESH_START.md`
-43. `41_EXPLICIT_NEXT_GOAL_CONTRACT.md`
-44. `43_AGENT_MARKETPLACE_FUTURE.md`
+17. `45_AI_COMPANY_OS_TASK_BACKLOG.md`
+18. `15_AI_COMPANY_BOOTSTRAP.md`
+19. `16_JOB_START_RUNTIME_CONTRACT.md`
+20. `17_CODEX_CLAUDE_REQUEST_PACKET.md`
+21. `18_AI_REPLY_INGEST_CONTRACT.md`
+22. `19_JOB_VALIDATE_TRUST_GATE.md`
+23. `20_JOB_COMPLETE_OUTCOME_CONTRACT.md`
+24. `21_EVOLUTION_REVIEW_SIGNAL_CONTRACT.md`
+25. `22_EVOLUTION_PROPOSAL_PREVIEW_CONTRACT.md`
+26. `23_EVOLUTION_APPLY_AUDIT_CONTRACT.md`
+27. `24_EVOLUTION_ROLLBACK_CONTRACT.md`
+28. `25_AUTO_TASK_DIRECTIVE_BRIDGE.md`
+29. `26_AUTO_STEP_RESULT_INTAKE.md`
+30. `27_AUTO_RESULT_REPORT_HANDOFF.md`
+31. `28_AUTO_BOARDROOM_REPORT_REVIEW.md`
+32. `29_AUTO_PLAN_FROM_HANDOFF.md`
+33. `30_AUTO_CYCLE_COMMAND.md`
+34. `31_CODEX_RESULT_CONTRACT_HARDENING.md`
+35. `32_AUTO_LOOP_DONE_GATE.md`
+36. `33_AUTO_NEXT_ITERATION_GATE.md`
+37. `34_ROLE_SPECIFIC_AUTO_DIRECTIVES.md`
+38. `35_ROLE_SPECIFIC_RESULT_COMPLIANCE.md`
+39. `36_AUTO_RESULT_QUALITY_SCORING.md`
+40. `37_QUALITY_AWARE_AUTO_PLAN_SELECTION.md`
+41. `38_RELEASE_GATE_EVIDENCE_PACKAGE.md`
+42. `39_RELEASE_GATE_DECISION_LOOP.md`
+43. `40_AUTO_ITERATION_ARCHIVE_FRESH_START.md`
+44. `41_EXPLICIT_NEXT_GOAL_CONTRACT.md`
+45. `43_AGENT_MARKETPLACE_FUTURE.md`
 
 권장 순서가 번호 순서와 완전히 같지는 않다.
 처음에는 철학과 아키텍처를 먼저 이해하고, 그다음 상태 모델과 세부 용어를 보면 된다.
@@ -540,6 +590,27 @@ Cambrian의 10년 아키텍처는 모델 경쟁이 아니라 신뢰 경쟁이다
 
 ---
 
+### `45_AI_COMPANY_OS_TASK_BACKLOG.md`
+
+Cambrian의 10년 방향을 실제 구현 순서와 `다음단계` 선택 규칙으로 고정한다.
+
+핵심 질문:
+
+* 사용자가 `다음단계`라고 하면 어떤 task부터 볼 것인가?
+* 24시간 프로젝트 완성 루프를 어떤 OS task로 쪼갤 것인가?
+* skill knowledge, worker performance, relearning, marketplace artifact는 어느 순서인가?
+* 새 아이디어가 들어왔을 때 AI Company OS 방향과 맞는지 어떻게 판정할 것인가?
+
+핵심 문장:
+
+```text
+Cambrian은 프로젝트 안에 검증 가능한 학습형 AI 회사를 설치하고,
+그 회사가 24시간 멈추지 않고 프로젝트를 끝까지 이끌어
+완성도 높은 제품을 만들게 하는 AI Company OS다.
+```
+
+---
+
 ## 6. 제품의 현재 공식 방향
 
 Cambrian의 현재 제품 방향은 아래와 같다.
@@ -593,9 +664,9 @@ validated_proposal_rate
 ### 10년 방향
 
 ```text
-Cambrian은 모든 프로젝트 안에 검증 가능한 AI 회사를 설치하고,
-그 회사가 안전하게 일하고, 증거로 배우고, 더 좋은 기본값으로 진화하게 만드는
-로컬 우선 AI company operating system이 된다.
+Cambrian은 프로젝트 안에 검증 가능한 학습형 AI 회사를 설치하고,
+그 회사가 24시간 멈추지 않고 프로젝트를 끝까지 이끌어
+완성도 높은 제품을 만들게 하는 AI Company OS다.
 ```
 
 ---

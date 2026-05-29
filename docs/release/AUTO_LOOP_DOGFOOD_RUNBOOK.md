@@ -50,7 +50,7 @@ The external result file must include the hardened contract:
 
 ```yaml
 status: success
-summary: "작업 결과 요약"
+summary: "Auto loop task result summary"
 changed_files: []
 tests:
   - command: "python -m pytest"
@@ -59,9 +59,15 @@ blockers: []
 next_action: "cambrian auto cycle --max-steps 1 --json"
 evidence:
   notes:
-    - "검증 메모"
+    - "Validation memo"
   artifacts: []
+role_outputs:
+  scope: "Bounded task scope"
+  acceptance_criteria: "What must be true for this task to count as done"
+  test_plan: "The validation command or check used for this result"
 ```
+
+If the generated task's `result_contract.required_role_output_keys` names different keys, the result file must include those exact keys under `role_outputs`.
 
 ## Ingest And Continue
 

@@ -2,39 +2,39 @@
 
 ## 1. Purpose
 
-설치형 Cambrian RC를 실제 Python + pytest 프로젝트에서 사용해 Auth Bug Core 작업 흐름이 실무에 쓸 수 있는지 확인한다.
+Verify that an installed Cambrian RC can run the Auth Bug Core workflow against a real Python + pytest project.
 
-이번 dogfood는 데모 프로젝트를 다시 돌리는 검증이 아니다. `examples/auth_bug_demo`는 smoke fixture이고, 실제 dogfood PASS로 사용할 수 없다.
+This dogfood is not another fixture smoke test. `examples/auth_bug_demo` is a fixture and must not be used as dogfood PASS evidence.
 
 ## 2. Preconditions
 
-- Task 159R-1 PASS
-- Task 159R-2 PASS
-- `python scripts/smoke_installed_wheel.py` PASS
-- fresh install에서 `auth-bug-core` pack list/show/install/activate/start PASS
+- Task 159R-1 PASS.
+- Task 159R-2 PASS.
+- `python scripts/smoke_installed_wheel.py` PASS.
+- A fresh install can list, show, install, activate, and start `auth-bug-core`.
 
-사전 smoke:
+Preflight smoke:
 
 ```bash
 python scripts/smoke_installed_wheel.py
 ```
 
-## 3. Target project requirements
+## 3. Target Project Requirements
 
-- Python 프로젝트
-- pytest 또는 equivalent test command 존재
-- auth/login 관련 버그 또는 실패 테스트 존재
-- 작업 전 git clean 상태 권장
-- 원본 프로젝트 직접 수정 금지, 복사본에서 실행 권장
-- examples/auth_bug_demo는 dogfood 대상이 아님
+- Real Python project.
+- pytest or an equivalent test command exists.
+- Auth/login bug, failing test, or realistic auth/login maintenance task exists.
+- A clean git tree is recommended before the run.
+- Do not directly edit the original project source during dogfood. Prefer a copy when source protection matters.
+- `examples/auth_bug_demo` is not a valid dogfood target.
 
-대상 지정:
+Target input:
 
 ```bash
 set CAMBRIAN_DOGFOOD_TARGET=C:\path\to\real-python-pytest-auth-project
 ```
 
-또는:
+Or:
 
 ```bash
 python scripts/dogfood_auth_bug_run.py --target C:\path\to\real-python-pytest-auth-project
@@ -42,7 +42,7 @@ python scripts/dogfood_auth_bug_run.py --target C:\path\to\real-python-pytest-au
 
 ## 4. Install Cambrian RC
 
-README와 `RC_INSTALL_GUIDE.md`의 local wheel 설치 흐름을 사용한다.
+Use the local wheel flow from README and `RC_INSTALL_GUIDE.md`.
 
 ```bash
 python -m pip install build
@@ -50,16 +50,16 @@ python -m build
 python -m pip install dist/*.whl
 ```
 
-## 5. Prepare target project
+## 5. Prepare Target Project
 
-권장:
+Recommended:
 
 ```bash
 git status --short
 python -m pytest -q
 ```
 
-dirty tree면 dogfood report에 기록한다. git repo가 아니어도 실행은 가능하지만 source protection evidence가 약해진다.
+If the tree is dirty, record it in the dogfood report. A non-git target may still be used, but source protection evidence is weaker.
 
 ## 6. Run Auth Bug Core
 
@@ -69,47 +69,47 @@ cambrian pack list
 cambrian pack show auth-bug-core
 cambrian install pack auth-bug-core
 cambrian pack activate auth-bug-core
-cambrian pack start "로그인 에러 수정해"
+cambrian pack start "Fix the login error"
 ```
 
-자동화:
+Automated run:
 
 ```bash
 python scripts/dogfood_auth_bug_run.py --target C:\path\to\target
 ```
 
-AI reply가 없으면 결과는 `WAITING_FOR_AI_REPLY`다. 이 상태는 실패가 아니다.
+If no AI reply is available, the correct result is `PARTIAL: WAITING_FOR_AI_REPLY`; that is not a failure by itself.
 
-## 7. Capture AI reply
+## 7. Capture AI Reply
 
-이번 RC는 AI provider API를 호출하지 않는다.
+This RC dogfood does not call an AI provider API automatically.
 
-허용 흐름:
+Allowed flow:
 
-1. `cambrian pack start "로그인 에러 수정해" --json > .cambrian/dogfood/job_start.json`
-2. 사용자가 packet을 기존 AI 도구에 붙여넣음
-3. AI 응답을 YAML 파일로 저장
-4. `cambrian pack job-ingest`로 다시 넣음
+1. `cambrian pack start "Fix the login error" --json > .cambrian/dogfood/job_start.json`
+2. Paste the generated packet into the user's existing AI coding tool.
+3. Save the AI response as a YAML reply file.
+4. Feed the reply back through `cambrian pack job-ingest`.
 
-## 8. Ingest AI reply
+## 8. Ingest AI Reply
 
 ```bash
 cambrian pack job-ingest latest ./ai_reply_patch_candidate.yaml --json
 ```
 
-스크립트 실행:
+Scripted run:
 
 ```bash
 python scripts/dogfood_auth_bug_run.py --target C:\path\to\target --ai-reply C:\path\to\ai_reply_patch_candidate.yaml
 ```
 
-## 9. Validate job
+## 9. Validate Job
 
 ```bash
 cambrian pack job-validate latest --json
 ```
 
-validation이 실패하면 아래 중 하나로 분류한다.
+If validation fails, classify it as one of:
 
 - AI_REPLY_FORMAT_FAILURE
 - JOB_INGEST_FAILURE
@@ -117,19 +117,19 @@ validation이 실패하면 아래 중 하나로 분류한다.
 - VALIDATION_NOT_TRUSTWORTHY
 - OUTPUT_NOT_ACTIONABLE
 
-## 10. Evaluate result
+## 10. Evaluate Result
 
-사람이 직접 평가한다.
+A human operator evaluates:
 
-- 다음 명령이 명확했는가?
-- 출력이 actionable 했는가?
-- 결과가 useful patch/test 방향을 제시했는가?
-- validate 결과를 믿을 수 있는가?
-- 헷갈린 지점은 무엇인가?
+- Was the next command clear?
+- Was the output actionable?
+- Did the result identify a useful patch or test direction?
+- Was validation trustworthy?
+- What was confusing?
 
-## 11. Failure handling
+## 11. Failure Handling
 
-실패 분류:
+Failure classes:
 
 - INSTALL_FAILURE
 - DOCTOR_FAILURE
@@ -144,23 +144,26 @@ validation이 실패하면 아래 중 하나로 분류한다.
 - VALIDATION_NOT_TRUSTWORTHY
 - USER_FLOW_CONFUSING
 
-P0은 install/activate/start/ingest/validate가 실제 target에서 반복 실패하는 경우다. P1은 흐름은 되지만 사용자가 다음 행동을 이해하지 못하는 경우다. P2는 문구/문서/fixture 개선이다.
+Priority guidance:
 
-## 12. What counts as PASS
+- P0: install, activate, start, ingest, or validate repeatedly fails on a real target.
+- P1: the flow runs, but the user cannot tell what to do next.
+- P2: wording, docs, or fixture clarity issues.
 
-- 실제 Python + pytest auth/login 프로젝트를 target으로 사용
-- `doctor`, `pack list`, `pack show`, `install`, `activate`, `pack start` 통과
-- job id 추출
-- AI reply가 있으면 `job-ingest`와 `job-validate`까지 통과
-- 원본 프로젝트 source file 자동 수정 없음
-- `DOGFOOD_REPORT.md` 작성
+## 12. What Counts As PASS
 
-## 13. What counts as FAIL
+- A real Python + pytest auth/login project is used as the target.
+- `doctor`, `pack list`, `pack show`, `install`, `activate`, and `pack start` pass.
+- A job id is extracted.
+- If an AI reply exists, `job-ingest` and `job-validate` pass.
+- No target source file is patched automatically.
+- `DOGFOOD_REPORT.md` is written.
 
-- target 없이 demo fixture로 PASS 처리
-- `examples/auth_bug_demo`를 dogfood target으로 사용
-- install/activate/start 중 하나 실패
-- job id 추출 실패
-- AI reply가 있는데 ingest/validate 실패 원인을 설명하지 못함
-- source code 자동 apply 발생
-- provider API key나 외부 네트워크가 필수인 상태
+## 13. What Counts As FAIL
+
+- Treating a demo fixture run as dogfood PASS.
+- Using `examples/auth_bug_demo` as the dogfood target.
+- Install, activate, start, or job id extraction fails.
+- An AI reply exists but ingest or validate fails without a clear recorded cause.
+- Source code is patched automatically.
+- A provider API key or network call becomes required.

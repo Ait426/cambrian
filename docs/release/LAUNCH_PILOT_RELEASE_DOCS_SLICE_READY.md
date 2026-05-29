@@ -43,13 +43,13 @@ docs(launch): launch pilot release docs
 ### Launch Pilot Release Docs Test Gate
 
 ```bash
-python -m pytest -q tests/test_public_demo_kit.py tests/test_launch_assets.py tests/test_pilot_outreach_kit.py tests/test_pilot_learning_board.py tests/test_launch_go_no_go.py tests/test_product_docs.py tests/test_split_run_regression_gate.py tests/test_worktree_release_handoff.py tests/test_commit_slicing_plan.py tests/test_packaging_slice_ready.py tests/test_auto_runtime_slice_ready.py tests/test_harness_workforce_skill_slice_ready.py tests/test_pack_template_benchmark_slice_ready.py
+python -m pytest -q tests/test_launch_pilot_release_docs_slice_ready.py tests/test_public_demo_kit.py tests/test_launch_assets.py tests/test_pilot_outreach_kit.py tests/test_pilot_learning_board.py tests/test_launch_go_no_go.py tests/test_product_docs.py tests/test_split_run_regression_gate.py tests/test_worktree_release_handoff.py tests/test_commit_slicing_plan.py tests/test_packaging_slice_ready.py tests/test_auto_runtime_slice_ready.py tests/test_harness_workforce_skill_slice_ready.py tests/test_pack_template_benchmark_slice_ready.py
 ```
 
 Result:
 
 ```text
-90 passed in 1.96s
+94 passed in 0.78s
 ```
 
 ## Review Notes

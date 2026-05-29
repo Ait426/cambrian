@@ -11,17 +11,37 @@ The goal is not to add product behavior. The goal is to stage and review the cur
 Refresh these numbers before committing.
 
 ```text
-Total git status entries: 266
-Tracked modified files: 21
-Untracked files/directories: 245
-Engine/runtime area entries: 106
-Test area entries: 140
-Docs area entries: 7
-Script area entries: 3
-Tools area entries: 1
-Web area entries: 1
-Runtime evidence entry: .cambrian/
+Total git status entries: 188
+Tracked modified files: 26
+Untracked files/directories: 162
+Slice candidate entries: 188
+Excluded-by-default entries: 0
+Manual review entries: 0
+Final staging receipt body sha256: b7917cffb0416a2e2d84a7c3fc68e82ca7b53f80f6539fe7a53acd907706f2e2
+Engine/runtime slice entries: 0
+Harness/workforce/skill slice entries: 0
+Launch/pilot/release docs slice entries: 173
+Pack/template/benchmark slice entries: 0
+Web area entries: 12
+Runtime evidence archive entries: 3
+Generated test/tool caches are ignored before staging. Runtime evidence/noisy generated entries still remain excluded by default if they appear in git status.
 ```
+
+## Latest Slice Prestage Audit
+
+Read-only slice prestage verification is complete for all seven active slices. No `git add`, commit, tag, push, deploy, publish, send, secret read, or private recipient entry occurred.
+
+| Slice | Candidate Paths | Candidate Paths SHA256 | Worktree Status | Prestage Status |
+|---|---:|---|---|---|
+| `slice_1_packaging_rc_runtime` | 0 | `4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945` | `committed_locally` | `complete` |
+| `slice_2_ai_company_auto_runtime` | 0 | `4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945` | `committed_locally` | `complete` |
+| `slice_3_harness_workforce_skill` | 0 | `4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945` | `committed_locally` | `complete` |
+| `slice_4_pack_template_benchmark` | 0 | `4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945` | `committed_locally` | `complete` |
+| `slice_5_launch_pilot_release_docs` | 173 | `1239b3a69d9169fa85cb5f2ed8480902adff70a090d99d074c156e0bd48cb78f` | `slice_worktree_ready` | `slice_prestage_ready` |
+| `slice_6_web_and_tools` | 12 | `d786f469da7364a023f124cd4b09d269ade6be883dbdecb949c30ca513fc99b5` | `slice_worktree_ready` | `slice_prestage_ready` |
+| `slice_7_runtime_evidence_archive` | 3 | `aac9d033dd84aced11f5bf8cb2d40db2fa5b246dff57eb8b6d3e65db64e7f2bd` | `slice_worktree_ready` | `slice_prestage_ready` |
+
+For each slice, `staged existing` was `0` during the receipt-backed prestage audit. This means the current index is still clean and the next operator action remains manual slice-by-slice staging.
 
 ## Completed Slice Gates
 
@@ -38,9 +58,23 @@ Runtime evidence entry: .cambrian/
 Latest active auto release gate:
 
 ```text
-release-gate-20260509-180519
+release-gate-20260513-142945
 Verdict: GO
-Goal: Validate runtime evidence archive commit slice readiness
+Goal: AI 응답 evidence compliance 검증을 job ingest와 validate에 연결
+```
+
+Latest release closure sweep:
+
+```text
+python scripts/prepare_cambrian_install_kit_release.py --verify-release-bundle dist/cambrian-install-kit-release-bundle.zip -> PASS
+python scripts/check_cambrian_install_kit_send_ready.py --verify-send-ready dist/cambrian-install-kit-send-ready.json -> GO
+python scripts/prepare_cambrian_install_kit_release.py --verify-release-receipt dist/cambrian-install-kit-release-receipt.json -> PASS
+python scripts/smoke_cambrian_install_kit_release_bundle.py --verify-receipt dist/cambrian-install-kit-release-bundle-smoke-receipt.json -> PASS
+python -m pytest --collect-only -q tests -> 2705 tests collected
+python -m pytest -q tests/test_cambrian_install_kit.py tests/test_ai_company_os_task_backlog.py tests/test_final_commit_staging_handoff.py tests/test_installed_wheel_pack_rc.py -> 138 passed
+python scripts/smoke_installed_wheel.py -> PASS
+python -m engine.cli auto status --json -> release_gate_go, GO
+all seven receipt-backed slice prestage checks -> PASS, staged existing 0
 ```
 
 ## Stage Order
@@ -121,6 +155,7 @@ Stage only:
 
 - harness profile/interview/plan/engineering/custom harness modules
 - workforce, skill, dispatch, evidence, evolution modules
+- `HARNESS_ARTIFACT_SYSTEM.md` and harness/evolution product contracts
 - harness/workforce/skill tests
 - TypeScript/Jest harness fixture and compatibility tests
 - `docs/release/HARNESS_WORKFORCE_SKILL_SLICE_READY.md`
@@ -144,6 +179,7 @@ Stage only:
 - advanced pack lifecycle/proof/release/registry/rollout/trust modules
 - template bootstrap/canary/challenge/qualification/library modules
 - benchmark/proof modules
+- agent platform schemas, validators, promotion/proof tools, and platform tests
 - pack/template/benchmark tests
 - `docs/release/PACK_TEMPLATE_BENCHMARK_SLICE_READY.md`
 
@@ -170,13 +206,14 @@ Stage only:
 
 - `docs/launch/`
 - release and product docs tied to launch, pilot, RC, split-run, and worktree handoff
+- external alpha root launcher/support files and demo fixture files
 - launch/pilot/release docs tests
 - `docs/release/LAUNCH_PILOT_RELEASE_DOCS_SLICE_READY.md`
 
 Gate:
 
 ```bash
-python -m pytest -q tests/test_public_demo_kit.py tests/test_launch_assets.py tests/test_pilot_outreach_kit.py tests/test_pilot_learning_board.py tests/test_launch_go_no_go.py tests/test_product_docs.py tests/test_split_run_regression_gate.py tests/test_worktree_release_handoff.py tests/test_commit_slicing_plan.py tests/test_launch_pilot_release_docs_slice_ready.py
+python -m pytest -q tests/test_public_demo_kit.py tests/test_launch_assets.py tests/test_pilot_outreach_kit.py tests/test_launch_go_no_go.py tests/test_product_docs.py tests/test_split_run_regression_gate.py tests/test_worktree_release_handoff.py tests/test_commit_slicing_plan.py tests/test_dogfood_runbook.py tests/test_launch_pilot_release_docs_slice_ready.py
 ```
 
 ## Slice 6 Stage Scope
@@ -239,12 +276,88 @@ python -m pytest -q tests/test_runtime_evidence_archive_slice_ready.py tests/tes
 
 ## Final Pre-Commit Commands
 
+Run before any manual staging attempt:
+
+```bash
+python scripts/check_final_commit_staging_handoff.py --json
+```
+
+Expected result:
+
+```text
+verdict: GO
+status: ready_for_manual_slice_staging
+safe_to_stage_all: false
+```
+
+`safe_to_stage_all: false` is intentional. This handoff authorizes manual slice-by-slice staging only.
+
+Run before staging a specific slice to list its current worktree candidates:
+
+```bash
+python scripts/check_final_commit_staging_handoff.py --worktree --all-slices --json
+python scripts/check_final_commit_staging_handoff.py --write-receipt-dir dist
+python scripts/check_final_commit_staging_handoff.py --verify-all-artifacts dist/final-commit-staging-receipt.json
+python scripts/check_final_commit_staging_handoff.py --verify-receipt dist/final-commit-staging-receipt.json
+python scripts/check_final_commit_staging_handoff.py --verify-receipt dist/final-commit-staging-receipt.json --verify-pathspec-files
+python scripts/check_final_commit_staging_handoff.py --verify-receipt dist/final-commit-staging-receipt.json --verify-runbook
+python scripts/check_final_commit_staging_handoff.py --verify-receipt dist/final-commit-staging-receipt.json --against-current-worktree
+python scripts/check_final_commit_staging_handoff.py --verify-receipt dist/final-commit-staging-receipt.json --against-current-worktree --verify-pathspec-files --verify-runbook
+python scripts/check_final_commit_staging_handoff.py --worktree --slice <slice_id> --json
+```
+
+Use `slice_plans.<slice_id>.candidate_paths` or the single-slice `candidate_paths` as the proposed stage list. Both commands are read-only; they do not run `git add`.
+Record the matching `candidate_paths_sha256` before staging.
+The receipt command writes `dist/final-commit-staging-receipt.json`, `dist/final-commit-staging-receipt.md`, `dist/final-commit-staging-runbook.md`, and `dist/final-commit-test-gate-evidence/*.template.json`; keep those out of source commits unless an explicit release artifact scope is chosen.
+The one-command preflight must return `receipt_all_artifacts_current`. The receipt verifier checks `receipt_body_sha256`, `candidate_paths_sha256`, `test_gate_commands_sha256`, policy flags, slice verify commands, and slice test gate commands before the receipt is used for staging. The pathspec verifier must return `receipt_pathspec_files_current`, the runbook verifier must return `receipt_runbook_current`, the evidence template verifier must return `receipt_test_gate_evidence_templates_current`, and the current-worktree verifier must return `receipt_current`; otherwise regenerate the receipt before staging.
+Receipt generation uses `git status --porcelain=v1 -z --untracked-files=all`, so untracked directories are expanded into file-level paths before path digests are calculated.
+Receipt files keep every slice `candidate_paths` entry in full because those paths are part of the commit digest lock. `excluded_by_default` is intentionally compacted into `excluded_by_default_count`, `excluded_by_default_summary`, `excluded_by_default_truncated`, and a bounded sample so large `.cambrian/` runtime trees do not create unreadable review artifacts.
+Receipt generation also writes one line-delimited pathspec file per active slice under `dist/final-commit-staging-pathspecs/`, a pending test gate evidence template under `dist/final-commit-test-gate-evidence/`, and a command-only runbook at `dist/final-commit-staging-runbook.md`. Prefer the runbook sequence and `git add --pathspec-from-file=dist/final-commit-staging-pathspecs/<slice_id>.pathspec` over copying long path lists by hand, then verify the staged diff with the receipt-backed command. The runbook includes the selected slice's receipt-locked `test_gate_commands`; run those after staged verification and before `git commit`.
+
 Run before each commit:
 
 ```bash
+python scripts/check_final_commit_staging_handoff.py --verify-prestage-from-receipt dist/final-commit-staging-receipt.json --slice <slice_id>
+git add --pathspec-from-file=dist/final-commit-staging-pathspecs/<slice_id>.pathspec
+python scripts/check_final_commit_staging_handoff.py --staged --slice <slice_id>
+python scripts/check_final_commit_staging_handoff.py --staged --slice <slice_id> --expect-paths-sha256 <candidate_paths_sha256>
+python scripts/check_final_commit_staging_handoff.py --verify-staged-from-receipt dist/final-commit-staging-receipt.json --slice <slice_id>
+python scripts/check_final_commit_staging_handoff.py --verify-commit-ready-from-receipt dist/final-commit-staging-receipt.json --slice <slice_id>
 git diff --cached --stat
 git diff --cached --name-only
 ```
+
+Then run the selected slice's `test_gate_commands` from `dist/final-commit-staging-receipt.json` or `dist/final-commit-staging-runbook.md`. The gate must pass before `git commit`.
+Record the passing command results in the receipt-designated file `dist/final-commit-test-gate-evidence/<slice_id>.json`, including a unique non-empty portable local `evidence_ref` under `dist/final-commit-test-gate-logs/` and matching `evidence_sha256` for every command result. The `evidence_ref` should point to the terminal log, CI output saved as a local file, or captured verification note used to prove that command ran, and that local evidence file must contain the exact expected command string. Then verify it:
+
+```bash
+python scripts/check_final_commit_staging_handoff.py --verify-test-gate-evidence-from-receipt dist/final-commit-staging-receipt.json --slice <slice_id> --test-gate-evidence dist/final-commit-test-gate-evidence/<slice_id>.json
+```
+
+This verifier must return `test_gate_evidence_ready` before `git commit`; a PASS entry without `evidence_ref`, without `evidence_sha256`, outside `dist/final-commit-test-gate-logs/`, with a reused `evidence_ref`, with a local evidence file that does not contain the expected command, with a missing local evidence file, with a mismatched hash, or saved under a path other than the receipt-designated `test_gate_evidence_file` is blocked.
+
+Run the integrated final commit gate after the staged slice verifier and test gate evidence verifier both pass:
+
+```bash
+python scripts/check_final_commit_staging_handoff.py --verify-final-commit-from-receipt dist/final-commit-staging-receipt.json --slice <slice_id> --test-gate-evidence dist/final-commit-test-gate-evidence/<slice_id>.json
+```
+
+This command must return `slice_final_commit_gate_ready` before `git commit`; it reruns the full receipt artifact check and blocks when the receipt, pathspec files, runbook, evidence templates, staged slice digest, or test gate evidence are no longer aligned.
+When it blocks, inspect `blocking_reasons` first; it names the stale artifact, staged slice, or test evidence condition that must be fixed before rerunning the final gate. Use `blocking_details` for the exact failed check names under `receipt_artifacts`, `commit_ready`, `test_gate_evidence`, or `integrated`, and treat `recovery_commands` as suggestions only. The script never executes those recovery commands, never runs `git add`, never runs `git commit`, and never runs `git push`; this is recorded under `recovery_execution_policy` with `script_executes_recovery_commands`, `script_executes_git_add`, `script_executes_git_commit`, and `script_executes_git_push` all set to `false`. Check `recovery_command_plan` before copying commands; it labels `git add` as `mutates_git_index`, and `index_mutation_requires_manual_user_confirmation` must remain `true`. Use `recovery_command_summary` to confirm whether any recovery step mutates the git index, writes `dist/`, or runs tests.
+
+Use one of these slice ids:
+
+```text
+slice_1_packaging_rc_runtime
+slice_2_ai_company_auto_runtime
+slice_3_harness_workforce_skill
+slice_4_pack_template_benchmark
+slice_5_launch_pilot_release_docs
+slice_6_web_and_tools
+slice_7_runtime_evidence_archive
+```
+
+The prestage audit must return `slice_prestage_ready` before running `git add`; it blocks if the current index already contains staged paths, if the receipt is stale, or if the selected slice pathspec file no longer matches the receipt. The staged slice audit must return `slice_stage_ready` before committing. The digest-locked command must also pass so the staged path set matches the planned `candidate_paths` exactly. Prefer the receipt-backed staged verifier because it reads the expected digest from the verified receipt. The final commit-ready audit must return `slice_commit_ready` and prints the receipt-locked suggested commit message plus the selected slice's `test_gate_commands`. The final integrated gate must return `slice_final_commit_gate_ready` with `receipt_all_artifacts_current`, empty `blocking_reasons`, empty `blocking_details`, empty `recovery_commands`, empty `recovery_command_plan`, `recovery_command_summary.total_count` equal to `0`, and `recovery_execution_policy.script_executes_recovery_commands` set to `false`. If any command returns `slice_stage_blocked`, `receipt_staged_slice_blocked`, `slice_commit_blocked`, `test_gate_evidence_blocked`, `slice_final_commit_gate_blocked`, or a slice-specific test gate failure, unstage the wrong-slice, excluded, manual-review, sensitive, missing, or extra paths and rerun it.
 
 Run before the final tag or RC packaging step:
 

@@ -6,7 +6,7 @@
 
 ## Target Project
 
-- Path: C:\Users\user\Desktop\_프로젝트\ONMI-STAY
+- Path: `<operator-local-target-redacted>`
 - Language: Python
 - Test command: pytest or project equivalent
 - Git repo: False
@@ -27,19 +27,19 @@ not a git repo
 ## Commands
 
 ```bash
-C:\Users\user\AppData\Local\Programs\Python\Python314\Scripts\cambrian.exe doctor
-C:\Users\user\AppData\Local\Programs\Python\Python314\Scripts\cambrian.exe pack list
-C:\Users\user\AppData\Local\Programs\Python\Python314\Scripts\cambrian.exe pack show auth-bug-core
-C:\Users\user\AppData\Local\Programs\Python\Python314\Scripts\cambrian.exe install pack auth-bug-core
-C:\Users\user\AppData\Local\Programs\Python\Python314\Scripts\cambrian.exe pack activate auth-bug-core
-C:\Users\user\AppData\Local\Programs\Python\Python314\Scripts\cambrian.exe pack start 로그인 에러 수정해 --json
-C:\Users\user\AppData\Local\Programs\Python\Python314\Scripts\cambrian.exe pack job-ingest job-auth-bug-core-20260507_105653 C:\Users\user\Desktop\cambrain\.cambrian\dogfood\onmi_stay_ai_reply_patch_candidate_v3.yaml --json
-C:\Users\user\AppData\Local\Programs\Python\Python314\Scripts\cambrian.exe pack job-validate job-auth-bug-core-20260507_105653 --json
+cambrian.exe doctor
+cambrian.exe pack list
+cambrian.exe pack show auth-bug-core
+cambrian.exe install pack auth-bug-core
+cambrian.exe pack activate auth-bug-core
+cambrian.exe pack start "Fix the login error" --json
+cambrian.exe pack job-ingest job-auth-bug-core-20260507_105653 <operator-local-ai-reply-yaml> --json
+cambrian.exe pack job-validate job-auth-bug-core-20260507_105653 --json
 ```
 
 ## AI Reply
 
-- Reply file: C:\Users\user\Desktop\cambrain\.cambrian\dogfood\onmi_stay_ai_reply_patch_candidate_v3.yaml
+- Reply file: `<operator-local-ai-reply-yaml>`
 - Provider API call: none
 
 ## Results
@@ -47,17 +47,13 @@ C:\Users\user\AppData\Local\Programs\Python\Python314\Scripts\cambrian.exe pack 
 | Step | Result | Duration | Notes |
 | --- | ---: | ---: | --- |
 | cambrian doctor | PASS | 0.369s | ok |
-| pack list | PASS | 0.34s | ok |
+| pack list | PASS | 0.340s | ok |
 | pack show auth-bug-core | PASS | 0.621s | ok |
 | install pack auth-bug-core | PASS | 0.439s | ok |
 | activate auth-bug-core | PASS | 0.489s | ok |
 | pack start | PASS | 0.533s | ok |
 | job-ingest | PASS | 0.713s | ok |
-| job-validate | FAIL | 1.798s | {
-  "schema_version": "1.0.0",
-  "generated_at": "2026-05-07T10:56:56.339510+00:00",
-  "job_id": "job-auth-bug-core-20260507_105653",
-  "job_ref": ".cambrian/pa |
+| job-validate | FAIL | 1.798s | JOB_VALIDATE_FAILURE |
 
 ## Human Evaluation
 
@@ -70,7 +66,11 @@ C:\Users\user\AppData\Local\Programs\Python\Python314\Scripts\cambrian.exe pack 
 
 ## Blockers
 
-- JOB_VALIDATE_FAILURE: job-validate failed
+- JOB_VALIDATE_FAILURE: `job-validate` failed after a successful start and ingest.
+
+## Usability Blocker Classification
+
+- P0: dogfood cannot be counted as end-to-end PASS until the validation failure is fixed or the AI reply contract mismatch is explained by a reproducible user error.
 
 ## Failure Classes
 
@@ -83,7 +83,7 @@ INSTALL_FAILURE, DOCTOR_FAILURE, PACK_CATALOG_FAILURE, PACK_INSTALL_FAILURE, PAC
 - Automatic patch apply: no
 - Provider API call: no
 - Allowed target metadata: `.cambrian/`
-- Cambrian repo report file: C:\Users\user\Desktop\cambrain\cambrian\docs\release\DOGFOOD_REPORT.md
+- Cambrian repo report file: docs/release/DOGFOOD_REPORT.md
 
 ## Verdict
 

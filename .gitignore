@@ -13,6 +13,7 @@ skill_pool/*.db
 # Environment
 .env
 .env.*
+.cambrian/
 
 # Claude Code
 .claude/
@@ -20,6 +21,19 @@ skill_pool/*.db
 # Logs
 *.log
 .launch_runs/
+
+# Generated test/tool caches
+.pytest_cache/
+.pytest_tmp/
+.pytest-basetemp*/
+.mypy_cache/
+.ruff_cache/
+
+# Local operator/session handoff
+docs/release/NEXT_SESSION_HANDOFF.md
+
+# External alpha support outputs
+external_alpha_diagnostics*.json
 
 # Data
 data/

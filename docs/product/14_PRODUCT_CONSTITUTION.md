@@ -12,14 +12,48 @@ Cambrian은 인간의 외주를 받아 제품을 만드는 AI 회사다.
 
 1. Cambrian installs an AI company inside each project.
 2. The installed AI company contains a harness, workforce, agents, skills, authority rules, evidence, validation, boardroom decisions, and evolution history.
-3. Claude, Codex, Cursor, GPT, and local models are execution engines. They are not the product identity.
-4. Presets are optional seeds. They are not the default installation unit.
-5. `auth-bug-core` is a seed preset for a narrow Python + pytest auth/login lane. It is not Cambrian's product center.
-6. `typescript-jest-auth-core` is a seed preset for TypeScript + Jest auth/API projects. It is not Cambrian's product center.
-7. The default install flow is custom AI company creation, not direct pack installation.
-8. Installation does not dispatch agents automatically.
-9. Work starts only when the user creates a job.
-10. Source changes, git operations, deployment, secret access, payment, and external network use require explicit authority and safety gates.
+3. A harness is valid only when it controls AI behavior through scope, routing, gates, verification, proof, and learning. Static descriptions do not count.
+4. Claude, Codex, Cursor, GPT, and local models are execution engines. They are not the product identity.
+5. Presets are optional seeds. They are not the default installation unit.
+6. `auth-bug-core` is a seed preset for a narrow Python + pytest auth/login lane. It is not Cambrian's product center.
+7. `typescript-jest-auth-core` is a seed preset for TypeScript + Jest auth/API projects. It is not Cambrian's product center.
+8. The default install flow is custom AI company creation, not direct pack installation.
+9. Installation does not dispatch agents automatically.
+10. Work starts only when the user creates a job.
+11. Source changes, git operations, deployment, secret access, payment, and external network use require explicit authority and safety gates.
+12. MCP is an AI-tool connection surface, not the product core. The local MCP adapter may expose only allowlisted Cambrian control-plane tools.
+13. A 24-hour company loop is supervised by default. Cambrian may select, route, validate, and remember work; Codex, Claude, Cursor, GPT, or a local model performs the thinking/execution step with evidence.
+
+## Platform-First Boundary
+
+The platform-first agent builder is an adjacent entry track, not a replacement for the local Cambrian Runtime.
+
+Platform-first may:
+
+- create `agent_contract_v0_1`
+- create `agent_pack_bundle_v0_1`
+- create `preflight_report.json`
+- let the user download `.agent-pack.json`
+- keep Cambrian adapter compatibility planned
+
+Platform-first must not:
+
+- require Cambrian Runtime in the Defensible Alpha
+- call provider APIs automatically
+- modify local source files
+- claim proof, performance, or success rate without runtime evidence
+- mark marketplace sale readiness as true before evidence exists
+- collect passwords, tokens, or personal API keys by default
+
+Platform-first is not a generic agent shop clone.
+Its defensibility comes from agent contracts, preflight validation, private download history, promotion audit lineage, and later Cambrian proof/evolution.
+
+Current boundary sentence:
+
+```text
+Platform-first creates portable AI agent contracts.
+Local Cambrian Runtime turns those contracts into execution, validation, evidence, proof, and evolution.
+```
 
 ## Canonical Flow
 
@@ -30,6 +64,7 @@ project scan
 -> workforce generation
 -> skill generation
 -> authority profile
+-> optional local MCP attachment
 -> auto mode
 -> boardroom decision
 -> execution plan
@@ -50,6 +85,7 @@ cambrian harness engineer dry-run "로그인 문제 봐줘"
 cambrian workforce generate
 cambrian skill generate
 cambrian harness install --confirm
+cambrian-mcp
 cambrian authority grant --mode full-authority
 cambrian auto init --goal "Build this product"
 cambrian auto boardroom
@@ -90,6 +126,8 @@ Current interpretation:
 - no secret auto-use
 - no payment or marketplace promise
 - no remote registry dependency for the core local runtime
+- no arbitrary shell execution through MCP
+- no unsupervised 24-hour source mutation loop
 
 ## Product Test
 

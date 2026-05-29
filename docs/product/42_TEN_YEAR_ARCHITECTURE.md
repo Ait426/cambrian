@@ -1,5 +1,60 @@
 # Cambrian 10-Year Architecture
 
+## 0. 2026-05-10 고정 보정: Platform-first와 Runtime 분리
+
+현재 방향은 옳다.
+다만 앞으로 10년을 보려면 두 제품 축을 섞지 않아야 한다.
+
+```text
+Platform-first track:
+  브라우저에서 AI 에이전트 계약을 만들고 다운로드 가능한 agent pack으로 내보낸다.
+
+Local Cambrian Runtime:
+  프로젝트 안에서 실행, 검증, evidence, proof, evolution을 담당한다.
+```
+
+이 둘은 경쟁하지 않는다.
+Platform-first는 더 넓은 사용자가 에이전트 계약을 만들게 하는 진입면이고, Local Cambrian Runtime은 그 계약이 실제 프로젝트에서 안전하게 실행되고 증거로 진화하게 만드는 신뢰 엔진이다.
+
+### 0.1 절대 경계
+
+- Platform-first Defensible Alpha는 Cambrian Runtime 설치를 요구하지 않는다.
+- Platform-first Defensible Alpha는 provider API를 호출하지 않는다.
+- Platform-first Defensible Alpha는 사용자의 파일이나 프로젝트를 자동 수정하지 않는다.
+- Platform-first Defensible Alpha는 proof 없는 성공률을 표시하지 않는다.
+- 공개 marketplace와 결제는 `no_runtime_evidence` 상태가 해소된 뒤에만 연다.
+- 한국 시장 선점은 단순 에이전트 쇼핑몰 UI가 아니라 agent contract, preflight, audit lineage, proof boundary 표준을 먼저 박는 것이다.
+
+### 0.2 10년 관점의 올바른 순서
+
+```text
+agent contract
+-> downloadable agent pack
+-> preflight validation
+-> private download and version history
+-> optional Cambrian adapter
+-> runtime execution evidence
+-> proof
+-> evolution history
+-> trusted marketplace
+```
+
+지금 당장 만들어야 하는 것은 마켓 화면이 아니라 신뢰 가능한 계약과 preflight gate다.
+마켓은 이 계약과 evidence가 쌓인 뒤에 열리는 유통 레이어다.
+
+### 0.3 법률과 신뢰 원칙
+
+Cambrian은 법률 판단을 자동화하지 않는다.
+플랫폼은 위험 행동을 조기에 드러내고, Red 위험을 차단하며, 사용자가 책임 경계를 이해하게 만든다.
+
+초기 법률 게이트의 최소 원칙:
+
+- 의료 결정, 법률 결정, 투자·금융 결정, 채용·해고 판단은 Red로 차단한다.
+- 비밀번호, 토큰, 개인 API 키 수집은 기본 금지다.
+- 외부 전송과 파일 생성은 명시 승인 대상이다.
+- 실제 실행 evidence가 없으면 proof, 성능, 성공률을 주장하지 않는다.
+- 공개 판매 상태는 기본 false다.
+
 ## 1. 현재 방향 판정
 
 판정:
@@ -356,6 +411,38 @@ Cambrian은 사용자의 프로젝트 안에 설치된다. 이 점이 중요하�
 - evidence and proof
 - evolution lineage
 
+### 5.6 Meta-Harness 흡수 원칙
+
+GitHub의 Meta-Harness 계열 구현에서 가져올 핵심은 외부 프레임워크나 새 의존성이 아니다.
+가져와야 할 것은 아래 세 가지 운영 원리다.
+
+- 작업 영역을 하나의 domain spec으로 고정한다.
+- 후보를 실행하고 evaluator가 같은 기준으로 판정한다.
+- 결과가 좋은 후보만 lineage와 함께 다음 세대로 승격한다.
+
+Cambrian은 이 원리를 그대로 복제하지 않고 로컬 우선 AI company runtime에 맞게 번역한다.
+
+```text
+Meta-Harness의 domain spec
+-> Cambrian의 project-local harness contract
+
+Meta-Harness의 evaluator
+-> Cambrian의 validation, judge rubric, proof gate
+
+Meta-Harness의 population / generation
+-> Cambrian의 workforce, skill, template, harness candidate lineage
+
+Meta-Harness의 selection
+-> Cambrian의 evidence-backed promotion / rollback
+```
+
+따라서 10년 아키텍처에서 하네스는 단순 검증 파일이 아니다.
+하네스는 특정 프로젝트에서 AI 회사가 어떤 문제를 풀고, 어디까지 쓸 수 있고, 어떤 검증을 통과해야 하며, 어떤 후보가 다음 기본값이 될 수 있는지를 고정하는 실행 계약이다.
+
+초기 구현은 새 복잡도를 늘리지 않는다.
+먼저 `.cambrian/harness/harness.yaml` 안에 domain spec에 해당하는 최소 필드를 흡수하고, evaluator는 기존 validation command와 judge rubric을 감싸는 표준 verdict 계약으로 정리한다.
+population 기반 자동 탐색은 external alpha 안정화와 pilot evidence가 충분히 쌓인 뒤에만 좁은 strongest lane에서 켠다.
+
 ## 6. 10년 로드맵
 
 ### Horizon 1: 2026-2027, 신뢰 가능한 로컬 회사
@@ -384,6 +471,9 @@ Cambrian은 사용자의 프로젝트 안에 설치된다. 이 점이 중요하�
 
 - `template evolve`, `template fork` 문서/CLI 불일치 해결
 - `.cambrian/` artifact source-of-truth doctor 추가
+- `.cambrian/harness/harness.yaml`에 domain spec 최소 계약 고정
+- evaluator verdict 계약을 validation, judge rubric, proof gate와 연결
+- 후보 lineage에 parent, mutation, evaluator result, promotion decision 기록
 - representative `.cambrian/` fixture 추가
 - first-run demo를 10분 안에 통과하도록 압축
 - pilot feedback을 evidence로 저장
@@ -431,7 +521,7 @@ Cambrian은 사용자의 프로젝트 안에 설치된다. 이 점이 중요하�
 - local/team registry 분리
 - install graph rollback 강화
 - organization-level policy profile
-- proof dashboard MVP
+- proof dashboard alpha
 
 측정:
 
@@ -801,3 +891,877 @@ Cambrian의 10년 아키텍처는 모델 경쟁이 아니라 신뢰 경쟁이다
 ```
 
 Cambrian은 항상 두 번째를 선택한다.
+## 14. 24-Hour Product Completion Agent
+
+Cambrian should eventually let a user install a project-local agent that keeps working for the product around the clock.
+
+This must not mean an unlimited autonomous coder.
+
+The product should be:
+
+```text
+24-hour product completion agent
+= a governed AI company loop that repeatedly plans, proposes, validates, records evidence, and asks for approval at risk boundaries.
+```
+
+The core promise:
+
+```text
+The user does not have to restart the thinking loop every day.
+Cambrian keeps the product goal, architecture, open blockers, validation commands, and proof history alive.
+```
+
+The forbidden promise:
+
+```text
+Cambrian will autonomously finish any product without supervision.
+```
+
+### 14.1 Runtime Shape
+
+The 24-hour agent is a loop, not one giant agent.
+
+```text
+mission state
+-> boardroom decision
+-> bounded work plan
+-> worker directive
+-> AI reply ingest
+-> evidence envelope
+-> validation
+-> verdict
+-> next mission state
+```
+
+### 14.2 Required Gates
+
+The loop may continue automatically only through low-risk planning and evidence work.
+
+It must stop for explicit approval before:
+
+```text
+source code apply
+git push
+deploy
+secret/API-key handling
+payment/outbound send
+database migration
+public release
+long-running paid cloud execution
+```
+
+### 14.3 Installed Capabilities
+
+An installed 24-hour agent needs these local components:
+
+```text
+.cambrian/mission.yaml
+.cambrian/harness.yaml
+.cambrian/workforce.yaml
+.cambrian/skills/
+.cambrian/auto/agenda.yaml
+.cambrian/auto/tasks/
+.cambrian/evidence/
+.cambrian/reports/latest_verdict.json
+```
+
+The user-facing command should be simple:
+
+```text
+cambrian mission install --goal "Finish this product"
+cambrian mission status
+cambrian mission run --max-steps 1
+cambrian mission resume
+```
+
+Later, a scheduler may call bounded steps repeatedly:
+
+```text
+cambrian mission run --max-steps 1 --write-evidence
+```
+
+### 14.4 Product Standard
+
+A 24-hour completion loop is allowed to claim progress only when it can show:
+
+```text
+what changed
+why it mattered
+which files or docs were used
+which validation commands ran
+which risks remain
+what the next safest action is
+```
+
+If evidence is missing, the agent must say:
+
+```text
+hold
+```
+
+not:
+
+```text
+done
+```
+
+### 14.5 First Build Target
+
+Do not start with cloud autonomy.
+
+Start with local bounded continuity:
+
+```text
+One Good Harness
+-> One Good Mission
+-> One Bounded 24-Hour Loop
+```
+
+The first implementation target is:
+
+```text
+Cambrian can wake up, read the mission state, select one next task, produce an evidence-bound directive or result, validate it, and update mission state without losing the product goal.
+```
+
+### 14.6 First CLI Slice, 2026-05-21
+
+Implemented local bounded mission commands:
+
+```text
+cambrian mission install --goal "Finish this product" --json
+cambrian mission status --json
+cambrian mission run --max-steps 1 --json
+cambrian mission run --max-steps 1 --start-job --json
+cambrian mission sync --json
+cambrian mission resume --json
+```
+
+The installed state lives at:
+
+```text
+.cambrian/mission.yaml
+.cambrian/mission/events.yaml
+.cambrian/mission/tasks/
+```
+
+When a project-specific harness is not installed yet, the mission layer falls back to basic project evidence such as `pyproject.toml`, `package.json`, `README.md`, `tests`, `engine`, `src`, and release/product docs. That fallback is intentionally modest: it gives the company loop a first validation command and evidence surface without pretending that a real custom harness already exists.
+
+The first version intentionally does not run forever by itself. It creates a repeatable operating loop that Codex, Claude, or another AI worker can execute one bounded step at a time. This keeps the product honest: Cambrian is not claiming autonomous completion until it can prove every step with evidence.
+
+Hard gates remain explicit-human-confirmation only:
+
+```text
+source_apply
+git_push
+public_release
+deploy
+secrets
+payment_or_external_spend
+database_migration
+```
+
+The correct next product step is not to add a daemon yet. The correct next step is to connect each mission directive to the existing job ingest, validation, completion, and company memory loop so the mission can learn from verified outcomes without becoming an unsafe background coder.
+
+### 14.7 Mission To Job Bridge, 2026-05-21
+
+The mission loop now has a first bridge into the existing Cambrian job runtime:
+
+```text
+cambrian mission run --max-steps 1 --start-job --json
+```
+
+Behavior:
+
+```text
+if custom harness is installed:
+  create mission task directive
+  create linked Cambrian job with entry_mode=mission
+  create bridge packet
+  set mission last_job_ref and last_bridge_packet_ref
+  wait for AI reply evidence
+
+if custom harness is missing:
+  create mission task directive
+  block job start
+  point next_command to harness engineering
+```
+
+This is still not a background daemon. It is the first honest company installation loop: mission state can now open real work packets, but execution, source mutation, validation, and promotion remain gated by the existing evidence contracts.
+
+### 14.8 Mission Outcome Sync, 2026-05-21
+
+The mission loop now absorbs the latest job outcome:
+
+```text
+cambrian mission sync --json
+```
+
+It reads:
+
+```text
+.cambrian/evidence/outcomes.yaml
+```
+
+and updates:
+
+```text
+.cambrian/mission.yaml#last_outcome
+.cambrian/mission/events.yaml
+```
+
+If the synced outcome has a `pass` verdict and no unchecked items, the next mission action becomes:
+
+```text
+cambrian mission run --max-steps 1 --start-job --json
+```
+
+Important boundary:
+
+```text
+mission sync only absorbs the outcome of the job opened by the mission itself.
+older unrelated outcomes are ignored.
+stale last_outcome is cleared when no linked mission job outcome exists.
+```
+
+This gives the local company its first closed control loop:
+
+```text
+mission install
+-> mission run --start-job
+-> job ingest
+-> job validate
+-> job complete
+-> mission sync
+-> next mission run
+```
+
+### 14.9 Cambrian Self Company Install, 2026-05-21
+
+Cambrian itself now has a project-local AI company installed against the mission-company identity:
+
+```text
+harness_id: custom-cambrian-mission-company
+workforce_id: workforce-cambrian-mission-company
+authority_mode: proposal_only
+```
+
+Installed worker contracts:
+
+```text
+mission-control-architect
+evidence-gate-reviewer
+release-loop-qa
+safety-boundary-reviewer
+pytest-regression-guardian
+```
+
+Installed skills:
+
+```text
+trace-failure-flow
+inspect-pytest-regression
+propose-safe-patch
+review-regression-risk
+```
+
+Important correction:
+
+```text
+mission-company identity outranks incidental auth scan evidence.
+mission-company skill generation uses generic regression validation, not auth-specific test skills.
+fixtures, .pytest_tmp, archive, errors, and dropzones are scan-noise boundaries, not product identity.
+```
+
+Verified local loop:
+
+```text
+cambrian harness bootstrap --confirm --json
+-> custom-cambrian-mission-company installed
+cambrian mission install --goal "Ship Cambrian so external users can install it, use One Good Harness, and follow a verified release path" --json
+-> contract_source: installed_harness
+cambrian mission run --max-steps 1 --start-job --json
+-> linked job created with entry_mode=mission
+-> source_code_modified_by_cambrian: false
+-> provider_api_called_by_cambrian: false
+job ingest latest ai_reply_patch_candidate.yaml --json
+-> reply evidence envelope satisfied
+job validate latest --run --json
+-> validation_status: passed
+-> trust_gate_status: verified
+job complete latest --outcome success --json
+-> verdict: pass
+mission sync --json
+-> last_outcome synced
+-> next_command: cambrian mission run --max-steps 1 --start-job --json
+```
+
+Second-cycle proof, same day:
+
+```text
+cambrian mission run --max-steps 1 --start-job --json
+-> run_count: 2
+-> linked job: job-custom-cambrian-mission-company-20260521_123525_483321
+job ingest latest ai_reply_patch_candidate.yaml --json
+-> reply_evidence_compliance: satisfied
+job validate latest --run --json
+-> validation_status: passed
+-> trust_gate_status: verified
+-> pytest mission/job contract slice: 25 passed
+-> py_compile mission/bridge slice: passed
+job complete latest --outcome success --json
+-> verdict: pass
+mission sync --json
+-> synced last_outcome: success/pass/verified
+-> unchecked_count: 0
+-> next_command: cambrian mission run --max-steps 1 --start-job --json
+```
+
+Third-cycle proof, same day:
+
+```text
+cambrian mission run --max-steps 1 --start-job --json
+-> run_count: 3
+-> linked job: job-custom-cambrian-mission-company-20260521_124123_126932
+job ingest latest ai_reply_patch_candidate.yaml --json
+-> reply_evidence_compliance: satisfied
+job validate latest --run --json
+-> validation_status: passed
+-> trust_gate_status: verified
+-> pytest mission/job contract slice: 25 passed
+-> py_compile mission/bridge slice: passed
+job complete latest --outcome success --json
+-> verdict: pass
+mission sync --json
+-> synced last_outcome: success/pass/verified
+-> unchecked_count: 0
+-> next_command: cambrian mission run --max-steps 1 --start-job --json
+```
+
+Operator surface installed, same day:
+
+```text
+cambrian mission operator --save --json
+-> status: operator_ready
+-> operator_mode: supervised_24h_company
+-> scheduler_readiness.safe_to_schedule: true
+-> current_run_count: 3
+-> last_outcome_verified: true
+-> operator_ref: .cambrian/mission/operator.yaml
+```
+
+The external scheduler entry is `Cambrian 24h Company Operator` (`cambrian-24h-company-operator`). Its contract is intentionally narrow: every tick must read `mission operator` first, open at most one mission-linked job only when `safe_to_schedule` is true, then stop at the evidence-envelope boundary.
+
+Product-level scheduler tick installed, same day:
+
+```text
+cambrian mission tick --json
+-> calls mission operator first
+-> skips when a job is waiting for AI evidence
+-> opens at most one mission-linked job when operator_ready
+-> stops at: cambrian job ingest latest ai_reply_patch_candidate.yaml --json
+```
+
+The scheduler no longer has to compose multiple Cambrian commands by prompt. It calls one product contract, `mission tick`, and Cambrian itself decides whether to skip or open exactly one bounded job.
+
+Fourth-cycle proof through `mission tick`, same day:
+
+```text
+cambrian mission tick --json
+-> status: tick_started_job
+-> run_count: 4
+-> opened job: job-custom-cambrian-mission-company-20260521_125621_788260
+-> packet: .cambrian/bridge/packets/packet_20260521_125621_f030.yaml
+job ingest latest ai_reply_patch_candidate.yaml --json
+-> reply_evidence_compliance: satisfied
+job validate latest --run --json
+-> validation_status: passed
+-> trust_gate_status: verified
+-> pytest mission/job/operator slice: 29 passed
+-> py_compile mission/bridge slice: passed
+job complete latest --outcome success --json
+-> verdict: pass
+mission sync --json
+-> synced last_outcome: success/pass/verified
+mission operator --save --json
+-> run_count: 4
+-> status: operator_ready
+-> scheduler_readiness.safe_to_schedule: true
+```
+
+Bounded worker-cycle automation installed, same day:
+
+```text
+automation_id: cambrian-24h-company-operator
+old contract: mission tick only
+new contract: operator -> tick -> evidence envelope -> ingest -> validate -> complete success only if verified -> mission sync -> operator_ready
+hard gates: no git push, no deploy, no publish, no secrets, no spend, no migrations, no source patch apply
+```
+
+Fifth-cycle proof through the bounded worker cycle:
+
+```text
+cambrian mission tick --json
+-> status: tick_started_job
+-> run_count: 5
+-> opened job: job-custom-cambrian-mission-company-20260521_130102_987724
+-> packet: .cambrian/bridge/packets/packet_20260521_130103_f6e1.yaml
+job ingest latest ai_reply_patch_candidate.yaml --json
+-> reply_evidence_compliance: satisfied
+job validate latest --run --json
+-> validation_status: passed
+-> trust_gate_status: verified
+-> pytest mission/job/operator slice: 29 passed
+-> py_compile mission/bridge slice: passed
+job complete latest --outcome success --json
+-> verdict: pass
+mission sync --json
+-> synced last_outcome: success/pass/verified
+mission operator --save --json
+-> run_count: 5
+-> status: operator_ready
+-> scheduler_readiness.safe_to_schedule: true
+```
+
+This is still a governed company loop, not an ungated autonomous daemon. The company can keep the release goal alive, open bounded jobs, demand evidence envelopes, and sync only linked outcomes; applying source changes, pushing git, deploying, publishing, touching secrets, spending money, or migrating a database still requires explicit human approval.
+
+### CEO/CTO/COO Product Boardroom Gate
+
+Added on 2026-05-22 KST / 2026-05-21 UTC.
+
+The 24h company loop now has a product boardroom gate before repeated mission work:
+
+```text
+cambrian company boardroom install --goal "Keep Cambrian product direction sharp for the 24h company loop" --json
+-> agents_ref: .cambrian/company/product_boardroom/agents.yaml
+-> agent_ids: ceo-agent, cto-agent, coo-agent
+-> agent_prompt_refs:
+   .cambrian/company/product_boardroom/agent_prompts/ceo-agent.md
+   .cambrian/company/product_boardroom/agent_prompts/cto-agent.md
+   .cambrian/company/product_boardroom/agent_prompts/coo-agent.md
+-> meeting_protocol_ref: .cambrian/company/product_boardroom/meeting_protocol.md
+-> agenda_ref: .cambrian/company/product_boardroom/agenda.yaml
+-> decision_history_ref: .cambrian/company/product_boardroom/decision_history.yaml
+
+cambrian company boardroom convene --topic "24h company product boardroom with durable agenda and decision history" --json
+-> conversation_ref: .cambrian/company/product_boardroom/conversations/24h-company-product-boardroom-with-durable-agenda-and-decision-history-20260521_163506_210843.yaml
+-> decision_packet_ref: .cambrian/company/product_boardroom/decision_packet.yaml
+-> open_questions_ref: .cambrian/company/product_boardroom/open_questions.yaml
+-> mission_gate.ready_for_mission: true
+```
+
+The boardroom is not an extra decorative office. It is a pre-mission product decision contract:
+
+- `ceo-agent` keeps external-user value, market priority, release trust, and scope discipline fixed.
+- `cto-agent` protects architecture, reliability gates, testability, and long-term maintainability.
+- `coo-agent` turns the discussion into one bounded operating step, stop condition, and validation handoff.
+
+Each agent now has a standalone prompt contract. `meeting_protocol.md` defines the required meeting order: CEO product outcome and scope cut, CTO architecture constraint and validation proof, COO next bounded mission job and stop condition, then exactly one decision packet.
+
+The boardroom also has durable continuity:
+
+- `agenda.yaml` carries the next product discussion topic, standing order, input refs, and open questions.
+- `latest_ai_request.yaml` is the request packet for real CEO/CTO/COO AI agent turns.
+- `decision_history.yaml` appends each ingested AI-authored boardroom decision so the 24h company can continue the product conversation instead of restarting from a blank prompt.
+
+The boardroom may write only product discussion artifacts under `.cambrian/company/product_boardroom/`. It cannot apply source patches, push git, deploy, publish, touch secrets, spend money, migrate databases, or call a provider API. `convene` is not allowed to fabricate CEO/CTO/COO turns. It creates an AI-agent request, and only `boardroom ingest` with verified AI-authored CEO/CTO/COO turns may create a `ready_for_mission` decision packet.
+
+As of the same build, this is enforced inside the mission operator itself:
+
+```text
+cambrian mission operator --save --json
+-> scheduler_readiness.product_boardroom_ready: true
+-> tick_contract.requires_product_boardroom_ready: true
+-> product_boardroom_gate.ready: true
+-> product_boardroom_gate.latest_decision_ai_agent_turns_verified: true
+-> product_boardroom_gate.latest_decision_generated_at >= product_boardroom_gate.mission_direction_updated_at
+-> product_boardroom_gate.freshness_basis: mission_direction_updated_at
+```
+
+If the boardroom is missing, lacks CEO/CTO/COO prompt refs, lacks AI-agent contracts, lacks protocol/agenda/history, has no `ready_for_mission` decision packet, has no verified AI-authored CEO/CTO/COO turns, or the latest boardroom decision is older than the current mission direction, the operator reports `boardroom_required` and will not schedule the next mission tick.
+
+This distinction is intentional. `mission_updated_at` is an operational ledger timestamp and can change when validation evidence is synced. `mission_direction_updated_at` changes only when the mission direction changes, so clean validation syncs do not force a new CEO/CTO/COO meeting by themselves.
+
+Verification:
+
+```text
+python -m py_compile engine\project_company_layer.py engine\cli.py engine\project_mission.py
+python -m pytest -q tests\test_company_layer.py tests\test_mission_company.py
+-> 32 passed
+```
+
+### 14.10 Generated Agent Runtime Classification
+
+Added on 2026-05-22 KST.
+
+Cambrian must not use the word `agent` as a vague bucket. Generated workers are now classified by runtime kind:
+
+```text
+general_agent
+= deterministic local workflow, routing, file inspection, validation, or artifact bookkeeping.
+
+ai_agent
+= thinking work: planning, diagnosis, review, product discussion, architecture judgment, risk judgment, or synthesis.
+```
+
+The rule is strict:
+
+```text
+If an agent has to think, it is an ai_agent.
+If it is an ai_agent, it must require an LLM call.
+If it requires an LLM call, job replies must include llm_invocation_evidence.
+```
+
+This prevents Cambrian from pretending that YAML, templates, or deterministic local code performed real reasoning.
+Install and generation remain provider-free, but runtime thinking must be attributed to an external AI worker, provider
+API, or local model adapter.
+
+The generated workforce now carries:
+
+```text
+agent_kind_summary
+agent_runtime_contracts
+agent_runtime_policy
+```
+
+Each generated thinking agent carries:
+
+```text
+agent_kind: ai_agent
+requires_llm_call: true
+runtime_contract.llm_invocation.required: true
+runtime_contract.llm_invocation.evidence_key: llm_invocation_evidence
+```
+
+The job bridge now includes selected agent runtime contracts in the execution packet. If any selected agent requires an
+LLM call, the response contract adds `llm invocation evidence` to required evidence. `job ingest` then rejects or holds
+the reply unless `llm_invocation_evidence` proves that the thinking work was actually performed by an AI worker/provider.
+
+AVE proof cycle:
+
+```text
+workforce installed in AVE:
+  ddmq-debugger
+  anthropic-api-error-analyst
+  stage-schema-validator
+  pytest-regression-guardian
+  risk-boundary-reviewer
+
+agent_kind_summary:
+  ai_agent: 5
+  general_agent: 0
+
+job ingest latest ai_reply_patch_candidate.yaml --json
+-> required evidence included llm_invocation_evidence
+-> reply_evidence_compliance: satisfied
+
+job validate latest --run --json
+-> validation_status: passed
+-> trust_gate_status: verified
+-> pytest: 27 passed
+-> py_compile: passed
+
+job complete latest --outcome success --json
+-> verdict: pass
+
+mission sync --json
+-> synced
+
+company boardroom convene + ingest
+-> fresh CEO/CTO/COO ai_agent decision ingested
+-> mission operator safe_to_schedule: true
+```
+
+Focused Cambrian regression checks:
+
+```text
+python -m py_compile engine\project_workforce_builder.py engine\project_custom_harness.py engine\project_bridge.py
+python -m pytest -q tests\test_workforce_builder.py tests\test_agent_generation.py tests\test_job_start_runtime_contract.py
+-> 16 passed
+
+python -m pytest -q tests\test_job_complete_evidence.py tests\test_job_start_selects_agents_and_skills.py tests\test_project_agent_dispatch.py tests\test_dispatch_on_demand.py tests\test_custom_harness_from_answers.py tests\test_company_layer.py tests\test_mission_company.py
+-> 48 passed
+```
+
+This is a product boundary, not only a schema addition. Cambrian can orchestrate ordinary deterministic agents locally,
+but it cannot claim CEO/CTO/COO discussion, code diagnosis, review, planning, or synthesis happened unless an AI agent
+turn or LLM invocation evidence exists.
+
+### 14.11 Cambrian As LLM Clothing
+
+Added on 2026-05-22 KST.
+
+Cambrian is not a replacement for an LLM. Cambrian is the operating layer worn by an LLM:
+
+```text
+LLM = intelligence engine
+Cambrian = clothes, harness, memory, evidence, authority, skills, agents, validation, and evolution around that engine
+```
+
+Therefore agent, skill, harness, and evolution generation must be LLM-first whenever the work needs judgment.
+Only trivial routing, file bookkeeping, and validation command execution may stay purely deterministic.
+
+Generation stages now carry an LLM assist contract:
+
+```text
+harness_generation
+workforce_generation
+agent_generation
+skill_generation
+skill_fusion
+evolution_review
+evolution_proposal
+```
+
+If an LLM provider is supplied, Cambrian calls it and records:
+
+```text
+llm_generation_evidence.called: true
+mode: provider_api
+provider: <provider>
+quality_status: llm_assisted
+```
+
+If no provider is supplied, Cambrian may still create structure, but the quality status is downgraded:
+
+```text
+quality_status: bootstrap_draft
+llm_enrichment_required: true
+```
+
+This is the honest boundary. Bootstrap drafts can help the user start, but they are not final intelligent generation.
+Cambrian must not sell or present deterministic template output as if an LLM reasoned through the project.
+
+### 14.12 Docs-To-Interview Inference
+
+The harness interview is not the product. The product is Cambrian understanding the project well enough to build a useful operating layer.
+
+Therefore the default install flow should be:
+
+```text
+project docs + scanner evidence
+-> LLM-assisted interview inference
+-> answers.yaml
+-> ask only for missing or low-confidence fields
+-> harness plan
+```
+
+For an existing project, Cambrian should read `README.md`, `CLAUDE.md`, `AGENTS.md`, architecture docs, release handoff docs, and other local Markdown before asking the user what the project is. If those documents already describe the domain, validation commands, safety policy, and key paths, the interview should collapse into a generated `answers.yaml`.
+
+For a greenfield project, a deeper interview still matters because there may be no project evidence yet. Even there, strong project docs should reduce or replace manual questions.
+
+Current implementation:
+
+```text
+cambrian harness interview infer --json
+```
+
+This command writes `.cambrian/interview/answers.yaml` from project documents and scanner evidence. If a provider is supplied, Cambrian records `llm_generation_evidence.called: true`. If no provider is supplied, the result is marked `project_docs_bootstrap` and keeps the honest `bootstrap_draft` quality boundary.
+
+If the LLM returns structured interview answers, Cambrian may fill missing fields from that reply, but it must not blindly overwrite stronger local evidence. The practical rule is simple: local evidence drafts first, LLM fills gaps, human interview remains the fallback for unresolved or low-confidence fields.
+
+### 14.13 Local MCP Adapter For AI Tool Operability
+
+Added on 2026-05-22 KST.
+
+The recent product decision is now fixed:
+
+```text
+CLI = human/operator entry
+MCP = AI-tool entry
+Web/download = distribution and understanding entry
+```
+
+For another person's Claude, Codex, Cursor, GPT, or local agent to use Cambrian naturally, a local MCP adapter is required. Without it, the user or AI must copy terminal commands by hand. That is acceptable for an internal smoke test, but weak for external-user adoption.
+
+The correct first version is not a broad MCP platform. It is a thin local adapter:
+
+```text
+cambrian-mcp
+```
+
+Equivalent module form:
+
+```text
+python -m engine.project_mcp_server
+```
+
+The adapter exposes allowlisted Cambrian control-plane tools:
+
+```text
+cambrian_doctor
+cambrian_project_scan
+cambrian_harness_interview_infer
+cambrian_harness_engineer_design
+cambrian_harness_engineer_review
+cambrian_harness_engineer_dry_run
+cambrian_workforce_generate
+cambrian_skill_generate
+cambrian_harness_install
+cambrian_job_start
+cambrian_job_ingest
+cambrian_job_validate
+cambrian_job_complete
+cambrian_company_snapshot
+```
+
+This is deliberately close to the CLI spine. MCP is not allowed to become a bypass around the harness.
+
+MCP safety contract:
+
+```text
+explicit cwd required
+allowlisted Cambrian CLI only
+no arbitrary shell
+no git push
+no deploy
+no publish
+no secret reading
+no source patch apply by default
+harness install requires confirm=true
+tool results return structuredContent and readable content
+```
+
+Product interpretation:
+
+```text
+MCP is the handle that lets an external AI operate Cambrian.
+Cambrian remains the local AI company runtime.
+Codex/Claude/Cursor/GPT remain execution engines.
+```
+
+Therefore MCP is now part of the external-user proof surface for OS-11, but not a replacement for One Good Harness.
+
+The first proof question becomes:
+
+```text
+Can an external user's AI operate Cambrian's One Good Harness path through MCP without arbitrary shell access or private-data leakage?
+```
+
+If yes, MCP becomes the preferred entry path for external AI tools.
+
+The local proof artifact is:
+
+```text
+python scripts/verify_mcp_operability.py --receipt dist/mcp_operability_receipt.json
+```
+
+That receipt must show initialize, tools/list, safe project scan with explicit `cwd`, missing-`cwd` blocking, harness install confirmation blocking, and no arbitrary shell exposure.
+
+This proof belongs in the external-user release gate and AI Company Golden Path.
+It should not run on every ordinary mission tick unless the mission is specifically about MCP or release readiness.
+
+### 14.14 Supervised 24-Hour Company Operating Model
+
+The 24-hour company is not a single autonomous agent.
+It is a governed operating loop.
+
+The correct architecture is:
+
+```text
+Cambrian
+  = mission, boardroom, harness, authority, evidence, validation, memory, next task
+
+Codex / Claude / Cursor / GPT / local model
+  = thinking and execution worker
+
+MCP
+  = tool connection so the worker can operate Cambrian safely
+
+Automation / heartbeat / scheduler
+  = wake-up mechanism that starts the next bounded cycle
+```
+
+This matters because "24 hours" can easily become a fake autonomy claim.
+Cambrian must not claim it can finish a product by itself unless each step is evidenced.
+
+The allowed loop is:
+
+```text
+mission operator
+-> product boardroom gate
+-> mission tick or mission run --start-job
+-> job packet
+-> AI worker reply with evidence envelope
+-> job ingest
+-> job validate
+-> job complete
+-> mission sync
+-> next bounded cycle
+```
+
+The loop must stop at any of these boundaries:
+
+```text
+missing boardroom decision
+missing AI reply evidence
+missing validation command
+failed validation
+authority-required action
+source patch apply
+git operation
+deployment
+publishing
+secret access
+payment or external spend
+database migration
+```
+
+The practical local development mode in Codex is:
+
+```text
+Cambrian decides the next bounded job.
+Codex performs the implementation work.
+Cambrian validates, records, and selects the next job.
+```
+
+This is the right near-term product mode because it aligns with the architecture:
+
+```text
+AI company runtime first
+AI execution engine second
+MCP connection surface third
+automation last
+```
+
+The next implementation priority is not to make Cambrian mutate code endlessly.
+The priority is to make the supervised loop reliable enough that the user does not have to manually choose every task.
+
+That means OS-11 remains the next task:
+
+```text
+First External Recipient Proof
+```
+
+But OS-11 now includes the local MCP path as a required operability proof, not merely CLI bundle proof.
+
+### 14.15 Company Ready Status Must Be Proof-Derived
+
+`cambrian company status --json` is a product trust surface, not a decorative dashboard.
+It must never report the 24-hour company as ready from file presence alone, and it must never stay blocked when valid proof already exists.
+
+The ready state is now derived from four conditions:
+
+```text
+company base initialized
+context promotion proof exists
+.cambrian/mission.yaml#last_outcome is success/pass/verified with unchecked_count = 0
+.cambrian/company/verification/ledger.yaml has a pass/verified entry for the same job_id with unchecked_risk_count = 0
+```
+
+This makes the status board evidence-backed:
+
+```text
+company_loop_proof_exists: true
+verification_ledger_proof_exists: true
+project_company_ready: true
+current_capability: verified_company_loop
+readiness_blockers: []
+```
+
+Important boundary:
+
+```text
+auto_leadership_enabled remains false.
+company_ready means the supervised loop has proof.
+It does not mean Cambrian may mutate source, deploy, publish, spend money, use secrets, or run unattended without explicit scheduling authority.
+```

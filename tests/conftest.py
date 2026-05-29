@@ -3,13 +3,29 @@ from pathlib import Path
 import pytest
 import yaml
 
-collect_ignore_glob = ["fixtures/project_mode/login_bug/tests/test_*.py"]
+collect_ignore_glob = [
+    "fixtures/project_mode/login_bug/tests/test_*.py",
+    "fixtures/one_good_harness/*/tests/test_*.py",
+]
 
 
 @pytest.fixture
 def schemas_dir():
     """프로젝트 루트의 schemas/ 디렉토리 경로."""
     return Path(__file__).parent.parent / "schemas"
+
+
+@pytest.fixture(autouse=True)
+def external_alpha_test_fast_windows_batch_rehearsal(
+    monkeypatch: pytest.MonkeyPatch,
+    request: pytest.FixtureRequest,
+) -> None:
+    test_path = Path(str(request.node.fspath))
+    if (
+        test_path.name.startswith("test_external_alpha_")
+        and test_path.name != "test_external_alpha_release_bundle.py"
+    ):
+        monkeypatch.setenv("CAMBRIAN_EXTERNAL_ALPHA_SKIP_BATCH_REHEARSAL_FOR_TESTS", "1")
 
 
 def create_valid_skill(base_dir: Path, skill_id: str = "test_skill") -> Path:

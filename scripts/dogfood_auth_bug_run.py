@@ -12,7 +12,7 @@ from pathlib import Path
 from typing import Any
 
 
-REQUEST_TEXT = "로그인 에러 수정해"
+REQUEST_TEXT = "Fix the login error"
 FAILURE_CLASSES = [
     "INSTALL_FAILURE",
     "DOCTOR_FAILURE",
@@ -54,6 +54,19 @@ def _run(command: list[str], cwd: Path, *, name: str, timeout: int = 60) -> dict
         "stderr": result.stderr,
         "status": "passed" if result.returncode == 0 else "failed",
     }
+
+
+def _redacted_command(command: list[str]) -> str:
+    parts: list[str] = []
+    for index, part in enumerate(command):
+        candidate = Path(part)
+        if index == 0 and (candidate.is_absolute() or "\\" in part or "/" in part):
+            parts.append(candidate.name or "<cambrian>")
+        elif candidate.is_absolute():
+            parts.append("<local-path>")
+        else:
+            parts.append(part)
+    return " ".join(parts)
 
 
 def _git_info(target: Path) -> dict[str, Any]:
@@ -180,7 +193,7 @@ def _write_report(path: Path, report: dict[str, Any]) -> None:
 - Automatic patch apply: no
 - Provider API call: no
 - Allowed target metadata: `.cambrian/`
-- Cambrian repo report file: {path}
+- Cambrian repo report file: docs/release/DOGFOOD_REPORT.md
 
 ## Verdict
 
@@ -193,11 +206,11 @@ def _write_report(path: Path, report: dict[str, Any]) -> None:
 def _blocked(message: str) -> int:
     print("[Task 159R-3 BLOCKED]")
     print()
-    print("이유:")
+    print("Reason:")
     print(f"- {message}")
     print()
-    print("다음 조치:")
-    print("- 실제 Python + pytest + auth/login 프로젝트를 `--target` 또는 CAMBRIAN_DOGFOOD_TARGET로 지정해야 합니다.")
+    print("Next action:")
+    print("- Provide a real Python + pytest auth/login project through `--target` or CAMBRIAN_DOGFOOD_TARGET.")
     return 2
 
 
@@ -206,9 +219,9 @@ def run(target: Path, ai_reply: Path | None, out: Path, cambrian: str) -> dict[s
     resolved_target = target.resolve()
     demo_path = (root / "examples" / "auth_bug_demo").resolve()
     if resolved_target == demo_path:
-        raise SystemExit(_blocked("examples/auth_bug_demo는 smoke fixture이며 dogfood 대상이 아닙니다."))
+        raise SystemExit(_blocked("examples/auth_bug_demo is a smoke fixture, not a dogfood target."))
     if not resolved_target.exists() or not resolved_target.is_dir():
-        raise SystemExit(_blocked(f"대상 프로젝트가 존재하지 않습니다: {resolved_target}"))
+        raise SystemExit(_blocked(f"Target project does not exist: {resolved_target}"))
 
     git = _git_info(resolved_target)
     steps: list[dict[str, Any]] = []
@@ -226,7 +239,7 @@ def run(target: Path, ai_reply: Path | None, out: Path, cambrian: str) -> dict[s
 
     job_id: str | None = None
     for name, command in flow:
-        commands.append(" ".join(command))
+        commands.append(_redacted_command(command))
         step = _run(command, resolved_target, name=name)
         steps.append(step)
         if step["exit_code"] != 0:
@@ -240,13 +253,13 @@ def run(target: Path, ai_reply: Path | None, out: Path, cambrian: str) -> dict[s
     if not blockers and ai_reply:
         reply_path = ai_reply.resolve()
         if not reply_path.exists():
-            blockers.append(f"AI_REPLY_FORMAT_FAILURE: AI reply file not found: {reply_path}")
+            blockers.append(f"AI_REPLY_FORMAT_FAILURE: AI reply file not found: <local-path>")
         else:
             for name, command in [
                 ("job-ingest", [cambrian, "pack", "job-ingest", job_id or "latest", str(reply_path), "--json"]),
                 ("job-validate", [cambrian, "pack", "job-validate", job_id or "latest", "--json"]),
             ]:
-                commands.append(" ".join(command))
+                commands.append(_redacted_command(command))
                 step = _run(command, resolved_target, name=name)
                 steps.append(step)
                 if step["exit_code"] != 0:
@@ -274,7 +287,7 @@ def run(target: Path, ai_reply: Path | None, out: Path, cambrian: str) -> dict[s
     report = {
         "date": datetime.now(timezone.utc).date().isoformat(),
         "target": {
-            "path": str(resolved_target),
+            "path": "<operator-local-target-redacted>",
             "git_repo": git["is_repo"],
             "dirty_tree": git["dirty"],
             "git_status_before": git["status_before"],
@@ -282,7 +295,7 @@ def run(target: Path, ai_reply: Path | None, out: Path, cambrian: str) -> dict[s
         "commands": commands,
         "steps": report_steps,
         "job_id": job_id,
-        "ai_reply": str(ai_reply) if ai_reply else None,
+        "ai_reply": "<operator-local-ai-reply-redacted>" if ai_reply else None,
         "blockers": blockers,
         "confusing_points": [],
         "verdict": verdict,
@@ -309,7 +322,7 @@ def main() -> None:
 
     target = args.target or (Path(os.environ["CAMBRIAN_DOGFOOD_TARGET"]) if os.environ.get("CAMBRIAN_DOGFOOD_TARGET") else None)
     if target is None:
-        raise SystemExit(_blocked("CAMBRIAN_DOGFOOD_TARGET 또는 --target이 없습니다."))
+        raise SystemExit(_blocked("CAMBRIAN_DOGFOOD_TARGET or --target is required."))
     run(target=target, ai_reply=args.ai_reply, out=args.out, cambrian=args.cambrian)
 
 

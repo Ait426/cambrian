@@ -41,6 +41,14 @@ existing task result was ingested and a follow-up auto cycle was executed
 - The auto loop creates Cambrian metadata and Codex/Claude task directives only.
 - Source patch application is not performed by this script.
 
+## Release Finishing Recheck
+
+- First-cycle command reached `WAITING_FOR_RESULT` and created a task directive.
+- The generated directive contained `directive_type: role_specific_auto_task`, `status: waiting_for_result`, and a `result_contract` with required fields and role output keys.
+- A hardened external-result file containing `status`, `summary`, `changed_files`, `tests`, `blockers`, `next_action`, `evidence`, and `role_outputs` was accepted by `auto step ingest`.
+- The follow-up `cambrian auto cycle --max-steps 1 --json` ran after result ingest.
+- The recheck report used sanitized target labels and did not store local operator paths.
+
 ## Next Action
 
 - If verdict is `WAITING_FOR_RESULT`, execute the generated directive in Codex or Claude.
